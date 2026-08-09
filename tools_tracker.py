@@ -75,11 +75,17 @@ def run_query(query, params=(), fetch=True):
     return result
 
 def format_currency(val):
-    """Helper to format numbers to 2 decimal places strictly."""
-    try:
-        return f"{float(val):.2f}"
-    except (ValueError, TypeError):
-        return "0.00"
+    try: return f"{float(val):.2f}"
+    except (ValueError, TypeError): return "0.00"
+
+# --- SMART BRANCH IDENTIFIER ---
+def get_branch(s_id):
+    if not s_id: return "أخرى"
+    char = str(s_id).strip().upper()[0]
+    if char == 'S': return "صيدا (Saida)"
+    if char == 'D': return "درعا (Daraa)"
+    if char == 'V': return "شريك/وكيل (Partner)"
+    return "أخرى"
 
 # ==========================================
 # AUTHENTICATION
@@ -117,14 +123,14 @@ def map_document_to_status(doc_string):
     doc = str(doc_string).strip()
     if "اد خ ص" in doc: return "قيد المعالجة (In Progress)"
     if "مبيع خ ص" in doc: return "جاهز للتسليم (Ready)"
-    if "قبض د" in doc: return "تم التسليم (Completed)"
+    if "قبض د" in doc: return "تم التسليم (Collected)"
     if "خ صيانة" in doc: return "حساب وكيل / شركة (Partner Charge)"
     return "قيد الانتظار"
 
 # ==========================================
 # MAIN APPLICATION TABS
 # ==========================================
-tab1, tab2, tab3, tab4 = st.tabs(["📥 1. استلام صيانة (Intake)", "🔧 2. فحص ومحاسبة (Ledger)", "📊 3. السجلات والاستيراد (Data)", "⏱️ 4. المتابعة والتأخير (Alerts)"])
+tab1, tab2, tab3, tab4 = st.tabs(["📥 1. استلام صيانة", "🔧 2. فحص وتسليم (Ledger & Delivery)", "📊 3. السجلات والاستيراد", "⏱️ 4. المتابعة والتأخير"])
 
 # --- TAB 1: NEW SERVICE INTAKE ---
 with tab1:
@@ -132,13 +138,13 @@ with tab1:
     with st.form("intake_form"):
         col1, col2, col3 = st.columns(3)
         with col1:
-            s_id = st.text_input("رقم الحساب / السند (مثال: D758)")
+            s_id = st.text_input("رقم الحساب / السند (يبدأ بـ S, D, أو V)")
             c_name = st.text_input("اسم الزبون")
             c_phone = st.text_input("رقم الهاتف")
         with col2:
             t_name = st.text_input("اسم الأداة / الموديل")
             w_status = st.selectbox("حالة الكفالة", ["خارج الكفالة", "ضمن كفالة", "ضمن كفالة يومين"])
-            doc_origin = st.selectbox("أصل السند (يحدد الحالة تلقائياً)", ["اد خ ص: (استلام للصيانة)", "مبيع خ ص: (جاهز ومفوتر)", "قبض د: (مدفوع ومسلم)", "خ صيانة: (تحميل على الوكيل)", "أخرى"])
+            doc_origin = st.selectbox("أصل السند (يحدد الحالة تلقائياً)", ["اد خ ص: (استلام للصيانة)", "مبيع خ ص: (جاهز ومفوتر)", "خ صيانة: (تحميل على الوكيل)"])
         with col3:
             issue = st.text_area("العطل / الشكوى")
             tech_assigned = st.text_input("الفني المستلم", value=current_user)
@@ -153,32 +159,47 @@ with tab1:
                                  document_origin, reported_issue, technician, status, date_logged) 
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
                               (s_id, t_name, c_name, c_phone, w_status, doc_origin, issue, tech_assigned, auto_status, date_now), fetch=False)
-                    st.success(f"✅ تم فتح حساب صيانة وحالته الآن: {auto_status}")
+                    st.success(f"✅ تم فتح حساب صيانة (فرع: {get_branch(s_id)}) وحالته الآن: {auto_status}")
                     st.rerun()
                 except sqlite3.IntegrityError:
                     st.error("رقم السند/الحساب موجود مسبقاً.")
             else:
                 st.warning("يرجى تعبئة رقم الحساب، اسم الزبون، واسم الأداة كحد أدنى.")
 
-# --- TAB 2: PROCESSING & LEDGER (FINANCIALS) ---
+# --- TAB 2: PROCESSING, LEDGER & DELIVERY LOCK ---
 with tab2:
-    st.subheader("تحديث حالة الصيانة والمحاسبة")
+    st.subheader("تحديث حالة الصيانة وتأكيد التسليم")
     
-    pending_services = run_query("SELECT service_id, customer_name, tool_name FROM service_ledger WHERE status NOT LIKE '%تم التسليم%'")
-    if pending_services:
-        options = {f"{row[0]} - {row[1]} ({row[2]})": row[0] for row in pending_services}
+    # Admin sees ALL devices (to revert mistakes). Tech sees ONLY non-collected devices.
+    if is_admin:
+        services = run_query("SELECT service_id, customer_name, tool_name FROM service_ledger")
+    else:
+        services = run_query("SELECT service_id, customer_name, tool_name FROM service_ledger WHERE status NOT LIKE '%تم التسليم%'")
+        
+    if services:
+        options = {f"{row[0]} - {row[1]} ({row[2]})": row[0] for row in services}
         selected_option = st.selectbox("اختر ملف الصيانة", list(options.keys()))
         selected_id = options[selected_option]
         
         curr_data = run_query("SELECT cost_debit, payment_credit, resolution_notes, status, document_origin FROM service_ledger WHERE service_id = ?", (selected_id,))[0]
         
         with st.form("update_service_form"):
-            st.info("قم بإدخال التكلفة والدفعات. تحديث 'أصل السند' سيغير حالة الجهاز تلقائياً.")
+            if "تم التسليم" in curr_data[3] and is_admin:
+                st.error("🔒 تنبيه: هذا الجهاز تم تسليمه وإقفاله. أنت تقوم بتعديله بصلاحيات (مدير النظام) لفك القفل.")
+            else:
+                st.info("قم بإدخال التكلفة والدفعات. لتسليم الجهاز، اختر 'قبض د:'")
             
-            new_doc_origin = st.selectbox("تحديث أصل السند (يغير الحالة):", 
-                                          ["اد خ ص: (استلام للصيانة)", "مبيع خ ص: (جاهز ومفوتر)", "قبض د: (مدفوع ومسلم)", "خ صيانة: (تحميل على الوكيل)"],
-                                          index=0) 
-                                          
+            # Map index safely based on current document origin
+            doc_options = ["اد خ ص: (استلام للصيانة)", "مبيع خ ص: (جاهز ومفوتر)", "قبض د: (مدفوع ومسلم)", "خ صيانة: (تحميل على الوكيل)"]
+            try:
+                curr_idx = [i for i, opt in enumerate(doc_options) if curr_data[4] in opt][0]
+            except IndexError:
+                curr_idx = 0
+                
+            new_doc_origin = st.selectbox("تحديث أصل السند (يغير الحالة تلقائياً):", doc_options, index=curr_idx)
+            
+            auto_new_status = map_document_to_status(new_doc_origin)
+            
             col_f1, col_f2, col_f3 = st.columns(3)
             with col_f1:
                 new_cost = st.number_input("تكلفة الصيانة (مدين - Debit)", value=float(curr_data[0]), step=1.0)
@@ -190,17 +211,25 @@ with tab2:
                 
             new_notes = st.text_area("البيان / ملاحظات الصيانة", value=curr_data[2] if curr_data[2] else "")
             
-            if st.form_submit_button("تحديث الحساب", use_container_width=True):
-                auto_new_status = map_document_to_status(new_doc_origin)
-                date_res = datetime.now().strftime("%Y-%m-%d") if "تم التسليم" in auto_new_status else ""
-                run_query('''UPDATE service_ledger SET 
-                             cost_debit = ?, payment_credit = ?, balance = ?, resolution_notes = ?, 
-                             document_origin = ?, status = ?, date_resolved = ? WHERE service_id = ?''',
-                          (new_cost, new_payment, calc_balance, new_notes, new_doc_origin, auto_new_status, date_res, selected_id), fetch=False)
-                st.success(f"✅ تم التحديث! الحالة الجديدة: {auto_new_status}")
-                st.rerun()
+            # DELIVERY CONFIRMATION LOCK
+            confirm_collection = True
+            if "تم التسليم" in auto_new_status:
+                st.warning("⚠️ إقفال الملف: سيتم تأكيد التسليم وإخفاء الجهاز من قائمة الفنيين ولن يمكن التراجع (إلا بواسطة المدير).")
+                confirm_collection = st.checkbox("✅ أؤكد أنني استلمت المبلغ المتبقي (إن وجد) وسلمت الجهاز للعميل.")
+
+            if st.form_submit_button("تحديث الحساب وتطبيق الحالة", use_container_width=True):
+                if "تم التسليم" in auto_new_status and not confirm_collection:
+                    st.error("❌ يرجى تحديد مربع تأكيد التسليم (✅ أؤكد أنني استلمت...) لإتمام العملية وإقفال الملف.")
+                else:
+                    date_res = datetime.now().strftime("%Y-%m-%d") if "تم التسليم" in auto_new_status else ""
+                    run_query('''UPDATE service_ledger SET 
+                                 cost_debit = ?, payment_credit = ?, balance = ?, resolution_notes = ?, 
+                                 document_origin = ?, status = ?, date_resolved = ? WHERE service_id = ?''',
+                              (new_cost, new_payment, calc_balance, new_notes, new_doc_origin, auto_new_status, date_res, selected_id), fetch=False)
+                    st.success(f"✅ تم التحديث! الحالة الجديدة: {auto_new_status}")
+                    st.rerun()
     else:
-        st.info("لا توجد أجهزة قيد الصيانة حالياً.")
+        st.info("لا توجد أجهزة قيد الصيانة حالياً (جميع الملفات مقفلة).")
 
 # --- TAB 3: LEDGER REPORTS & EXCEL IMPORT ---
 with tab3:
@@ -208,7 +237,7 @@ with tab3:
     
     if is_admin:
         with st.expander("📥 استيراد ملف الإكسل القديم (تهيئة التطبيق)"):
-            st.warning("ارفع ملف `service tools inventory .xlsx`. سيقوم النظام تلقائياً بتفكيك النصوص، استخراج الأسماء والأرقام والمحاسبة وإضافتها للقاعدة.")
+            st.warning("ارفع ملف `service tools inventory .xlsx`. سيقوم النظام تلقائياً بتفكيك النصوص واستيرادها.")
             uploaded_legacy = st.file_uploader("رفع ملف كشف الحساب (Excel)", type=["xlsx"])
             if uploaded_legacy and st.button("بدء الاستيراد والمعالجة"):
                 with st.spinner("جاري معالجة وتفكيك البيانات..."):
@@ -255,6 +284,9 @@ with tab3:
     query = "SELECT service_id, tool_name, customer_name, phone_number, cost_debit, payment_credit, balance, document_origin, status, date_logged FROM service_ledger"
     ledger_df = pd.DataFrame(run_query(query), columns=['الحساب', 'الأداة', 'الزبون', 'الهاتف', 'مدين', 'دائن', 'الرصيد', 'أصل السند', 'الحالة', 'التاريخ'])
     
+    # Add dynamic branch column
+    ledger_df.insert(1, 'الفرع (Branch)', ledger_df['الحساب'].apply(get_branch))
+    
     # Format Financial Columns to 2 decimal places
     ledger_df['مدين'] = ledger_df['مدين'].apply(format_currency)
     ledger_df['دائن'] = ledger_df['دائن'].apply(format_currency)
@@ -265,8 +297,7 @@ with tab3:
 # --- TAB 4: TIMELINE & ALERTS (SLA FOLLOW-UP) ---
 with tab4:
     st.subheader("⏱️ المتابعة وتنبيهات التأخير (Follow-up & Alerts)")
-    
-    st.info("يقوم النظام تلقائياً بحساب عدد الأيام منذ استلام الجهاز لتنبيهك بالتأخيرات.")
+    st.info("يقوم النظام تلقائياً بحساب عدد الأيام منذ استلام الجهاز وتصنيفها حسب الفرع لتنبيهك بالتأخيرات.")
     
     open_jobs = run_query("SELECT service_id, customer_name, tool_name, phone_number, status, date_logged, balance FROM service_ledger WHERE status NOT LIKE '%تم التسليم%'")
     
@@ -290,10 +321,11 @@ with tab4:
             alerts_data.append({
                 "التنبيه": alert_type,
                 "أيام الانتظار": days_in_shop,
+                "الفرع (Branch)": get_branch(s_id),
                 "الزبون": c_name,
                 "الهاتف": phone,
                 "الحالة الحالية": status,
-                "الرصيد المطلوب": format_currency(bal),  # Applies 2 decimal point format here
+                "الرصيد المطلوب": format_currency(bal), 
                 "رقم السند": s_id
             })
             
@@ -306,4 +338,4 @@ with tab4:
             
         st.dataframe(alerts_df.style.map(color_alerts, subset=['التنبيه']), use_container_width=True)
     else:
-        st.success("🎉 لا توجد أي أجهزة قيد الصيانة. جميع الأعمال مكتملة!")
+        st.success("🎉 لا توجد أي أجهزة قيد الصيانة أو جاهزة للتسليم. جميع الأعمال مقفلة ومسلمة!")
