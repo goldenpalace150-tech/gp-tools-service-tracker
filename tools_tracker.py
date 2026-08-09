@@ -74,6 +74,13 @@ def run_query(query, params=(), fetch=True):
     conn.close()
     return result
 
+def format_currency(val):
+    """Helper to format numbers to 2 decimal places strictly."""
+    try:
+        return f"{float(val):.2f}"
+    except (ValueError, TypeError):
+        return "0.00"
+
 # ==========================================
 # AUTHENTICATION
 # ==========================================
@@ -170,7 +177,7 @@ with tab2:
             
             new_doc_origin = st.selectbox("تحديث أصل السند (يغير الحالة):", 
                                           ["اد خ ص: (استلام للصيانة)", "مبيع خ ص: (جاهز ومفوتر)", "قبض د: (مدفوع ومسلم)", "خ صيانة: (تحميل على الوكيل)"],
-                                          index=0) # Default to first, user should select appropriately
+                                          index=0) 
                                           
             col_f1, col_f2, col_f3 = st.columns(3)
             with col_f1:
@@ -247,6 +254,12 @@ with tab3:
 
     query = "SELECT service_id, tool_name, customer_name, phone_number, cost_debit, payment_credit, balance, document_origin, status, date_logged FROM service_ledger"
     ledger_df = pd.DataFrame(run_query(query), columns=['الحساب', 'الأداة', 'الزبون', 'الهاتف', 'مدين', 'دائن', 'الرصيد', 'أصل السند', 'الحالة', 'التاريخ'])
+    
+    # Format Financial Columns to 2 decimal places
+    ledger_df['مدين'] = ledger_df['مدين'].apply(format_currency)
+    ledger_df['دائن'] = ledger_df['دائن'].apply(format_currency)
+    ledger_df['الرصيد'] = ledger_df['الرصيد'].apply(format_currency)
+
     st.markdown(ledger_df.to_html(index=False), unsafe_allow_html=True)
 
 # --- TAB 4: TIMELINE & ALERTS (SLA FOLLOW-UP) ---
@@ -255,7 +268,6 @@ with tab4:
     
     st.info("يقوم النظام تلقائياً بحساب عدد الأيام منذ استلام الجهاز لتنبيهك بالتأخيرات.")
     
-    # Query all unfinished jobs
     open_jobs = run_query("SELECT service_id, customer_name, tool_name, phone_number, status, date_logged, balance FROM service_ledger WHERE status NOT LIKE '%تم التسليم%'")
     
     if open_jobs:
@@ -281,13 +293,12 @@ with tab4:
                 "الزبون": c_name,
                 "الهاتف": phone,
                 "الحالة الحالية": status,
-                "الرصيد المطلوب": bal,
+                "الرصيد المطلوب": format_currency(bal),  # Applies 2 decimal point format here
                 "رقم السند": s_id
             })
             
         alerts_df = pd.DataFrame(alerts_data).sort_values(by="أيام الانتظار", ascending=False)
         
-        # Color coding function for pandas
         def color_alerts(val):
             if "🔴" in str(val): return 'background-color: #ffcccc'
             if "🟠" in str(val): return 'background-color: #ffe4b5'
