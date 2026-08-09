@@ -3,7 +3,7 @@ import sqlite3
 import pandas as pd
 from datetime import datetime
 import io
-import json
+import re
 
 # ==========================================
 # PAGE CONFIGURATION & ARABIC RTL STYLING
@@ -15,20 +15,17 @@ st.markdown("""
         .stApp {
             background-image: linear-gradient(rgba(248, 249, 250, 0.95), rgba(248, 249, 250, 0.95)), 
                               url("https://images.unsplash.com/photo-1581092160562-40aa08e78837?q=80&w=1920&auto=format&fit=crop");
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
-            direction: rtl;
-            text-align: right;
+            background-size: cover; background-position: center; background-attachment: fixed;
+            direction: rtl; text-align: right;
         }
         h1, h2, h3, h4, p, span, label, div { overflow-wrap: break-word !important; text-align: right; }
         .stTabs [data-baseweb="tab-list"] { gap: 8px; flex-wrap: wrap; }
-        .stTabs [data-baseweb="tab"] { background-color: #ffffff; border-radius: 4px; padding: 8px 16px; font-size: 14px; font-weight: bold; }
+        .stTabs [data-baseweb="tab"] { background-color: #ffffff; border-radius: 4px; padding: 8px 16px; font-weight: bold; }
         table { width: 100% !important; font-size: 13px !important; background-color: white; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🛠️ نظام إدارة مركز الصيانة والمحاسبة (كشف الحساب)")
+st.title("🛠️ نظام إدارة مركز الصيانة والمحاسبة الذكي")
 
 # ==========================================
 # DATABASE INITIALIZATION
@@ -38,11 +35,7 @@ DB_NAME = 'customer_service_center.db'
 def init_db():
     conn = sqlite3.connect(DB_NAME, check_same_thread=False)
     cursor = conn.cursor()
-    
-    # Users table
     cursor.execute('''CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT, role TEXT)''')
-    
-    # Service Tickets & Ledger table (Mirrors your Excel structure)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS service_ledger (
             service_id TEXT PRIMARY KEY,
@@ -63,12 +56,10 @@ def init_db():
             photo_incoming BLOB
         )
     ''')
-    
     cursor.execute("SELECT * FROM users WHERE username = 'admin'")
     if not cursor.fetchone():
         cursor.execute("INSERT INTO users VALUES ('admin', '123', 'مدير النظام (Admin)')")
         cursor.execute("INSERT INTO users VALUES ('tech', '123', 'فني صيانة (Technician)')")
-        
     conn.commit()
     conn.close()
 
@@ -113,9 +104,20 @@ is_admin = ("Admin" in current_role)
 st.divider()
 
 # ==========================================
+# HELPER: STATUS MAPPING
+# ==========================================
+def map_document_to_status(doc_string):
+    doc = str(doc_string).strip()
+    if "اد خ ص" in doc: return "قيد المعالجة (In Progress)"
+    if "مبيع خ ص" in doc: return "جاهز للتسليم (Ready)"
+    if "قبض د" in doc: return "تم التسليم (Completed)"
+    if "خ صيانة" in doc: return "حساب وكيل / شركة (Partner Charge)"
+    return "قيد الانتظار"
+
+# ==========================================
 # MAIN APPLICATION TABS
 # ==========================================
-tab1, tab2, tab3 = st.tabs(["📥 1. استلام صيانة جديدة (Intake)", "🔧 2. الفحص والمحاسبة (Processing & Ledger)", "📊 3. كشف الحساب والتقارير (Reports)"])
+tab1, tab2, tab3, tab4 = st.tabs(["📥 1. استلام صيانة (Intake)", "🔧 2. فحص ومحاسبة (Ledger)", "📊 3. السجلات والاستيراد (Data)", "⏱️ 4. المتابعة والتأخير (Alerts)"])
 
 # --- TAB 1: NEW SERVICE INTAKE ---
 with tab1:
@@ -123,37 +125,31 @@ with tab1:
     with st.form("intake_form"):
         col1, col2, col3 = st.columns(3)
         with col1:
-            s_id = st.text_input("رقم الحساب / السند (مثال: D758)", help="Service ID")
+            s_id = st.text_input("رقم الحساب / السند (مثال: D758)")
             c_name = st.text_input("اسم الزبون")
             c_phone = st.text_input("رقم الهاتف")
         with col2:
-            t_name = st.text_input("اسم الأداة / الموديل (مثال: مضخة ١ بنزين)")
+            t_name = st.text_input("اسم الأداة / الموديل")
             w_status = st.selectbox("حالة الكفالة", ["خارج الكفالة", "ضمن كفالة", "ضمن كفالة يومين"])
-            doc_origin = st.text_input("أصل السند (مثال: اد خ ص: 851)")
+            doc_origin = st.selectbox("أصل السند (يحدد الحالة تلقائياً)", ["اد خ ص: (استلام للصيانة)", "مبيع خ ص: (جاهز ومفوتر)", "قبض د: (مدفوع ومسلم)", "خ صيانة: (تحميل على الوكيل)", "أخرى"])
         with col3:
-            issue = st.text_area("العطل / الشكوى (مثال: عدم ضغط ماء)")
+            issue = st.text_area("العطل / الشكوى")
             tech_assigned = st.text_input("الفني المستلم", value=current_user)
             
-        st.write("📸 التقاط صورة للجهاز عند الاستلام (اختياري)")
-        enable_camera = st.checkbox("تفعيل الكاميرا")
-        photo_data = None
-        if enable_camera:
-            cam_pic = st.camera_input("التقط صورة")
-            if cam_pic: photo_data = cam_pic.getvalue()
-
         if st.form_submit_button("حفظ واستخراج إيصال استلام", use_container_width=True):
             if s_id and c_name and t_name:
                 try:
                     date_now = datetime.now().strftime("%Y-%m-%d")
+                    auto_status = map_document_to_status(doc_origin)
                     run_query('''INSERT INTO service_ledger 
                                 (service_id, tool_name, customer_name, phone_number, warranty_status, 
-                                 document_origin, reported_issue, technician, date_logged, photo_incoming) 
+                                 document_origin, reported_issue, technician, status, date_logged) 
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
-                              (s_id, t_name, c_name, c_phone, w_status, doc_origin, issue, tech_assigned, date_now, photo_data), fetch=False)
-                    st.success(f"✅ تم فتح حساب صيانة للزبون {c_name} بنجاح!")
+                              (s_id, t_name, c_name, c_phone, w_status, doc_origin, issue, tech_assigned, auto_status, date_now), fetch=False)
+                    st.success(f"✅ تم فتح حساب صيانة وحالته الآن: {auto_status}")
                     st.rerun()
                 except sqlite3.IntegrityError:
-                    st.error("رقم السند/الحساب موجود مسبقاً. يرجى استخدام رقم مختلف.")
+                    st.error("رقم السند/الحساب موجود مسبقاً.")
             else:
                 st.warning("يرجى تعبئة رقم الحساب، اسم الزبون، واسم الأداة كحد أدنى.")
 
@@ -161,17 +157,21 @@ with tab1:
 with tab2:
     st.subheader("تحديث حالة الصيانة والمحاسبة")
     
-    pending_services = run_query("SELECT service_id, customer_name, tool_name FROM service_ledger WHERE status != 'تم التسليم (Completed)'")
+    pending_services = run_query("SELECT service_id, customer_name, tool_name FROM service_ledger WHERE status NOT LIKE '%تم التسليم%'")
     if pending_services:
         options = {f"{row[0]} - {row[1]} ({row[2]})": row[0] for row in pending_services}
         selected_option = st.selectbox("اختر ملف الصيانة", list(options.keys()))
         selected_id = options[selected_option]
         
-        # Load current financial data for this service
-        curr_data = run_query("SELECT cost_debit, payment_credit, resolution_notes, status FROM service_ledger WHERE service_id = ?", (selected_id,))[0]
+        curr_data = run_query("SELECT cost_debit, payment_credit, resolution_notes, status, document_origin FROM service_ledger WHERE service_id = ?", (selected_id,))[0]
         
         with st.form("update_service_form"):
-            st.info("قم بإدخال تكلفة الصيانة والدفعات لتحديث الرصيد التلقائي.")
+            st.info("قم بإدخال التكلفة والدفعات. تحديث 'أصل السند' سيغير حالة الجهاز تلقائياً.")
+            
+            new_doc_origin = st.selectbox("تحديث أصل السند (يغير الحالة):", 
+                                          ["اد خ ص: (استلام للصيانة)", "مبيع خ ص: (جاهز ومفوتر)", "قبض د: (مدفوع ومسلم)", "خ صيانة: (تحميل على الوكيل)"],
+                                          index=0) # Default to first, user should select appropriately
+                                          
             col_f1, col_f2, col_f3 = st.columns(3)
             with col_f1:
                 new_cost = st.number_input("تكلفة الصيانة (مدين - Debit)", value=float(curr_data[0]), step=1.0)
@@ -181,66 +181,118 @@ with tab2:
                 calc_balance = new_cost - new_payment
                 st.metric("الرصيد المتبقي (Balance)", f"{calc_balance:.2f}")
                 
-            new_notes = st.text_area("البيان / ملاحظات الصيانة (مثال: لا يوجد عطل، تم تبديل قطعة)", value=curr_data[2] if curr_data[2] else "")
-            new_status = st.selectbox("حالة الجهاز", ["قيد المعالجة (In Progress)", "جاهز للتسليم (Ready)", "تم التسليم (Completed)"], 
-                                      index=0 if curr_data[3] == 'قيد الانتظار' else (2 if curr_data[3] == 'تم التسليم (Completed)' else 1))
+            new_notes = st.text_area("البيان / ملاحظات الصيانة", value=curr_data[2] if curr_data[2] else "")
             
-            if st.form_submit_button("تحديث الحساب وحالة الجهاز", use_container_width=True):
-                date_res = datetime.now().strftime("%Y-%m-%d") if "Completed" in new_status else ""
+            if st.form_submit_button("تحديث الحساب", use_container_width=True):
+                auto_new_status = map_document_to_status(new_doc_origin)
+                date_res = datetime.now().strftime("%Y-%m-%d") if "تم التسليم" in auto_new_status else ""
                 run_query('''UPDATE service_ledger SET 
                              cost_debit = ?, payment_credit = ?, balance = ?, resolution_notes = ?, 
-                             status = ?, date_resolved = ? WHERE service_id = ?''',
-                          (new_cost, new_payment, calc_balance, new_notes, new_status, date_res, selected_id), fetch=False)
-                st.success("✅ تم تحديث كشف الحساب وحالة الصيانة بنجاح!")
+                             document_origin = ?, status = ?, date_resolved = ? WHERE service_id = ?''',
+                          (new_cost, new_payment, calc_balance, new_notes, new_doc_origin, auto_new_status, date_res, selected_id), fetch=False)
+                st.success(f"✅ تم التحديث! الحالة الجديدة: {auto_new_status}")
                 st.rerun()
     else:
         st.info("لا توجد أجهزة قيد الصيانة حالياً.")
 
-# --- TAB 3: LEDGER REPORTS & EXCEL EXPORT ---
+# --- TAB 3: LEDGER REPORTS & EXCEL IMPORT ---
 with tab3:
-    st.subheader("كشف الحساب العام (Ledger & Reports)")
+    st.subheader("كشف الحساب واستيراد البيانات التاريخية")
     
-    search_term = st.text_input("🔍 بحث في كشف الحساب (حسب اسم الزبون، رقم الحساب، الهاتف، أو الأداة):")
-    
-    query = """
-    SELECT service_id AS 'الحساب', tool_name AS 'اسم الأداة', customer_name AS 'اسم الزبون', 
-           phone_number AS 'رقم الهاتف', warranty_status AS 'الكفالة', 
-           cost_debit AS 'مدين', payment_credit AS 'دائن', balance AS 'الرصيد الحالي',
-           resolution_notes AS 'البيان', document_origin AS 'أصل السند', 
-           status AS 'الحالة', date_logged AS 'التاريخ'
-    FROM service_ledger
-    """
-    ledger_data = run_query(query)
-    ledger_df = pd.DataFrame(ledger_data, columns=['الحساب', 'اسم الأداة', 'اسم الزبون', 'رقم الهاتف', 'الكفالة', 'مدين', 'دائن', 'الرصيد الحالي', 'البيان', 'أصل السند', 'الحالة', 'التاريخ'])
-    
-    if search_term:
-        mask = ledger_df.astype(str).apply(lambda x: x.str.contains(search_term, case=False, na=False)).any(axis=1)
-        display_df = ledger_df[mask]
-    else:
-        display_df = ledger_df
-        
-    st.markdown(display_df.to_html(index=False), unsafe_allow_html=True)
-    
-    st.divider()
-    if st.button("📥 تصدير كشف الحساب إلى Excel", type="primary"):
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            ledger_df.to_excel(writer, index=False, sheet_name='كشف حساب')
-        excel_data = output.getvalue()
-        
-        st.download_button(
-            label="💾 تحميل التقرير (Excel)",
-            data=excel_data,
-            file_name="Customer_Service_Ledger.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
+    if is_admin:
+        with st.expander("📥 استيراد ملف الإكسل القديم (تهيئة التطبيق)"):
+            st.warning("ارفع ملف `service tools inventory .xlsx`. سيقوم النظام تلقائياً بتفكيك النصوص، استخراج الأسماء والأرقام والمحاسبة وإضافتها للقاعدة.")
+            uploaded_legacy = st.file_uploader("رفع ملف كشف الحساب (Excel)", type=["xlsx"])
+            if uploaded_legacy and st.button("بدء الاستيراد والمعالجة"):
+                with st.spinner("جاري معالجة وتفكيك البيانات..."):
+                    df = pd.read_excel(uploaded_legacy, sheet_name='كشف حساب')
+                    df = df.dropna(subset=['اسم الزبون'])
+                    
+                    inserted_count = 0
+                    for index, row in df.iterrows():
+                        raw_text = str(row['اسم الزبون'])
+                        parts = [p.strip() for p in raw_text.split('-')]
+                        
+                        s_id = parts[0] if len(parts) > 0 else f"SYS-{index}"
+                        t_name = parts[1] if len(parts) > 1 else "غير محدد"
+                        c_name = parts[2] if len(parts) > 2 else "غير محدد"
+                        
+                        phone = ""
+                        for p in parts:
+                            if len(re.sub(r'\D', '', p)) >= 9:
+                                phone = p
+                                break
+                                
+                        doc_org = str(row['أصل السند']) if pd.notna(row['أصل السند']) else ""
+                        status = map_document_to_status(doc_org)
+                        
+                        res_notes = str(row['البيان']) if pd.notna(row['البيان']) else ""
+                        dt_logged = str(row['التاريخ']).split(' ')[0] if pd.notna(row['التاريخ']) else datetime.now().strftime("%Y-%m-%d")
+                        
+                        debit = float(row['مدين']) if pd.notna(row['مدين']) else 0.0
+                        credit = float(row['دائن']) if pd.notna(row['دائن']) else 0.0
+                        bal = float(row['الرصيد الحالي']) if pd.notna(row['الرصيد الحالي']) else 0.0
+                        
+                        try:
+                            run_query('''INSERT OR REPLACE INTO service_ledger 
+                                (service_id, tool_name, customer_name, phone_number, document_origin, 
+                                 resolution_notes, status, cost_debit, payment_credit, balance, date_logged) 
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
+                                (s_id, t_name, c_name, phone, doc_org, res_notes, status, debit, credit, bal, dt_logged), fetch=False)
+                            inserted_count += 1
+                        except Exception as e:
+                            pass
+                    st.success(f"✅ تمت معالجة واستيراد {inserted_count} سجل بنجاح!")
+                    st.rerun()
 
-    # Session Backup mechanism
-    with st.expander("💾 حفظ واستعادة قاعدة البيانات بالكامل (نسخة احتياطية JSON)"):
-        col_s1, col_s2 = st.columns(2)
-        with col_s1:
-            json_export = ledger_df.to_json(orient='records', force_ascii=False).encode('utf-8')
-            st.download_button("📥 تحميل نسخة احتياطية (JSON)", data=json_export, file_name="service_ledger_backup.json", mime="application/json", use_container_width=True)
-        with col_s2:
-            st.info("ميزة الاستعادة تتطلب مدير نظام لضمان عدم الكتابة فوق البيانات الحالية بالخطأ.")
+    query = "SELECT service_id, tool_name, customer_name, phone_number, cost_debit, payment_credit, balance, document_origin, status, date_logged FROM service_ledger"
+    ledger_df = pd.DataFrame(run_query(query), columns=['الحساب', 'الأداة', 'الزبون', 'الهاتف', 'مدين', 'دائن', 'الرصيد', 'أصل السند', 'الحالة', 'التاريخ'])
+    st.markdown(ledger_df.to_html(index=False), unsafe_allow_html=True)
+
+# --- TAB 4: TIMELINE & ALERTS (SLA FOLLOW-UP) ---
+with tab4:
+    st.subheader("⏱️ المتابعة وتنبيهات التأخير (Follow-up & Alerts)")
+    
+    st.info("يقوم النظام تلقائياً بحساب عدد الأيام منذ استلام الجهاز لتنبيهك بالتأخيرات.")
+    
+    # Query all unfinished jobs
+    open_jobs = run_query("SELECT service_id, customer_name, tool_name, phone_number, status, date_logged, balance FROM service_ledger WHERE status NOT LIKE '%تم التسليم%'")
+    
+    if open_jobs:
+        alerts_data = []
+        for job in open_jobs:
+            s_id, c_name, t_name, phone, status, d_logged, bal = job
+            try:
+                date_obj = datetime.strptime(d_logged, "%Y-%m-%d")
+                days_in_shop = (datetime.now() - date_obj).days
+            except:
+                days_in_shop = 0
+                
+            alert_type = "✅ طبيعي"
+            if "المعالجة" in status or "الانتظار" in status:
+                if days_in_shop > 5: alert_type = "🔴 متأخر جداً في الصيانة"
+                elif days_in_shop > 3: alert_type = "🟠 متأخر في الصيانة"
+            elif "جاهز" in status:
+                if days_in_shop > 7: alert_type = "🔴 العميل تأخر في الاستلام"
+                
+            alerts_data.append({
+                "التنبيه": alert_type,
+                "أيام الانتظار": days_in_shop,
+                "الزبون": c_name,
+                "الهاتف": phone,
+                "الحالة الحالية": status,
+                "الرصيد المطلوب": bal,
+                "رقم السند": s_id
+            })
+            
+        alerts_df = pd.DataFrame(alerts_data).sort_values(by="أيام الانتظار", ascending=False)
+        
+        # Color coding function for pandas
+        def color_alerts(val):
+            if "🔴" in str(val): return 'background-color: #ffcccc'
+            if "🟠" in str(val): return 'background-color: #ffe4b5'
+            return ''
+            
+        st.dataframe(alerts_df.style.map(color_alerts, subset=['التنبيه']), use_container_width=True)
+    else:
+        st.success("🎉 لا توجد أي أجهزة قيد الصيانة. جميع الأعمال مكتملة!")
