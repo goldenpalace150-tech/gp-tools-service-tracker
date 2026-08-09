@@ -165,7 +165,6 @@ with tab1:
 # --- TAB 2: UPDATE & DELIVERY ---
 with tab2:
     st.subheader("تحديث حالة الصيانة")
-    
     filtered = live_df[~live_df['status'].str.contains('تم التسليم', na=False)] if not live_df.empty else pd.DataFrame()
         
     if not filtered.empty:
@@ -220,7 +219,7 @@ with tab2:
         st.info("لا توجد أجهزة قيد الصيانة.")
 
 
-# --- TAB 3: DELAY ALERTS ---
+# --- TAB 3: DELAY ALERTS & SHIPMENTS ---
 with tab3:
     st.subheader("تنبيهات التأخير ومتابعة الشحنات")
     
@@ -255,10 +254,10 @@ with tab3:
                 
             st.dataframe(pd.DataFrame(alerts).sort_values(by="أيام", ascending=False), use_container_width=True)
 
-# --- TAB 4: SPARE PARTS INVENTORY (NEW) ---
+# --- TAB 4: SPARE PARTS INVENTORY ---
 with tab4:
     st.subheader("📦 إدارة ومخزون قطع الغيار")
-    st.markdown("استيراد تقارير الجرد وتعديل حالة مخزون الصيانة.")
+    st.markdown("استيراد لائحة الأسعار (لائحة أسعار المواد) لإنشاء أو تحديث الكتالوج.")
     
     stock_df = get_stock()
     
@@ -273,49 +272,51 @@ with tab4:
         )
         
     with col_btn2:
-        with st.expander("📤 استيراد تقرير المواد (Import Excel)"):
-            uploaded_stock = st.file_uploader("رفع تقرير مخزون المواد (Excel)", type=["xlsx"], key="stock_upload")
-            if uploaded_stock and st.button("تحديث السجلات سحابياً"):
-                with st.spinner("جاري تفكيك التقرير..."):
+        with st.expander("📤 استيراد لائحة أسعار المواد (Import Excel)"):
+            uploaded_stock = st.file_uploader("رفع ملف لائحة الأسعار", type=["xlsx"])
+            if uploaded_stock and st.button("تحديث الأسعار والمواد سحابياً"):
+                with st.spinner("جاري استيراد لائحة الأسعار..."):
                     try:
-                        # Parsing logic specifically designed for the accounting ledger layout
-                        raw_stock = pd.read_excel(uploaded_stock, sheet_name=0, header=5)
-                        col_code = raw_stock.columns[1]   # Unnamed: 1 (Item Code)
-                        col_name = raw_stock.columns[5]   # أصل السند (Item Name)
-                        col_qty = raw_stock.columns[12]   # Unnamed: 12 (Quantity)
-                        col_price = raw_stock.columns[14] # Unnamed: 14 (Price)
+                        raw_stock = pd.read_excel(uploaded_stock)
                         
-                        # Filter to get actual items (skip metadata rows)
-                        items_df = raw_stock[raw_stock[col_code].notna() & (raw_stock[col_code].astype(str).str.strip() != 'رمز المادة')].copy()
-                        
-                        items_df[col_qty] = pd.to_numeric(items_df[col_qty], errors='coerce').fillna(0)
-                        items_df[col_price] = pd.to_numeric(items_df[col_price], errors='coerce').fillna(0.0)
-                        
-                        # Aggregate quantities and prices per item code
-                        agg_df = items_df.groupby(col_code).agg({
-                            col_name: 'first',
-                            col_qty: 'sum',
-                            col_price: 'max'
-                        }).reset_index()
-                        
-                        agg_df.columns = STOCK_COLUMNS
-                        save_stock(agg_df)
-                        st.success("✅ تم تحديث المخزون بنجاح!")
-                        st.rerun()
+                        if 'MtCode' in raw_stock.columns and 'اسم المادة' in raw_stock.columns:
+                            # Extract catalog details (Assuming wholesale "الجملة" as standard cost)
+                            price_col = 'الجملة' if 'الجملة' in raw_stock.columns else raw_stock.columns[-1]
+                            
+                            new_items = raw_stock[['MtCode', 'اسم المادة', price_col]].copy()
+                            new_items.columns = ['item_code', 'item_name', 'price']
+                            new_items = new_items.dropna(subset=['item_code'])
+                            
+                            new_items['price'] = pd.to_numeric(new_items['price'], errors='coerce').fillna(0.0)
+                            new_items['quantity'] = 0 # Default quantity for completely new items
+                            
+                            # Smart Merge: Preserve manually entered quantities if the item already exists in the cloud
+                            if not stock_df.empty:
+                                qty_dict = dict(zip(stock_df['item_code'], stock_df['quantity']))
+                                new_items['quantity'] = new_items['item_code'].map(qty_dict).fillna(0)
+                            
+                            # Reorder columns to match standard format
+                            final_stock = new_items[STOCK_COLUMNS]
+                            save_stock(final_stock)
+                            
+                            st.success(f"✅ تم تحديث {len(final_stock)} مادة بنجاح! تم حفظ الكميات السابقة وتحديث الأسعار فقط.")
+                            st.rerun()
+                        else:
+                            st.error("❌ خطأ: الملف المرفوع لا يحتوي على أعمدة 'MtCode' و 'اسم المادة'. يرجى التأكد من اختيار لائحة الأسعار الصحيحة.")
                     except Exception as e:
-                        st.error(f"حدث خطأ. تأكد من أن التقرير يحمل نفس هيكلية المحاسبة. التفاصيل: {e}")
+                        st.error(f"حدث خطأ غير متوقع: {e}")
 
     if not stock_df.empty:
-        st.write("يمكنك تعديل الأرقام مباشرة في الجدول بالأسفل للضبط اليدوي:")
+        st.write("يمكنك تعديل الكميات مباشرة في الجدول بالأسفل للضبط اليدوي:")
         edited_stock = st.data_editor(
             stock_df,
             num_rows="dynamic",
             use_container_width=True,
             column_config={
-                "item_code": "كود القطعة",
-                "item_name": "اسم القطعة",
+                "item_code": "كود المادة (MtCode)",
+                "item_name": "اسم المادة",
                 "quantity": st.column_config.NumberColumn("الكمية المتوفرة", step=1),
-                "price": st.column_config.NumberColumn("سعر التكلفة", format="%.2f")
+                "price": st.column_config.NumberColumn("السعر (الجملة)", format="%.2f")
             }
         )
         if st.button("💾 حفظ التعديلات اليدوية", use_container_width=True):
@@ -323,7 +324,7 @@ with tab4:
             st.success("✅ تم الحفظ سحابياً!")
             st.rerun()
     else:
-        st.info("لا توجد بيانات مخزون حالياً. يرجى استيراد التقرير.")
+        st.info("لا توجد بيانات مخزون حالياً. يرجى رفع ملف لائحة أسعار المواد.")
 
 # --- TAB 5: LEDGER IMPORT ---
 with tab5:
