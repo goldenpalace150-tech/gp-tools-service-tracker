@@ -41,7 +41,6 @@ EXPECTED_COLUMNS = [
 
 def get_ledger():
     try:
-        # ttl=0 forces a fresh pull from Google Sheets every single time (Live Sync)
         df = conn.read(worksheet="Ledger", ttl=0)
         if df.empty or len(df.columns) < len(EXPECTED_COLUMNS):
             return pd.DataFrame(columns=EXPECTED_COLUMNS)
@@ -76,7 +75,7 @@ def map_document_to_status(doc_string):
     return "قيد الانتظار"
 
 # ==========================================
-# AUTHENTICATION (Hardcoded for Sheets Version)
+# AUTHENTICATION
 # ==========================================
 if 'logged_in_user' not in st.session_state: st.session_state['logged_in_user'] = None
 st.sidebar.header("🔐 نظام تسجيل الدخول")
@@ -110,7 +109,6 @@ st.divider()
 # ==========================================
 tab1, tab2, tab3, tab4 = st.tabs(["📥 1. استلام صيانة", "🔧 2. فحص وتسليم (Ledger & Delivery)", "📊 3. السجلات والاستيراد", "⏱️ 4. المتابعة والتأخير"])
 
-# Fetch live data immediately for the session
 live_df = get_ledger()
 
 # --- TAB 1: NEW SERVICE INTAKE ---
@@ -145,10 +143,8 @@ with tab1:
                         "balance": 0.0, "resolution_notes": "", "date_logged": date_now, "date_resolved": ""
                     }
                     
-                    # Live Append and Save
                     updated_df = pd.concat([live_df, pd.DataFrame([new_row])], ignore_index=True)
                     save_ledger(updated_df)
-                    
                     st.success(f"✅ تم فتح حساب صيانة وحفظه سحابياً بنجاح. الحالة الآن: {auto_status}")
                     st.rerun()
             else:
@@ -158,7 +154,6 @@ with tab1:
 with tab2:
     st.subheader("تحديث حالة الصيانة وتأكيد التسليم")
     
-    # Filter pending based on live data
     if is_admin:
         pending_mask = pd.Series([True] * len(live_df))
     else:
@@ -208,7 +203,6 @@ with tab2:
                 else:
                     date_res = datetime.now().strftime("%Y-%m-%d") if "تم التسليم" in auto_new_status else ""
                     
-                    # Update DataFrame exactly at the correct row index
                     idx = live_df.index[live_df['service_id'] == selected_id][0]
                     live_df.at[idx, 'cost_debit'] = new_cost
                     live_df.at[idx, 'payment_credit'] = new_payment
@@ -243,7 +237,7 @@ with tab3:
                         parts = [p.strip() for p in raw_text.split('-')]
                         
                         s_id = parts[0] if len(parts) > 0 else f"SYS-{index}"
-                        if s_id in live_df['service_id'].values: continue # Skip existing
+                        if s_id in live_df['service_id'].values: continue 
                         
                         t_name = parts[1] if len(parts) > 1 else "غير محدد"
                         c_name = parts[2] if len(parts) > 2 else "غير محدد"
@@ -273,17 +267,16 @@ with tab3:
     display_df = live_df.copy()
     if not display_df.empty:
         display_df.insert(1, 'Branch', display_df['service_id'].apply(get_branch))
-        
         display_df['cost_debit'] = display_df['cost_debit'].apply(format_currency)
         display_df['payment_credit'] = display_df['payment_credit'].apply(format_currency)
         display_df['balance'] = display_df['balance'].apply(format_currency)
 
     st.markdown(display_df.to_html(index=False), unsafe_allow_html=True)
 
-# --- TAB 4: TIMELINE & ALERTS (SLA FOLLOW-UP) ---
+# --- TAB 4: TIMELINE, ALERTS & ADVANCED FILTERS ---
 with tab4:
     st.subheader("⏱️ المتابعة وتنبيهات التأخير (Follow-up & Alerts)")
-    st.info("البيانات مسحوبة مباشرة من السحابة لضمان الدقة.")
+    st.info("البيانات مسحوبة مباشرة من السحابة لضمان الدقة. استخدم الفلاتر أدناه لتخصيص العرض.")
     
     if not live_df.empty:
         open_jobs = live_df[~live_df['status'].astype(str).str.contains('تم التسليم', na=False)]
@@ -308,20 +301,44 @@ with tab4:
                     "التنبيه": alert_type,
                     "أيام الانتظار": days_in_shop,
                     "الفرع (Branch)": get_branch(row['service_id']),
+                    "الحالة الحالية": row['status'],
                     "الزبون": row['customer_name'],
                     "الهاتف": row['phone_number'],
-                    "الحالة الحالية": row['status'],
                     "الرصيد المطلوب": format_currency(row['balance']), 
                     "رقم السند": row['service_id']
                 })
                 
-            alerts_df = pd.DataFrame(alerts_data).sort_values(by="أيام الانتظار", ascending=False)
+            alerts_df = pd.DataFrame(alerts_data)
+
+            # --- DYNAMIC FILTERS ---
+            col_filt1, col_filt2, col_filt3 = st.columns(3)
+            
+            with col_filt1:
+                all_branches = alerts_df['الفرع (Branch)'].unique().tolist()
+                selected_branches = st.multiselect("📍 تصفية حسب الفرع:", options=all_branches, default=all_branches)
+                
+            with col_filt2:
+                all_statuses = alerts_df['الحالة الحالية'].unique().tolist()
+                selected_statuses = st.multiselect("📋 تصفية حسب الحالة:", options=all_statuses, default=all_statuses)
+                
+            with col_filt3:
+                all_alerts = alerts_df['التنبيه'].unique().tolist()
+                selected_alerts = st.multiselect("⚠️ تصفية حسب التنبيه:", options=all_alerts, default=all_alerts)
+                
+            # Apply Filters
+            filtered_alerts_df = alerts_df[
+                (alerts_df['الفرع (Branch)'].isin(selected_branches)) &
+                (alerts_df['الحالة الحالية'].isin(selected_statuses)) &
+                (alerts_df['التنبيه'].isin(selected_alerts))
+            ]
+            
+            filtered_alerts_df = filtered_alerts_df.sort_values(by="أيام الانتظار", ascending=False)
             
             def color_alerts(val):
-                if "🔴" in str(val): return 'background-color: #ffcccc'
-                if "🟠" in str(val): return 'background-color: #ffe4b5'
+                if "🔴" in str(val): return 'background-color: #ffcccc; font-weight: bold;'
+                if "🟠" in str(val): return 'background-color: #ffe4b5; font-weight: bold;'
                 return ''
                 
-            st.dataframe(alerts_df.style.map(color_alerts, subset=['التنبيه']), use_container_width=True)
+            st.dataframe(filtered_alerts_df.style.map(color_alerts, subset=['التنبيه']), use_container_width=True)
         else:
             st.success("🎉 لا توجد أي أجهزة قيد الصيانة أو جاهزة للتسليم.")
