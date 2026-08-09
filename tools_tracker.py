@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import re
+import io
 from streamlit_gsheets import GSheetsConnection
 
 # ==========================================
@@ -22,7 +23,7 @@ st.markdown("""
 st.title("🛠️ نظام إدارة الصيانة والمحاسبة")
 
 # ==========================================
-# GOOGLE SHEETS CONNECTION & DATA FIXES
+# GOOGLE SHEETS CONNECTION
 # ==========================================
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -33,29 +34,42 @@ EXPECTED_COLUMNS = [
     "balance", "spare_parts", "resolution_notes", "date_logged", "date_resolved"
 ]
 
+STOCK_COLUMNS = ["item_code", "item_name", "quantity", "price"]
+
 def get_ledger():
     try:
         df = conn.read(worksheet="Ledger", ttl=0)
-        
-        # Ensure all columns exist (adds 'spare_parts' automatically if missing in old sheets)
         for col in EXPECTED_COLUMNS:
             if col not in df.columns:
                 df[col] = ""
-                
-        # Format text to prevent crashing
         for col in EXPECTED_COLUMNS:
             if col not in ['cost_debit', 'payment_credit', 'balance']:
                 df[col] = df[col].fillna("").astype(str).replace({'nan': '', 'None': ''})
-                
-        # Default empty spare parts to "لا حاجة / متوفرة"
         df.loc[df['spare_parts'] == "", 'spare_parts'] = "لا حاجة / متوفرة"
-        
         return df
     except:
         return pd.DataFrame(columns=EXPECTED_COLUMNS)
 
 def save_ledger(df):
     conn.update(worksheet="Ledger", data=df)
+
+def get_stock():
+    try:
+        df = conn.read(worksheet="Stock", ttl=0)
+        if df.empty or len(df.columns) < len(STOCK_COLUMNS):
+            return pd.DataFrame(columns=STOCK_COLUMNS)
+        return df
+    except:
+        return pd.DataFrame(columns=STOCK_COLUMNS)
+
+def save_stock(df):
+    conn.update(worksheet="Stock", data=df)
+
+def convert_df_to_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Stock')
+    return output.getvalue()
 
 # Helpers
 def get_branch(s_id):
@@ -107,11 +121,11 @@ live_df = get_ledger()
 # TABS NAVIGATION
 # ==========================================
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📥 1. استلام جديد", 
-    "🔧 2. الصيانة والتسليم", 
-    "📦 3. متابعة قطع الغيار (الشحنات)", 
-    "⏱️ 4. تنبيهات التأخير", 
-    "📊 5. كشف الحساب والاستيراد"
+    "📥 1. استلام صيانة", 
+    "🔧 2. تحديث وتسليم", 
+    "⏱️ 3. تنبيهات التأخير",
+    "📦 4. مخزون قطع الغيار (استيراد/تصدير)", 
+    "📊 5. كشف الحساب العام"
 ])
 
 # --- TAB 1: INTAKE ---
@@ -127,11 +141,11 @@ with tab1:
             t_name = st.text_input("كود/اسم الأداة (مثال: TGT11376)")
         with c3:
             doc_origin = st.selectbox("أصل السند", ["اد خ ص: (استلام للصيانة)", "مبيع خ ص: (جاهز ومفوتر)", "خ صيانة: (تحميل على الوكيل)"])
-            spare_parts = st.selectbox("حالة قطع الغيار", ["لا حاجة / متوفرة", "بانتظار شحن مجاني (Free Shipment)", "بانتظار شحن عادي (Normal Shipment)"])
+            spare_parts = st.selectbox("حالة قطع الغيار للمستودع", ["لا حاجة / متوفرة", "بانتظار شحن مجاني (Free Shipment)", "بانتظار شحن عادي (Normal Shipment)"])
             
         issue = st.text_input("العطل المرصود")
         
-        if st.form_submit_button("حفظ النظام سحابياً", use_container_width=True):
+        if st.form_submit_button("حفظ السجل سحابياً", use_container_width=True):
             if s_id and c_name:
                 date_now = datetime.now().strftime("%Y-%m-%d")
                 auto_status = map_document_to_status(doc_origin)
@@ -170,7 +184,7 @@ with tab2:
                 sp_opts = ["لا حاجة / متوفرة", "بانتظار شحن مجاني (Free Shipment)", "بانتظار شحن عادي (Normal Shipment)"]
                 try: sp_i = sp_opts.index(str(row_data['spare_parts']))
                 except: sp_i = 0
-                new_spare = st.selectbox("تحديث قطع الغيار:", sp_opts, index=sp_i)
+                new_spare = st.selectbox("تحديث حالة قطع الغيار:", sp_opts, index=sp_i)
             
             new_status = map_document_to_status(new_doc)
             
@@ -205,33 +219,23 @@ with tab2:
     else:
         st.info("لا توجد أجهزة قيد الصيانة.")
 
-# --- TAB 3: SPARE PARTS SHIPMENT (NEW) ---
-with tab3:
-    st.subheader("📦 الأجهزة بانتظار شحنات قطع الغيار")
-    st.info("هذه القائمة مخصصة لمتابعة الأجهزة التي تتطلب قطع غيار من الشحنات القادمة (مجاني أو عادي).")
-    
-    if not live_df.empty:
-        # Filter for tools waiting on shipments
-        shipment_df = live_df[live_df['spare_parts'].str.contains('شحن', na=False, regex=False)]
-        
-        if not shipment_df.empty:
-            shipment_display = shipment_df[['service_id', 'tool_name', 'customer_name', 'spare_parts', 'status', 'date_logged']].copy()
-            shipment_display.columns = ["السند", "الأداة/الكود", "الزبون", "نوع الشحنة المطلوبة", "الحالة الحالية", "تاريخ الاستلام"]
-            
-            def color_shipment(val):
-                if "مجاني" in str(val): return 'background-color: #d1e7dd; color: #0f5132; font-weight: bold;'
-                if "عادي" in str(val): return 'background-color: #cfe2ff; color: #084298; font-weight: bold;'
-                return ''
-                
-            st.dataframe(shipment_display.style.map(color_shipment, subset=['نوع الشحنة المطلوبة']), use_container_width=True)
-        else:
-            st.success("لا توجد أي أجهزة بانتظار شحنات قطع غيار حالياً.")
-    else:
-        st.info("لا توجد سجلات.")
 
-# --- TAB 4: DELAY ALERTS ---
-with tab4:
-    st.subheader("تنبيهات ومتابعة التأخير")
+# --- TAB 3: DELAY ALERTS ---
+with tab3:
+    st.subheader("تنبيهات التأخير ومتابعة الشحنات")
+    
+    st.markdown("#### 📦 الأجهزة بانتظار شحنات قطع الغيار")
+    if not live_df.empty:
+        shipment_df = live_df[live_df['spare_parts'].str.contains('شحن', na=False, regex=False)]
+        if not shipment_df.empty:
+            ship_disp = shipment_df[['service_id', 'tool_name', 'customer_name', 'spare_parts', 'status']].copy()
+            ship_disp.columns = ["السند", "الأداة/الكود", "الزبون", "نوع الشحنة المطلوبة", "الحالة الحالية"]
+            st.dataframe(ship_disp, use_container_width=True)
+        else:
+            st.info("لا توجد أجهزة بانتظار شحنات حالياً.")
+            
+    st.divider()
+    st.markdown("#### ⏱️ الأجهزة المتأخرة")
     if not live_df.empty:
         open_jobs = live_df[~live_df['status'].str.contains('تم التسليم', na=False)]
         if not open_jobs.empty:
@@ -250,16 +254,84 @@ with tab4:
                 alerts.append({"التنبيه": alert, "أيام": days, "الفرع": get_branch(r['service_id']), "الحالة": r['status'], "الزبون": r['customer_name'], "السند": r['service_id']})
                 
             st.dataframe(pd.DataFrame(alerts).sort_values(by="أيام", ascending=False), use_container_width=True)
-        else:
-            st.success("🎉 لا توجد أجهزة متأخرة.")
 
-# --- TAB 5: IMPORT WITH SMART PARSING ---
+# --- TAB 4: SPARE PARTS INVENTORY (NEW) ---
+with tab4:
+    st.subheader("📦 إدارة ومخزون قطع الغيار")
+    st.markdown("استيراد تقارير الجرد وتعديل حالة مخزون الصيانة.")
+    
+    stock_df = get_stock()
+    
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        st.download_button(
+            label="📥 تصدير المخزون الحالي (Export to Excel)",
+            data=convert_df_to_excel(stock_df) if not stock_df.empty else b"",
+            file_name=f"Spare_Parts_Stock_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+        
+    with col_btn2:
+        with st.expander("📤 استيراد تقرير المواد (Import Excel)"):
+            uploaded_stock = st.file_uploader("رفع تقرير مخزون المواد (Excel)", type=["xlsx"], key="stock_upload")
+            if uploaded_stock and st.button("تحديث السجلات سحابياً"):
+                with st.spinner("جاري تفكيك التقرير..."):
+                    try:
+                        # Parsing logic specifically designed for the accounting ledger layout
+                        raw_stock = pd.read_excel(uploaded_stock, sheet_name=0, header=5)
+                        col_code = raw_stock.columns[1]   # Unnamed: 1 (Item Code)
+                        col_name = raw_stock.columns[5]   # أصل السند (Item Name)
+                        col_qty = raw_stock.columns[12]   # Unnamed: 12 (Quantity)
+                        col_price = raw_stock.columns[14] # Unnamed: 14 (Price)
+                        
+                        # Filter to get actual items (skip metadata rows)
+                        items_df = raw_stock[raw_stock[col_code].notna() & (raw_stock[col_code].astype(str).str.strip() != 'رمز المادة')].copy()
+                        
+                        items_df[col_qty] = pd.to_numeric(items_df[col_qty], errors='coerce').fillna(0)
+                        items_df[col_price] = pd.to_numeric(items_df[col_price], errors='coerce').fillna(0.0)
+                        
+                        # Aggregate quantities and prices per item code
+                        agg_df = items_df.groupby(col_code).agg({
+                            col_name: 'first',
+                            col_qty: 'sum',
+                            col_price: 'max'
+                        }).reset_index()
+                        
+                        agg_df.columns = STOCK_COLUMNS
+                        save_stock(agg_df)
+                        st.success("✅ تم تحديث المخزون بنجاح!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"حدث خطأ. تأكد من أن التقرير يحمل نفس هيكلية المحاسبة. التفاصيل: {e}")
+
+    if not stock_df.empty:
+        st.write("يمكنك تعديل الأرقام مباشرة في الجدول بالأسفل للضبط اليدوي:")
+        edited_stock = st.data_editor(
+            stock_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            column_config={
+                "item_code": "كود القطعة",
+                "item_name": "اسم القطعة",
+                "quantity": st.column_config.NumberColumn("الكمية المتوفرة", step=1),
+                "price": st.column_config.NumberColumn("سعر التكلفة", format="%.2f")
+            }
+        )
+        if st.button("💾 حفظ التعديلات اليدوية", use_container_width=True):
+            save_stock(edited_stock)
+            st.success("✅ تم الحفظ سحابياً!")
+            st.rerun()
+    else:
+        st.info("لا توجد بيانات مخزون حالياً. يرجى استيراد التقرير.")
+
+# --- TAB 5: LEDGER IMPORT ---
 with tab5:
     st.subheader("استيراد وكشف حساب عام")
     if is_admin:
-        with st.expander("📥 استيراد ملف قديم (مع نظام التمييز الذكي)"):
-            uploaded_legacy = st.file_uploader("رفع ملف Excel", type=["xlsx"])
-            if uploaded_legacy and st.button("بدء الاستيراد الذكي"):
+        with st.expander("📥 استيراد ملف صيانة قديم (تفكيك ذكي)"):
+            uploaded_legacy = st.file_uploader("رفع كشف الحساب (Excel)", type=["xlsx"])
+            if uploaded_legacy and st.button("بدء الاستيراد"):
                 df = pd.read_excel(uploaded_legacy, sheet_name='كشف حساب').dropna(subset=['اسم الزبون'])
                 new_records = []
                 for index, row in df.iterrows():
@@ -268,21 +340,15 @@ with tab5:
                     s_id = parts[0] if len(parts) > 0 else f"SYS-{index}"
                     if not live_df.empty and s_id in live_df['service_id'].values: continue 
                     
-                    # --- SMART DATA DETERMINATION LOGIC ---
                     c_name, phone, t_name = "غير محدد", "", "غير محدد"
-                    
                     for p in parts[1:]:
                         p_clean = p.strip()
-                        # If it is 8+ numbers and NO letters, it is a phone number
                         if re.match(r'^[\d\s\+\-]{8,}$', p_clean) and not any(c.isalpha() for c in p_clean):
                             phone = p_clean
-                        # If it contains both letters AND numbers (e.g. TGT11376), it's an item code
                         elif re.search(r'[a-zA-Z]', p_clean) and re.search(r'\d', p_clean):
                             t_name = p_clean
-                        # Otherwise, treat it as the Customer Name
                         elif len(p_clean) > 2:
                             c_name = p_clean
-                    # --------------------------------------
 
                     doc_org = str(row['أصل السند']) if pd.notna(row['أصل السند']) else ""
                     new_records.append({
