@@ -84,8 +84,9 @@ def map_document_to_status(doc_string):
     doc = str(doc_string).strip()
     if "اد خ ص" in doc: return "قيد المعالجة (In Progress)"
     if "مبيع خ ص" in doc: return "جاهز للتسليم (Ready)"
-    if "قبض د" in doc: return "تم التسليم (Collected)"
-    if "خ صيانة" in doc: return "حساب وكيل (Partner Charge)"
+    # Both of these now contain "تم التسليم" so the system knows to close the ticket
+    if "قبض د" in doc: return "تم التسليم للزبون (Customer Collected)"
+    if "خ صيانة" in doc: return "تم التسليم - حساب وكيل (Partner Collected)"
     return "قيد الانتظار"
 
 # ==========================================
@@ -168,7 +169,8 @@ with tab2:
     filtered = live_df[~live_df['status'].str.contains('تم التسليم', na=False)] if not live_df.empty else pd.DataFrame()
         
     if not filtered.empty:
-        opts = {f"{r['service_id']} - {r['customer_name']}": r['service_id'] for _, r in filtered.iterrows()}
+        # Tool name is now successfully added back into the dropdown
+        opts = {f"{r['service_id']} - {r['customer_name']} ({r['tool_name']})": r['service_id'] for _, r in filtered.iterrows()}
         sel_id = opts[st.selectbox("اختر الجهاز:", list(opts.keys()))]
         row_data = live_df[live_df['service_id'] == sel_id].iloc[0]
         
@@ -195,12 +197,13 @@ with tab2:
             notes = st.text_input("ملاحظات الصيانة", value=str(row_data['resolution_notes']))
             
             confirm = True
+            # Will trigger for both Normal Delivery and Partner Collection
             if "تم التسليم" in new_status:
-                confirm = st.checkbox("✅ أؤكد تسليم الجهاز للعميل.")
+                confirm = st.checkbox("✅ أؤكد إقفال الملف (تسليم للزبون أو تحميل على الوكيل).")
 
             if st.form_submit_button("تحديث السجل", use_container_width=True):
                 if "تم التسليم" in new_status and not confirm:
-                    st.error("❌ يرجى تأكيد التسليم.")
+                    st.error("❌ يرجى تأكيد إقفال الملف بالمربع أعلاه.")
                 else:
                     idx = live_df.index[live_df['service_id'] == sel_id][0]
                     live_df.at[idx, 'cost_debit'] = cost
@@ -250,7 +253,8 @@ with tab3:
                 elif "جاهز" in str(r['status']) and days > 7:
                     alert = "🔴 تأخر بالاستلام"
                     
-                alerts.append({"التنبيه": alert, "أيام": days, "الفرع": get_branch(r['service_id']), "الحالة": r['status'], "الزبون": r['customer_name'], "السند": r['service_id']})
+                # Tool Name added to the Alert Tracking
+                alerts.append({"التنبيه": alert, "أيام": days, "الفرع": get_branch(r['service_id']), "الحالة": r['status'], "الزبون": r['customer_name'], "الأداة": r['tool_name'], "السند": r['service_id']})
                 
             st.dataframe(pd.DataFrame(alerts).sort_values(by="أيام", ascending=False), use_container_width=True)
 
@@ -280,7 +284,6 @@ with tab4:
                         raw_stock = pd.read_excel(uploaded_stock)
                         
                         if 'MtCode' in raw_stock.columns and 'اسم المادة' in raw_stock.columns:
-                            # Extract catalog details (Assuming wholesale "الجملة" as standard cost)
                             price_col = 'الجملة' if 'الجملة' in raw_stock.columns else raw_stock.columns[-1]
                             
                             new_items = raw_stock[['MtCode', 'اسم المادة', price_col]].copy()
@@ -288,14 +291,12 @@ with tab4:
                             new_items = new_items.dropna(subset=['item_code'])
                             
                             new_items['price'] = pd.to_numeric(new_items['price'], errors='coerce').fillna(0.0)
-                            new_items['quantity'] = 0 # Default quantity for completely new items
+                            new_items['quantity'] = 0 
                             
-                            # Smart Merge: Preserve manually entered quantities if the item already exists in the cloud
                             if not stock_df.empty:
                                 qty_dict = dict(zip(stock_df['item_code'], stock_df['quantity']))
                                 new_items['quantity'] = new_items['item_code'].map(qty_dict).fillna(0)
                             
-                            # Reorder columns to match standard format
                             final_stock = new_items[STOCK_COLUMNS]
                             save_stock(final_stock)
                             
