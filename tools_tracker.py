@@ -44,6 +44,13 @@ def get_ledger():
         df = conn.read(worksheet="Ledger", ttl=0)
         if df.empty or len(df.columns) < len(EXPECTED_COLUMNS):
             return pd.DataFrame(columns=EXPECTED_COLUMNS)
+            
+        # FIX: Force text columns to string type to prevent TypeError on updates
+        for col in EXPECTED_COLUMNS:
+            if col not in ['cost_debit', 'payment_credit', 'balance']:
+                if col in df.columns:
+                    df[col] = df[col].fillna("").astype(str).replace({'nan': '', 'None': ''})
+                    
         return df
     except Exception as e:
         return pd.DataFrame(columns=EXPECTED_COLUMNS)
@@ -183,9 +190,9 @@ with tab2:
             
             col_f1, col_f2, col_f3 = st.columns(3)
             with col_f1:
-                new_cost = st.number_input("تكلفة الصيانة (مدين - Debit)", value=float(curr_data['cost_debit']) if pd.notna(curr_data['cost_debit']) else 0.0, step=1.0)
+                new_cost = st.number_input("تكلفة الصيانة (مدين - Debit)", value=float(curr_data['cost_debit']) if pd.notna(curr_data['cost_debit']) and str(curr_data['cost_debit']).strip() != "" else 0.0, step=1.0)
             with col_f2:
-                new_payment = st.number_input("الدفعة المستلمة (دائن - Credit)", value=float(curr_data['payment_credit']) if pd.notna(curr_data['payment_credit']) else 0.0, step=1.0)
+                new_payment = st.number_input("الدفعة المستلمة (دائن - Credit)", value=float(curr_data['payment_credit']) if pd.notna(curr_data['payment_credit']) and str(curr_data['payment_credit']).strip() != "" else 0.0, step=1.0)
             with col_f3:
                 calc_balance = new_cost - new_payment
                 st.metric("الرصيد المتبقي (Balance)", f"{calc_balance:.2f}")
@@ -285,7 +292,7 @@ with tab4:
             alerts_data = []
             for _, row in open_jobs.iterrows():
                 try:
-                    date_obj = datetime.strptime(str(row['date_logged']), "%Y-%m-%d")
+                    date_obj = datetime.strptime(str(row['date_logged']).split(' ')[0], "%Y-%m-%d")
                     days_in_shop = (datetime.now() - date_obj).days
                 except:
                     days_in_shop = 0
