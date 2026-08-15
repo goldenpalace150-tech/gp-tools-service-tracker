@@ -7,7 +7,7 @@ import requests
 import base64
 from streamlit_gsheets import GSheetsConnection
 
-# ImgBB API Key added successfully
+# ImgBB API Key
 IMGBB_API_KEY = "c6e484b83af4bb39c92e1782cc6ce5e6"
 
 # ==========================================
@@ -39,7 +39,7 @@ EXPECTED_COLUMNS = [
     "balance", "spare_parts", "resolution_notes", "remarks", "date_logged", "date_resolved"
 ]
 STOCK_COLUMNS = ["item_code", "item_name", "quantity", "price"]
-HAWARA_COLUMNS = ["order_id", "order_type", "delivery_note", "document_link", "status", "date_logged"]
+HAWARA_COLUMNS = ["order_id", "order_type", "linked_service_id", "courier", "delivery_note", "document_link", "status", "date_logged"]
 
 def get_status_rank(val):
     s = str(val)
@@ -98,7 +98,8 @@ def save_stock(df): conn.update(worksheet="Stock", data=df)
 def get_hawara():
     try:
         df = conn.read(worksheet="Hawara", ttl=0)
-        if df.empty or len(df.columns) < len(HAWARA_COLUMNS): return pd.DataFrame(columns=HAWARA_COLUMNS)
+        for col in HAWARA_COLUMNS:
+            if col not in df.columns: df[col] = ""
         return df
     except: return pd.DataFrame(columns=HAWARA_COLUMNS)
 
@@ -354,7 +355,7 @@ elif st.session_state['current_module'] == 'Warehouse':
             st.rerun()
 
 # ==========================================
-# MODULE 4: LOGISTICS & HAWARA ORDERS (100% CLOUD)
+# MODULE 4: LOGISTICS & HAWARA ORDERS
 # ==========================================
 elif st.session_state['current_module'] == 'Logistics':
     st.title("🚚 اللوجستيات وإدارة الموردين")
@@ -367,53 +368,61 @@ elif st.session_state['current_module'] == 'Logistics':
             with c1: 
                 h_id = st.text_input("معرف الطلب (مثال: HAW-001)")
                 h_type = st.selectbox("نوع العملية", ["طلب قطع غيار", "إرسال أجهزة للصيانة", "استرجاع بضاعة"])
+                linked_sid = st.selectbox("ربط بسند صيانة (اختياري)", options=["بدون ربط"] + live_df['service_id'].tolist() if not live_df.empty else ["بدون ربط"])
             with c2: 
-                h_note = st.text_input("رقم بوليصة الشحن (Delivery Note Number)")
-                uploaded_doc = st.file_uploader("إرفاق صورة الفاتورة للرفع السحابي (Upload Image)", type=["png", "jpg", "jpeg"])
+                courier = st.selectbox("شركة الشحن / الساعي", ["شركة أرامكس", "نقل قدموس", "ساعي داخلي", "شركة حوارة الخاصة"])
+                h_note = st.text_input("رقم بوليصة الشحن (Delivery Note)")
             with c3:
                 h_status = st.selectbox("حالة الطلبية", ["قيد الطلب / التجهيز", "في الطريق (شحن)", "تم الاستلام"])
+                uploaded_doc = st.file_uploader("إرفاق صورة الفاتورة (Upload Invoice)", type=["png", "jpg", "jpeg"])
                 
             if st.form_submit_button("حفظ الطلبية ورفع المستند", use_container_width=True):
                 if h_id:
-                    file_url = "لا يوجد مرفق"
+                    file_url = ""
                     if uploaded_doc is not None:
-                        if IMGBB_API_KEY == "YOUR_API_KEY_HERE":
-                            st.error("⚠️ يرجى التأكد من أن مفتاح API الخاص بـ ImgBB مضاف بشكل صحيح.")
-                        else:
-                            with st.spinner("جاري رفع الفاتورة للسحابة..."):
-                                try:
-                                    b64_img = base64.b64encode(uploaded_doc.getvalue()).decode("utf-8")
-                                    res = requests.post(
-                                        f"https://api.imgbb.com/1/upload?key={IMGBB_API_KEY}",
-                                        data={"image": b64_img}
-                                    )
-                                    if res.status_code == 200:
-                                        file_url = res.json()["data"]["url"]
-                                    else:
-                                        st.error("حدث خطأ أثناء رفع الصورة للسحابة.")
-                                except Exception as e:
-                                    st.error(f"فشل الاتصال: {e}")
+                        with st.spinner("جاري رفع الفاتورة للسحابة..."):
+                            try:
+                                b64_img = base64.b64encode(uploaded_doc.getvalue()).decode("utf-8")
+                                res = requests.post(f"https://api.imgbb.com/1/upload?key={IMGBB_API_KEY}", data={"image": b64_img})
+                                if res.status_code == 200:
+                                    file_url = res.json()["data"]["url"]
+                            except: pass
 
                     new_hawara = {
-                        "order_id": h_id, "order_type": h_type, "delivery_note": h_note, 
+                        "order_id": h_id, "order_type": h_type, 
+                        "linked_service_id": linked_sid if linked_sid != "بدون ربط" else "",
+                        "courier": courier, "delivery_note": h_note, 
                         "document_link": file_url, "status": h_status, "date_logged": datetime.now().strftime("%Y-%m-%d")
                     }
                     save_hawara(pd.concat([hawara_df, pd.DataFrame([new_hawara])], ignore_index=True))
-                    st.success(f"✅ تم حفظ الطلبية بنجاح! {'(تم رفع المرفق سحابياً)' if uploaded_doc else ''}")
+                    st.success("✅ تم حفظ الطلبية بنجاح!")
                     st.rerun()
                 else: st.warning("يرجى إدخال معرف الطلب.")
 
         st.divider()
-        st.markdown("#### سجل طلبيات حوارة (تحديث مباشر)")
+        st.markdown("#### سجل طلبيات حوارة (إدارة وحذف المرفقات)")
         if not hawara_df.empty:
-            edited_hawara = st.data_editor(hawara_df, use_container_width=True, column_config={
-                "order_id": "معرف الطلب", "order_type": "النوع", "delivery_note": "بوليصة الشحن", 
-                "document_link": st.column_config.LinkColumn("مستند الفاتورة (Link)"), "status": st.column_config.SelectboxColumn("الحالة", options=["قيد الطلب / التجهيز", "في الطريق (شحن)", "تم الاستلام"]), "date_logged": "التاريخ"
-            })
-            if st.button("💾 حفظ تعديلات الطلبيات", use_container_width=True):
+            # Interactive data editor with delete support and link formatting
+            edited_hawara = st.data_editor(
+                hawara_df, 
+                num_rows="dynamic",
+                use_container_width=True, 
+                column_config={
+                    "order_id": "معرف الطلب",
+                    "order_type": "النوع",
+                    "linked_service_id": "رقم سند الصيانة",
+                    "courier": "شركة الشحن",
+                    "delivery_note": "بوليصة الشحن",
+                    "document_link": st.column_config.LinkColumn("رابط الفاتورة", display_text="🔗 عرض الفاتورة (View Invoice)"),
+                    "status": st.column_config.SelectboxColumn("الحالة", options=["قيد الطلب / التجهيز", "في الطريق (شحن)", "تم الاستلام"]),
+                    "date_logged": "التاريخ"
+                }
+            )
+            if st.button("💾 حفظ التعديلات أو حذف السجلات", use_container_width=True):
                 save_hawara(edited_hawara)
-                st.success("✅ تم التحديث بنجاح!")
+                st.success("✅ تم حفظ التعديلات بنجاح!")
                 st.rerun()
+        else: st.info("لا توجد طلبيات مسجلة حالياً.")
 
     with tab2:
         st.markdown("#### أجهزة جاهزة تتطلب شحن محلي")
@@ -488,19 +497,14 @@ elif st.session_state['current_module'] == 'Admin':
                                 
                                 for p in parts[1:]:
                                     digits = re.sub(r'\D', '', p)
-                                    # Identify Warranty
                                     if any(kw in p for kw in ['كفالة', 'ضمان', 'مجاني']):
                                         w_status = "ضمن كفالة"
-                                    # Identify Phone
                                     elif 8 <= len(digits) <= 15 and len(p) < 20:
                                         phone = digits
-                                    # Identify Tool
                                     elif any(kw in p for kw in ['فولت', 'فولط', 'واط', 'امبير', 'مثقب', 'صاروخ', 'مضخة', 'جلخ', 'كسارة', 'هوا', 'بطارية', 'شاحن', 'ماكينة', 'غطاس', 'غاطسة', 'رجاج', 'sds']):
                                         t_name = p
-                                    # Identify Issue
                                     elif any(kw in p for kw in ['عطل', 'لايعمل', 'لا يعمل', 'تبديل', 'صيانة', 'ماس', 'صوت', 'فواشة', 'كبسة', 'حرامي']):
                                         issue = p
-                                    # Identify Name
                                     elif len(p) > 2:
                                         if c_name == "غير محدد": c_name = p
                                         elif t_name == "غير محدد": t_name = p
