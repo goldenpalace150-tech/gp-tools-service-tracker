@@ -419,7 +419,7 @@ elif st.session_state['current_module'] == 'Admin':
 
     if is_admin:
         with st.expander("📥 استيراد كشف حساب الأمين الشامل (Smart Auto-Parser)"):
-            st.markdown("يقوم بمسح كامل محتوى ورقة الأمين، وربط كل سند بحركاته المالية (`قبض م`، `مبيع خ ص`، `اد خ ص`) وإغلاق المنتهي فوراً.")
+            st.markdown("يقوم بمسح كامل محتوى ورقة الأمين، وربط كل سند بحركاته المالية وإغلاق المنتهي فوراً مع التقاط دقيق للأرقام.")
             uploaded_legacy = st.file_uploader("رفع كشف الحساب", type=["xlsx"])
             if uploaded_legacy and st.button("بدء الاستيراد والدمج الذكي"):
                 with st.spinner("جاري مسح جميع سطور وسندات الأمين..."):
@@ -432,42 +432,58 @@ elif st.session_state['current_module'] == 'Admin':
                         row_vals = [str(x).strip() for x in row.dropna().tolist()]
                         row_text = " ".join(row_vals)
                         
-                        # Find Account Header (e.g. S353, D485, V286)
-                        sid_match = re.search(r'\b([SDV]\d+)\b', row_text, re.IGNORECASE)
-                        if sid_match and any(keyword in row_text for keyword in ['الزبون', 'الحساب', '-']):
-                            curr_sid = sid_match.group(1).upper()
-                            
-                            # Parse customer metadata
-                            parts = [p.strip() for p in re.split(r'[-–:]', row_text) if p.strip()]
-                            c_name, phone, t_name = "غير محدد", "", "غير محدد"
-                            for p in parts:
-                                if re.match(r'^[\d\s\+\-]{8,}$', p) and not any(c.isalpha() for c in p):
-                                    phone = p
-                                elif re.search(r'[a-zA-Z]', p) and re.search(r'\d', p) and p != curr_sid:
-                                    t_name = p
-                                elif len(p) > 2 and not any(k in p for k in ['الزبون', 'الحساب', 'عملة', curr_sid]):
-                                    if c_name == "غير محدد": c_name = p
-                                    elif t_name == "غير محدد": t_name = p
+                        # 1. SMART ISOLATION: Find ONLY the specific cell containing the Customer/Tool string
+                        header_cell = ""
+                        for val in row_vals:
+                            if re.search(r'\b[SDV]\d+\b', val, re.IGNORECASE) and '-' in val:
+                                header_cell = val
+                                break
+                        
+                        if header_cell:
+                            curr_sid_match = re.search(r'\b([SDV]\d+)\b', header_cell, re.IGNORECASE)
+                            if curr_sid_match:
+                                curr_sid = curr_sid_match.group(1).upper()
+                                
+                                # Strip headers like "الزبون:" and split strictly
+                                clean_header = re.sub(r'^(الزبون:|الحساب:|الزبون|الحساب)\s*', '', header_cell).strip()
+                                parts = [p.strip() for p in re.split(r'[-–]', clean_header) if p.strip()]
+                                
+                                c_name, phone, t_name, issue = "غير محدد", "", "غير محدد", ""
+                                
+                                for p in parts[1:]:
+                                    # Securely isolate phone numbers (8-15 pure digits, rejects strings with dates attached)
+                                    digits = re.sub(r'\D', '', p)
+                                    if 8 <= len(digits) <= 15 and len(p) < 20:
+                                        phone = digits
+                                    elif any(kw in p for kw in ['فولت', 'فولط', 'واط', 'امبير', 'مثقب', 'صاروخ', 'مضخة', 'جلخ', 'كسارة', 'هوا', 'بطارية', 'شاحن', 'ماكينة', 'غطاس', 'غاطسة', 'رجاج', 'sds']):
+                                        t_name = p
+                                    elif any(kw in p for kw in ['عطل', 'لايعمل', 'لا يعمل', 'تبديل', 'صيانة', 'ماس', 'صوت', 'فواشة', 'كبسة', 'حرامي']):
+                                        issue = p
+                                    elif len(p) > 2:
+                                        if c_name == "غير محدد": c_name = p
+                                        elif t_name == "غير محدد": t_name = p
+                                        else: issue = p
 
-                            if curr_sid not in records:
-                                records[curr_sid] = {
-                                    "service_id": curr_sid, "tool_name": t_name, "customer_name": c_name, "phone_number": phone,
-                                    "warranty_status": "خارج الكفالة", "document_origin": "", "reported_issue": "",
-                                    "technician": "Admin Import", "status": "قيد الانتظار", "cost_debit": 0.0,
-                                    "payment_credit": 0.0, "balance": 0.0, "spare_parts": "لا حاجة / متوفرة",
-                                    "resolution_notes": "", "date_logged": datetime.now().strftime("%Y-%m-%d"), "date_resolved": ""
-                                }
+                                if curr_sid not in records:
+                                    records[curr_sid] = {
+                                        "service_id": curr_sid, "tool_name": t_name, "customer_name": c_name, "phone_number": phone,
+                                        "warranty_status": "خارج الكفالة", "document_origin": "", "reported_issue": issue,
+                                        "technician": "Admin Import", "status": "قيد الانتظار", "cost_debit": 0.0,
+                                        "payment_credit": 0.0, "balance": 0.0, "spare_parts": "لا حاجة / متوفرة",
+                                        "resolution_notes": "", "date_logged": datetime.now().strftime("%Y-%m-%d"), "date_resolved": ""
+                                    }
 
-                        # Scan voucher events for current active ticket block
+                        # 2. VOUCHER SCAN: Extract financial numbers securely
                         if curr_sid and curr_sid in records:
                             rec = records[curr_sid]
                             c_origin = rec["document_origin"]
                             c_rank = get_status_rank(c_origin)
                             
-                            # Update financial numbers if present in row
                             nums = []
                             for v in row_vals:
-                                try: nums.append(float(v))
+                                try:
+                                    num_val = float(v)
+                                    nums.append(num_val)
                                 except: pass
                             
                             if "قبض" in row_text:
@@ -481,7 +497,7 @@ elif st.session_state['current_module'] == 'Admin':
                             elif "اد خ ص" in row_text and c_rank < 1:
                                 rec["document_origin"] = "اد خ ص: (استلام للصيانة)"
 
-                    # Convert to dataframe & assign proper statuses
+                    # Final assignment
                     imported_list = []
                     for sid, rec in records.items():
                         rec["balance"] = float(rec["cost_debit"]) - float(rec["payment_credit"])
@@ -493,9 +509,11 @@ elif st.session_state['current_module'] == 'Admin':
                     if imported_list:
                         new_imp_df = pd.DataFrame(imported_list)
                         merged = pd.concat([live_df, new_imp_df], ignore_index=True)
+                        
+                        # Use the deduplication engine to overwrite all bad history records!
                         final_df = deduplicate_ledger(merged)
                         save_ledger(final_df)
-                        st.success(f"✅ تم مسح وتحديث {len(final_df)} جهاز بنجاح تام وحل جميع التنبيهات المنتهية!")
+                        st.success(f"✅ تم مسح وتحديث {len(final_df)} جهاز بنجاح. أصبحت البيانات الآن نظيفة ومقروءة بشكل مثالي!")
                         st.rerun()
                     else:
                         st.warning("لم يتم العثور على أرقام سندات مطابقة.")
