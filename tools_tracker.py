@@ -81,11 +81,16 @@ def get_branch(s_id):
     if char == 'V': return "شريك (Partner)"
     return "أخرى"
 
-def map_document_to_status(doc_string):
+def map_document_to_status(doc_string, cost=0.0):
     doc = str(doc_string).strip()
+    try: cost_val = float(cost)
+    except: cost_val = 0.0
+    
     if "اد خ ص" in doc: return "قيد المعالجة (In Progress)"
-    if "مبيع خ ص" in doc: return "جاهز للتسليم (Ready)"
-    # FIXED: Added "قبض م" to ensure Al-Ameen imports are closed properly
+    if "مبيع خ ص" in doc: 
+        # SMART RULE: Identifies if a ready item is free/under warranty based on 0 cost
+        if cost_val == 0.0: return "جاهز للتسليم (بدون تكلفة/كفالة)"
+        return "جاهز للتسليم (Ready)"
     if "قبض د" in doc or "قبض م" in doc: return "تم التسليم للزبون (Customer Collected)"
     if "خ صيانة" in doc: return "تم التسليم - حساب وكيل (Partner Collected)"
     return "قيد الانتظار"
@@ -207,7 +212,7 @@ elif st.session_state['current_module'] == 'Services':
                     new_row = {
                         "service_id": s_id, "tool_name": t_name, "customer_name": c_name, "phone_number": c_phone,
                         "warranty_status": "خارج الكفالة", "document_origin": doc_origin, "reported_issue": issue,
-                        "technician": current_user, "status": map_document_to_status(doc_origin), "cost_debit": 0.0, "payment_credit": 0.0,
+                        "technician": current_user, "status": map_document_to_status(doc_origin, 0.0), "cost_debit": 0.0, "payment_credit": 0.0,
                         "balance": 0.0, "spare_parts": spare_parts, "resolution_notes": "", "date_logged": date_now, "date_resolved": ""
                     }
                     updated_df = pd.concat([live_df, pd.DataFrame([new_row])], ignore_index=True)
@@ -236,12 +241,14 @@ elif st.session_state['current_module'] == 'Services':
                     except: sp_i = 0
                     new_spare = st.selectbox("تحديث حالة قطع الغيار:", sp_opts, index=sp_i)
                 
-                new_status = map_document_to_status(new_doc)
                 col1, col2, col3 = st.columns(3)
                 with col1: cost = st.number_input("تكلفة الصيانة (مدين)", value=float(row_data['cost_debit'] or 0), step=1.0)
                 with col2: pay = st.number_input("الدفعة (دائن)", value=float(row_data['payment_credit'] or 0), step=1.0)
                 with col3: st.metric("الرصيد", f"{cost - pay:.2f}")
                     
+                # SMART MAPPING: Passing the cost to determine if it is a free warranty ready item
+                new_status = map_document_to_status(new_doc, cost)
+                
                 notes = st.text_input("ملاحظات الصيانة", value=str(row_data['resolution_notes']))
                 confirm = True
                 if "تم التسليم" in new_status: confirm = st.checkbox("✅ أؤكد إقفال الملف (تسليم للزبون أو تحميل على الوكيل).")
@@ -264,7 +271,7 @@ elif st.session_state['current_module'] == 'Services':
         else: st.info("لا توجد أجهزة قيد الصيانة.")
 
     with tab3:
-        st.markdown("#### ⏱️ الأجهزة المتأخرة")
+        st.markdown("#### ⏱️ الأجهزة المتأخرة والجاهزة")
         if not live_df.empty:
             open_jobs = live_df[~live_df['status'].str.contains('تم التسليم', na=False)]
             if not open_jobs.empty:
@@ -407,10 +414,12 @@ elif st.session_state['current_module'] == 'Admin':
                         elif re.search(r'[a-zA-Z]', p_clean) and re.search(r'\d', p_clean): t_name = p_clean
                         elif len(p_clean) > 2: c_name = p_clean
                     doc_org = str(row['أصل السند']) if pd.notna(row['أصل السند']) else ""
+                    
+                    cost_val = float(row.get('مدين', 0) or 0)
                     new_records.append({
                         "service_id": s_id, "tool_name": t_name, "customer_name": c_name, "phone_number": phone,
                         "warranty_status": "", "document_origin": doc_org, "reported_issue": "", "technician": "Admin Import", 
-                        "status": map_document_to_status(doc_org), "cost_debit": float(row.get('مدين', 0) or 0), 
+                        "status": map_document_to_status(doc_org, cost_val), "cost_debit": cost_val, 
                         "payment_credit": float(row.get('دائن', 0) or 0), "balance": float(row.get('الرصيد الحالي', 0) or 0), 
                         "spare_parts": "لا حاجة / متوفرة", "resolution_notes": str(row.get('البيان', "")), 
                         "date_logged": datetime.now().strftime("%Y-%m-%d"), "date_resolved": ""
