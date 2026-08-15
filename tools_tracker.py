@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime
 import re
 import io
+import os
 from streamlit_gsheets import GSheetsConnection
 
 # ==========================================
@@ -31,10 +32,10 @@ EXPECTED_COLUMNS = [
     "service_id", "tool_name", "customer_name", "phone_number", 
     "warranty_status", "document_origin", "reported_issue", 
     "technician", "status", "cost_debit", "payment_credit", 
-    "balance", "spare_parts", "resolution_notes", "date_logged", "date_resolved"
+    "balance", "spare_parts", "resolution_notes", "remarks", "date_logged", "date_resolved"
 ]
 STOCK_COLUMNS = ["item_code", "item_name", "quantity", "price"]
-HAWARA_COLUMNS = ["order_id", "order_type", "delivery_note", "document_link", "status", "date_logged"]
+HAWARA_COLUMNS = ["order_id", "order_type", "delivery_note", "document_file", "status", "date_logged"]
 
 def get_status_rank(val):
     s = str(val)
@@ -225,7 +226,10 @@ elif st.session_state['current_module'] == 'Services':
                 doc_origin = st.selectbox("أصل السند", ["اد خ ص: (استلام للصيانة)", "مبيع خ ص: (جاهز ومفوتر)", "خ صيانة: (تحميل على الوكيل)"])
                 spare_parts = st.selectbox("حالة قطع الغيار", ["لا حاجة / متوفرة", "بانتظار شحن مجاني (Free Shipment)", "بانتظار شحن عادي (Normal Shipment)"])
                 
-            issue = st.text_input("العطل المرصود")
+            c4, c5 = st.columns(2)
+            with c4: issue = st.text_input("العطل المرصود")
+            with c5: remarks = st.text_input("ملاحظات إضافية (Remarks)")
+
             if st.form_submit_button("حفظ السجل", use_container_width=True):
                 if s_id and c_name:
                     date_now = datetime.now().strftime("%Y-%m-%d")
@@ -233,7 +237,7 @@ elif st.session_state['current_module'] == 'Services':
                         "service_id": s_id, "tool_name": t_name, "customer_name": c_name, "phone_number": c_phone,
                         "warranty_status": "خارج الكفالة", "document_origin": doc_origin, "reported_issue": issue,
                         "technician": current_user, "status": map_document_to_status(doc_origin, 0.0), "cost_debit": 0.0, "payment_credit": 0.0,
-                        "balance": 0.0, "spare_parts": spare_parts, "resolution_notes": "", "date_logged": date_now, "date_resolved": ""
+                        "balance": 0.0, "spare_parts": spare_parts, "resolution_notes": "", "remarks": remarks, "date_logged": date_now, "date_resolved": ""
                     }
                     save_ledger(pd.concat([live_df, pd.DataFrame([new_row])], ignore_index=True))
                     st.success("✅ تم الحفظ بنجاح!")
@@ -266,7 +270,11 @@ elif st.session_state['current_module'] == 'Services':
                 with col3: st.metric("الرصيد", f"{cost - pay:.2f}")
                     
                 new_status = map_document_to_status(new_doc, cost)
-                notes = st.text_input("ملاحظات الصيانة", value=str(row_data['resolution_notes']))
+                
+                c_n1, c_n2 = st.columns(2)
+                with c_n1: notes = st.text_input("ملاحظات الصيانة والحل (Resolution)", value=str(row_data.get('resolution_notes', '')))
+                with c_n2: remarks_update = st.text_input("تحديثات إضافية (Remarks)", value=str(row_data.get('remarks', '')))
+                
                 confirm = True
                 if "تم التسليم" in new_status: confirm = st.checkbox("✅ أؤكد إقفال الملف (تسليم للزبون أو تحميل على الوكيل).")
 
@@ -278,6 +286,7 @@ elif st.session_state['current_module'] == 'Services':
                         live_df.at[idx, 'payment_credit'] = pay
                         live_df.at[idx, 'balance'] = cost - pay
                         live_df.at[idx, 'resolution_notes'] = notes
+                        live_df.at[idx, 'remarks'] = remarks_update
                         live_df.at[idx, 'document_origin'] = new_doc
                         live_df.at[idx, 'status'] = new_status
                         live_df.at[idx, 'spare_parts'] = new_spare
@@ -301,7 +310,7 @@ elif st.session_state['current_module'] == 'Services':
                         if days > 5: alert = "🔴 متأخر جداً"
                         elif days > 3: alert = "🟠 متأخر"
                     elif "جاهز" in str(r['status']) and days > 7: alert = "🔴 تأخر بالاستلام"
-                    alerts.append({"التنبيه": alert, "أيام": days, "الفرع": get_branch(r['service_id']), "الحالة": r['status'], "الزبون": r['customer_name'], "الأداة": r['tool_name'], "السند": r['service_id']})
+                    alerts.append({"التنبيه": alert, "أيام": days, "الفرع": get_branch(r['service_id']), "الحالة": r['status'], "الزبون": r['customer_name'], "الأداة": r['tool_name'], "الملاحظات": r.get('remarks', ''), "السند": r['service_id']})
                 st.dataframe(pd.DataFrame(alerts).sort_values(by="أيام", ascending=False), use_container_width=True)
 
 # ==========================================
@@ -358,19 +367,26 @@ elif st.session_state['current_module'] == 'Logistics':
                 h_id = st.text_input("معرف الطلب (مثال: HAW-001)")
                 h_type = st.selectbox("نوع العملية", ["طلب قطع غيار", "إرسال أجهزة للصيانة", "استرجاع بضاعة"])
             with c2: 
-                h_note = st.text_input("رقم بوليصة الشحن (Delivery Note)")
-                h_link = st.text_input("رابط المستند/الفاتورة (Google Drive Link)")
+                h_note = st.text_input("رقم بوليصة الشحن (Delivery Note Number)")
+                uploaded_doc = st.file_uploader("إرفاق صورة الفاتورة/البوليصة (Upload Image/PDF)", type=["png", "jpg", "jpeg", "pdf"])
             with c3:
                 h_status = st.selectbox("حالة الطلبية", ["قيد الطلب / التجهيز", "في الطريق (شحن)", "تم الاستلام"])
                 
-            if st.form_submit_button("حفظ الطلبية", use_container_width=True):
+            if st.form_submit_button("حفظ الطلبية وإرفاق المستند", use_container_width=True):
                 if h_id:
+                    file_path = "لا يوجد مرفق"
+                    if uploaded_doc is not None:
+                        if not os.path.exists("uploads"): os.makedirs("uploads")
+                        file_path = os.path.join("uploads", uploaded_doc.name)
+                        with open(file_path, "wb") as f:
+                            f.write(uploaded_doc.getbuffer())
+
                     new_hawara = {
                         "order_id": h_id, "order_type": h_type, "delivery_note": h_note, 
-                        "document_link": h_link, "status": h_status, "date_logged": datetime.now().strftime("%Y-%m-%d")
+                        "document_file": file_path, "status": h_status, "date_logged": datetime.now().strftime("%Y-%m-%d")
                     }
                     save_hawara(pd.concat([hawara_df, pd.DataFrame([new_hawara])], ignore_index=True))
-                    st.success("✅ تم إضافة الطلبية بنجاح!")
+                    st.success(f"✅ تم إضافة الطلبية بنجاح! {'(تم حفظ المرفق)' if uploaded_doc else ''}")
                     st.rerun()
                 else: st.warning("يرجى إدخال معرف الطلب.")
 
@@ -379,7 +395,7 @@ elif st.session_state['current_module'] == 'Logistics':
         if not hawara_df.empty:
             edited_hawara = st.data_editor(hawara_df, use_container_width=True, column_config={
                 "order_id": "معرف الطلب", "order_type": "النوع", "delivery_note": "بوليصة الشحن", 
-                "document_link": st.column_config.LinkColumn("مستند الفاتورة (Link)"), "status": st.column_config.SelectboxColumn("الحالة", options=["قيد الطلب / التجهيز", "في الطريق (شحن)", "تم الاستلام"]), "date_logged": "التاريخ"
+                "document_file": st.column_config.TextColumn("المستند المرفق (مسار الملف)"), "status": st.column_config.SelectboxColumn("الحالة", options=["قيد الطلب / التجهيز", "في الطريق (شحن)", "تم الاستلام"]), "date_logged": "التاريخ"
             })
             if st.button("💾 حفظ تعديلات الطلبيات", use_container_width=True):
                 save_hawara(edited_hawara)
@@ -404,27 +420,37 @@ elif st.session_state['current_module'] == 'Logistics':
             else: st.success("لا توجد أجهزة جاهزة تحتاج إلى شحن حالياً.")
 
 # ==========================================
-# MODULE 5: ADMIN & FINANCE (ROBUST AL-AMEEN PARSER)
+# MODULE 5: ADMIN & FINANCE (EXPORT & IMPORT)
 # ==========================================
 elif st.session_state['current_module'] == 'Admin':
-    st.title("⚙️ إعدادات النظام والمالية")
+    st.title("⚙️ الإدارة والتقارير المالية")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🧹 تنظيف وتوحيد السجلات وإزالة التأخيرات المنتهية", use_container_width=True):
-            clean_df = deduplicate_ledger(live_df)
-            save_ledger(clean_df)
-            st.success("✅ تم فحص وإصلاح وتوحيد قاعدة البيانات بالكامل!")
-            st.rerun()
+    st.markdown("#### 📊 استخراج وتصدير تقارير الصيانة (Service Reports)")
+    if not live_df.empty:
+        all_statuses = live_df['status'].unique().tolist()
+        selected_statuses = st.multiselect("🔍 تصفية السجل حسب الحالة:", options=all_statuses, default=all_statuses)
+        
+        filtered_ledger = live_df[live_df['status'].isin(selected_statuses)]
+        
+        st.download_button(
+            label="📥 تصدير التقرير المفلتر إلى Excel", 
+            data=convert_df_to_excel(filtered_ledger), 
+            file_name=f"Service_Report_{datetime.now().strftime('%Y-%m-%d')}.xlsx", 
+            use_container_width=True
+        )
+        st.dataframe(filtered_ledger, use_container_width=True)
+    else:
+        st.info("لا توجد بيانات صيانة لعرضها.")
+        
+    st.divider()
 
     if is_admin:
         with st.expander("📥 استيراد كشف حساب الأمين الشامل (Smart Auto-Parser)"):
-            st.markdown("يقوم بمسح كامل محتوى ورقة الأمين، وربط كل سند بحركاته المالية وإغلاق المنتهي فوراً مع التقاط دقيق للأرقام.")
+            st.markdown("يقوم بمسح السطور واستخراج (الاسم، الهاتف، الجهاز، **والكفالة**) آلياً.")
             uploaded_legacy = st.file_uploader("رفع كشف الحساب", type=["xlsx"])
             if uploaded_legacy and st.button("بدء الاستيراد والدمج الذكي"):
                 with st.spinner("جاري مسح جميع سطور وسندات الأمين..."):
                     raw_excel = pd.read_excel(uploaded_legacy, header=None)
-                    
                     records = {}
                     curr_sid = None
                     
@@ -432,7 +458,6 @@ elif st.session_state['current_module'] == 'Admin':
                         row_vals = [str(x).strip() for x in row.dropna().tolist()]
                         row_text = " ".join(row_vals)
                         
-                        # 1. SMART ISOLATION: Find ONLY the specific cell containing the Customer/Tool string
                         header_cell = ""
                         for val in row_vals:
                             if re.search(r'\b[SDV]\d+\b', val, re.IGNORECASE) and '-' in val:
@@ -443,22 +468,26 @@ elif st.session_state['current_module'] == 'Admin':
                             curr_sid_match = re.search(r'\b([SDV]\d+)\b', header_cell, re.IGNORECASE)
                             if curr_sid_match:
                                 curr_sid = curr_sid_match.group(1).upper()
-                                
-                                # Strip headers like "الزبون:" and split strictly
                                 clean_header = re.sub(r'^(الزبون:|الحساب:|الزبون|الحساب)\s*', '', header_cell).strip()
                                 parts = [p.strip() for p in re.split(r'[-–]', clean_header) if p.strip()]
                                 
-                                c_name, phone, t_name, issue = "غير محدد", "", "غير محدد", ""
+                                c_name, phone, t_name, issue, w_status = "غير محدد", "", "غير محدد", "", "خارج الكفالة"
                                 
                                 for p in parts[1:]:
-                                    # Securely isolate phone numbers (8-15 pure digits, rejects strings with dates attached)
                                     digits = re.sub(r'\D', '', p)
-                                    if 8 <= len(digits) <= 15 and len(p) < 20:
+                                    # Identify Warranty
+                                    if any(kw in p for kw in ['كفالة', 'ضمان', 'مجاني']):
+                                        w_status = "ضمن كفالة"
+                                    # Identify Phone
+                                    elif 8 <= len(digits) <= 15 and len(p) < 20:
                                         phone = digits
+                                    # Identify Tool
                                     elif any(kw in p for kw in ['فولت', 'فولط', 'واط', 'امبير', 'مثقب', 'صاروخ', 'مضخة', 'جلخ', 'كسارة', 'هوا', 'بطارية', 'شاحن', 'ماكينة', 'غطاس', 'غاطسة', 'رجاج', 'sds']):
                                         t_name = p
+                                    # Identify Issue
                                     elif any(kw in p for kw in ['عطل', 'لايعمل', 'لا يعمل', 'تبديل', 'صيانة', 'ماس', 'صوت', 'فواشة', 'كبسة', 'حرامي']):
                                         issue = p
+                                    # Identify Name
                                     elif len(p) > 2:
                                         if c_name == "غير محدد": c_name = p
                                         elif t_name == "غير محدد": t_name = p
@@ -467,23 +496,19 @@ elif st.session_state['current_module'] == 'Admin':
                                 if curr_sid not in records:
                                     records[curr_sid] = {
                                         "service_id": curr_sid, "tool_name": t_name, "customer_name": c_name, "phone_number": phone,
-                                        "warranty_status": "خارج الكفالة", "document_origin": "", "reported_issue": issue,
+                                        "warranty_status": w_status, "document_origin": "", "reported_issue": issue,
                                         "technician": "Admin Import", "status": "قيد الانتظار", "cost_debit": 0.0,
                                         "payment_credit": 0.0, "balance": 0.0, "spare_parts": "لا حاجة / متوفرة",
-                                        "resolution_notes": "", "date_logged": datetime.now().strftime("%Y-%m-%d"), "date_resolved": ""
+                                        "resolution_notes": "", "remarks": "", "date_logged": datetime.now().strftime("%Y-%m-%d"), "date_resolved": ""
                                     }
 
-                        # 2. VOUCHER SCAN: Extract financial numbers securely
                         if curr_sid and curr_sid in records:
                             rec = records[curr_sid]
                             c_origin = rec["document_origin"]
                             c_rank = get_status_rank(c_origin)
-                            
                             nums = []
                             for v in row_vals:
-                                try:
-                                    num_val = float(v)
-                                    nums.append(num_val)
+                                try: nums.append(float(v))
                                 except: pass
                             
                             if "قبض" in row_text:
@@ -497,7 +522,6 @@ elif st.session_state['current_module'] == 'Admin':
                             elif "اد خ ص" in row_text and c_rank < 1:
                                 rec["document_origin"] = "اد خ ص: (استلام للصيانة)"
 
-                    # Final assignment
                     imported_list = []
                     for sid, rec in records.items():
                         rec["balance"] = float(rec["cost_debit"]) - float(rec["payment_credit"])
@@ -509,14 +533,9 @@ elif st.session_state['current_module'] == 'Admin':
                     if imported_list:
                         new_imp_df = pd.DataFrame(imported_list)
                         merged = pd.concat([live_df, new_imp_df], ignore_index=True)
-                        
-                        # Use the deduplication engine to overwrite all bad history records!
                         final_df = deduplicate_ledger(merged)
                         save_ledger(final_df)
-                        st.success(f"✅ تم مسح وتحديث {len(final_df)} جهاز بنجاح. أصبحت البيانات الآن نظيفة ومقروءة بشكل مثالي!")
+                        st.success(f"✅ تم استيراد وتحديث {len(final_df)} سجل والتقاط الكفالات والملاحظات بنجاح!")
                         st.rerun()
                     else:
                         st.warning("لم يتم العثور على أرقام سندات مطابقة.")
-
-    st.markdown("#### 📊 السجل المالي العام (General Ledger)")
-    st.dataframe(live_df, use_container_width=True)
