@@ -3,8 +3,12 @@ import pandas as pd
 from datetime import datetime
 import re
 import io
-import os
+import requests
+import base64
 from streamlit_gsheets import GSheetsConnection
+
+# ImgBB API Key added successfully
+IMGBB_API_KEY = "c6e484b83af4bb39c92e1782cc6ce5e6"
 
 # ==========================================
 # PAGE CONFIGURATION
@@ -35,7 +39,7 @@ EXPECTED_COLUMNS = [
     "balance", "spare_parts", "resolution_notes", "remarks", "date_logged", "date_resolved"
 ]
 STOCK_COLUMNS = ["item_code", "item_name", "quantity", "price"]
-HAWARA_COLUMNS = ["order_id", "order_type", "delivery_note", "document_file", "status", "date_logged"]
+HAWARA_COLUMNS = ["order_id", "order_type", "delivery_note", "document_link", "status", "date_logged"]
 
 def get_status_rank(val):
     s = str(val)
@@ -62,8 +66,7 @@ def map_document_to_status(doc_string, cost=0.0):
     return "قيد الانتظار"
 
 def deduplicate_ledger(df):
-    if df.empty or 'service_id' not in df.columns:
-        return df
+    if df.empty or 'service_id' not in df.columns: return df
     df['rank'] = df['document_origin'].apply(get_status_rank)
     df = df.sort_values(by=['service_id', 'rank'], ascending=[True, True])
     deduped = df.groupby('service_id', as_index=False).last()
@@ -79,11 +82,9 @@ def get_ledger():
                 df[col] = df[col].fillna("").astype(str).replace({'nan': '', 'None': ''})
         df.loc[df['spare_parts'] == "", 'spare_parts'] = "لا حاجة / متوفرة"
         return deduplicate_ledger(df)
-    except:
-        return pd.DataFrame(columns=EXPECTED_COLUMNS)
+    except: return pd.DataFrame(columns=EXPECTED_COLUMNS)
 
-def save_ledger(df):
-    conn.update(worksheet="Ledger", data=deduplicate_ledger(df))
+def save_ledger(df): conn.update(worksheet="Ledger", data=deduplicate_ledger(df))
 
 def get_stock():
     try:
@@ -353,7 +354,7 @@ elif st.session_state['current_module'] == 'Warehouse':
             st.rerun()
 
 # ==========================================
-# MODULE 4: LOGISTICS & HAWARA ORDERS
+# MODULE 4: LOGISTICS & HAWARA ORDERS (100% CLOUD)
 # ==========================================
 elif st.session_state['current_module'] == 'Logistics':
     st.title("🚚 اللوجستيات وإدارة الموردين")
@@ -368,25 +369,37 @@ elif st.session_state['current_module'] == 'Logistics':
                 h_type = st.selectbox("نوع العملية", ["طلب قطع غيار", "إرسال أجهزة للصيانة", "استرجاع بضاعة"])
             with c2: 
                 h_note = st.text_input("رقم بوليصة الشحن (Delivery Note Number)")
-                uploaded_doc = st.file_uploader("إرفاق صورة الفاتورة/البوليصة (Upload Image/PDF)", type=["png", "jpg", "jpeg", "pdf"])
+                uploaded_doc = st.file_uploader("إرفاق صورة الفاتورة للرفع السحابي (Upload Image)", type=["png", "jpg", "jpeg"])
             with c3:
                 h_status = st.selectbox("حالة الطلبية", ["قيد الطلب / التجهيز", "في الطريق (شحن)", "تم الاستلام"])
                 
-            if st.form_submit_button("حفظ الطلبية وإرفاق المستند", use_container_width=True):
+            if st.form_submit_button("حفظ الطلبية ورفع المستند", use_container_width=True):
                 if h_id:
-                    file_path = "لا يوجد مرفق"
+                    file_url = "لا يوجد مرفق"
                     if uploaded_doc is not None:
-                        if not os.path.exists("uploads"): os.makedirs("uploads")
-                        file_path = os.path.join("uploads", uploaded_doc.name)
-                        with open(file_path, "wb") as f:
-                            f.write(uploaded_doc.getbuffer())
+                        if IMGBB_API_KEY == "YOUR_API_KEY_HERE":
+                            st.error("⚠️ يرجى التأكد من أن مفتاح API الخاص بـ ImgBB مضاف بشكل صحيح.")
+                        else:
+                            with st.spinner("جاري رفع الفاتورة للسحابة..."):
+                                try:
+                                    b64_img = base64.b64encode(uploaded_doc.getvalue()).decode("utf-8")
+                                    res = requests.post(
+                                        f"https://api.imgbb.com/1/upload?key={IMGBB_API_KEY}",
+                                        data={"image": b64_img}
+                                    )
+                                    if res.status_code == 200:
+                                        file_url = res.json()["data"]["url"]
+                                    else:
+                                        st.error("حدث خطأ أثناء رفع الصورة للسحابة.")
+                                except Exception as e:
+                                    st.error(f"فشل الاتصال: {e}")
 
                     new_hawara = {
                         "order_id": h_id, "order_type": h_type, "delivery_note": h_note, 
-                        "document_file": file_path, "status": h_status, "date_logged": datetime.now().strftime("%Y-%m-%d")
+                        "document_link": file_url, "status": h_status, "date_logged": datetime.now().strftime("%Y-%m-%d")
                     }
                     save_hawara(pd.concat([hawara_df, pd.DataFrame([new_hawara])], ignore_index=True))
-                    st.success(f"✅ تم إضافة الطلبية بنجاح! {'(تم حفظ المرفق)' if uploaded_doc else ''}")
+                    st.success(f"✅ تم حفظ الطلبية بنجاح! {'(تم رفع المرفق سحابياً)' if uploaded_doc else ''}")
                     st.rerun()
                 else: st.warning("يرجى إدخال معرف الطلب.")
 
@@ -395,7 +408,7 @@ elif st.session_state['current_module'] == 'Logistics':
         if not hawara_df.empty:
             edited_hawara = st.data_editor(hawara_df, use_container_width=True, column_config={
                 "order_id": "معرف الطلب", "order_type": "النوع", "delivery_note": "بوليصة الشحن", 
-                "document_file": st.column_config.TextColumn("المستند المرفق (مسار الملف)"), "status": st.column_config.SelectboxColumn("الحالة", options=["قيد الطلب / التجهيز", "في الطريق (شحن)", "تم الاستلام"]), "date_logged": "التاريخ"
+                "document_link": st.column_config.LinkColumn("مستند الفاتورة (Link)"), "status": st.column_config.SelectboxColumn("الحالة", options=["قيد الطلب / التجهيز", "في الطريق (شحن)", "تم الاستلام"]), "date_logged": "التاريخ"
             })
             if st.button("💾 حفظ تعديلات الطلبيات", use_container_width=True):
                 save_hawara(edited_hawara)
