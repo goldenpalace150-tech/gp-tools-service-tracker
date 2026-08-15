@@ -36,6 +36,39 @@ EXPECTED_COLUMNS = [
 STOCK_COLUMNS = ["item_code", "item_name", "quantity", "price"]
 HAWARA_COLUMNS = ["order_id", "order_type", "delivery_note", "document_link", "status", "date_logged"]
 
+def get_status_rank(val):
+    s = str(val)
+    if "قبض" in s or "Collected" in s: return 4
+    if "خ صيانة" in s or "حساب وكيل" in s: return 3
+    if "مبيع خ ص" in s or "جاهز" in s: return 2
+    if "اد خ ص" in s or "المعالجة" in s: return 1
+    return 0
+
+def map_document_to_status(doc_string, cost=0.0):
+    doc = str(doc_string).strip()
+    try: cost_val = float(cost)
+    except: cost_val = 0.0
+    
+    if "قبض" in doc: return "تم التسليم للزبون (Customer Collected)"
+    if "خ صيانة" in doc: return "تم التسليم - حساب وكيل (Partner Collected)"
+    if "مبيع خ ص" in doc: 
+        if cost_val == 0.0: return "جاهز للتسليم (بدون تكلفة/كفالة)"
+        return "جاهز للتسليم (Ready)"
+    if "اد خ ص" in doc: return "قيد المعالجة (In Progress)"
+    return "قيد الانتظار"
+
+def deduplicate_ledger(df):
+    if df.empty or 'service_id' not in df.columns:
+        return df
+    
+    df['rank'] = df['document_origin'].apply(get_status_rank)
+    df = df.sort_values(by=['service_id', 'rank'], ascending=[True, True])
+    
+    # Keep the last entry (highest rank) per service_id
+    deduped = df.groupby('service_id', as_index=False).last()
+    deduped = deduped.drop(columns=['rank'], errors='ignore')
+    return deduped
+
 def get_ledger():
     try:
         df = conn.read(worksheet="Ledger", ttl=0)
@@ -45,10 +78,15 @@ def get_ledger():
             if col not in ['cost_debit', 'payment_credit', 'balance']:
                 df[col] = df[col].fillna("").astype(str).replace({'nan': '', 'None': ''})
         df.loc[df['spare_parts'] == "", 'spare_parts'] = "لا حاجة / متوفرة"
-        return df
-    except: return pd.DataFrame(columns=EXPECTED_COLUMNS)
+        
+        # Deduplicate on load
+        return deduplicate_ledger(df)
+    except:
+        return pd.DataFrame(columns=EXPECTED_COLUMNS)
 
-def save_ledger(df): conn.update(worksheet="Ledger", data=df)
+def save_ledger(df):
+    clean_df = deduplicate_ledger(df)
+    conn.update(worksheet="Ledger", data=clean_df)
 
 def get_stock():
     try:
@@ -80,19 +118,6 @@ def get_branch(s_id):
     if char == 'D': return "درعا (Daraa)"
     if char == 'V': return "شريك (Partner)"
     return "أخرى"
-
-def map_document_to_status(doc_string, cost=0.0):
-    doc = str(doc_string).strip()
-    try: cost_val = float(cost)
-    except: cost_val = 0.0
-    
-    if "اد خ ص" in doc: return "قيد المعالجة (In Progress)"
-    if "مبيع خ ص" in doc: 
-        if cost_val == 0.0: return "جاهز للتسليم (بدون تكلفة/كفالة)"
-        return "جاهز للتسليم (Ready)"
-    if "قبض" in doc: return "تم التسليم للزبون (Customer Collected)"
-    if "خ صيانة" in doc: return "تم التسليم - حساب وكيل (Partner Collected)"
-    return "قيد الانتظار"
 
 # ==========================================
 # AUTHENTICATION & SESSION STATE
@@ -246,7 +271,6 @@ elif st.session_state['current_module'] == 'Services':
                 with col3: st.metric("الرصيد", f"{cost - pay:.2f}")
                     
                 new_status = map_document_to_status(new_doc, cost)
-                
                 notes = st.text_input("ملاحظات الصيانة", value=str(row_data['resolution_notes']))
                 confirm = True
                 if "تم التسليم" in new_status: confirm = st.checkbox("✅ أؤكد إقفال الملف (تسليم للزبون أو تحميل على الوكيل).")
@@ -387,34 +411,38 @@ elif st.session_state['current_module'] == 'Logistics':
             else: st.success("لا توجد أجهزة جاهزة تحتاج إلى شحن حالياً.")
 
 # ==========================================
-# MODULE 5: ADMIN & FINANCE (SMART IMPORT)
+# MODULE 5: ADMIN & FINANCE (AUTO-CONSOLIDATION)
 # ==========================================
 elif st.session_state['current_module'] == 'Admin':
     st.title("⚙️ إعدادات النظام والمالية")
     
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🧹 تنظيف وتوحيد السجلات الحالية (Clean Duplicates Now)", use_container_width=True):
+            clean_df = deduplicate_ledger(live_df)
+            save_ledger(clean_df)
+            st.success("✅ تم دمج وتوحيد جميع التكرارات بناءً على الحالة الأحدث!")
+            st.rerun()
+
     if is_admin:
-        with st.expander("📥 استيراد بيانات صيانة قديمة (استيراد ذكي ومؤتمت)"):
-            st.warning("هذا المستورد الذكي يقرأ جميع السطور الفرعية للملف (مثل قبض م) ويغلق الحسابات تلقائياً.")
+        with st.expander("📥 استيراد وتصحيح ذكي (Excel Import & Sync)"):
+            st.markdown("يقوم بدمج كل مراحل الجهاز في سجل واحد واختيار الحالة الأحدث تلقائياً.")
             uploaded_legacy = st.file_uploader("رفع كشف الحساب", type=["xlsx"])
-            if uploaded_legacy and st.button("بدء الاستيراد الآلي"):
-                with st.spinner("جاري قراءة الملف وتتبع تاريخ كل جهاز..."):
+            if uploaded_legacy and st.button("بدء الاستيراد الموحد"):
+                with st.spinner("جاري قراءة وتوحيد بيانات كل جهاز..."):
                     df = pd.read_excel(uploaded_legacy)
-                    new_records = []
-                    current_record = None
-                    
+                    records_by_id = {}
+                    current_sid = None
                     cust_col = 'اسم الزبون' if 'اسم الزبون' in df.columns else 'الحساب' if 'الحساب' in df.columns else None
 
                     for index, row in df.iterrows():
                         row_str = " ".join(str(val) for val in row.values)
                         cust_name_raw = str(row[cust_col]) if cust_col and pd.notna(row[cust_col]) else ""
                         
-                        # Identify new customer block
                         if cust_name_raw and '-' in cust_name_raw and any(c in cust_name_raw.upper() for c in ['S', 'D', 'V']):
-                            if current_record:
-                                new_records.append(current_record)
-                                
                             parts = [p.strip() for p in cust_name_raw.split('-')]
-                            s_id = parts[0] if len(parts) > 0 else f"SYS-{index}"
+                            current_sid = parts[0] if len(parts) > 0 else f"SYS-{index}"
+                            
                             c_name, phone, t_name = "غير محدد", "", "غير محدد"
                             for p in parts[1:]:
                                 p_clean = p.strip()
@@ -426,42 +454,38 @@ elif st.session_state['current_module'] == 'Admin':
                             payment_val = float(row.get('دائن', 0) if pd.notna(row.get('دائن')) else 0)
                             balance_val = float(row.get('الرصيد الحالي', 0) if pd.notna(row.get('الرصيد الحالي')) else 0)
                             
-                            current_record = {
-                                "service_id": s_id, "tool_name": t_name, "customer_name": c_name, "phone_number": phone,
-                                "warranty_status": "", "document_origin": "", "reported_issue": "", "technician": "Admin Import", 
-                                "status": "قيد الانتظار", "cost_debit": cost_val, 
-                                "payment_credit": payment_val, "balance": balance_val, 
-                                "spare_parts": "لا حاجة / متوفرة", "resolution_notes": "", 
-                                "date_logged": datetime.now().strftime("%Y-%m-%d"), "date_resolved": ""
-                            }
+                            if current_sid not in records_by_id:
+                                records_by_id[current_sid] = {
+                                    "service_id": current_sid, "tool_name": t_name, "customer_name": c_name, "phone_number": phone,
+                                    "warranty_status": "", "document_origin": "", "reported_issue": "", "technician": "Admin Import", 
+                                    "status": "قيد الانتظار", "cost_debit": cost_val, "payment_credit": payment_val, "balance": balance_val, 
+                                    "spare_parts": "لا حاجة / متوفرة", "resolution_notes": "", "date_logged": datetime.now().strftime("%Y-%m-%d"), "date_resolved": ""
+                                }
                         
-                        # SMART SCANNER: Scans sub-rows to find closing commands automatically
-                        if current_record:
-                            if "قبض" in row_str:
-                                current_record["document_origin"] = "قبض د: (مدفوع ومسلم)"
-                            elif "خ صيانة" in row_str and "قبض" not in current_record["document_origin"]:
-                                current_record["document_origin"] = "خ صيانة: (تحميل على الوكيل)"
-                            elif "مبيع خ ص" in row_str and "قبض" not in current_record["document_origin"] and "خ صيانة" not in current_record["document_origin"]:
-                                current_record["document_origin"] = "مبيع خ ص: (جاهز ومفوتر)"
-                            elif "اد خ ص" in row_str and current_record["document_origin"] == "":
-                                current_record["document_origin"] = "اد خ ص: (استلام للصيانة)"
+                        if current_sid and current_sid in records_by_id:
+                            # Keep the highest-ranked document origin for this service ticket
+                            current_origin = records_by_id[current_sid]["document_origin"]
+                            current_rank = get_status_rank(current_origin)
+                            
+                            if "قبض" in row_str and current_rank < 4:
+                                records_by_id[current_sid]["document_origin"] = "قبض د: (مدفوع ومسلم)"
+                            elif "خ صيانة" in row_str and current_rank < 3:
+                                records_by_id[current_sid]["document_origin"] = "خ صيانة: (تحميل على الوكيل)"
+                            elif "مبيع خ ص" in row_str and current_rank < 2:
+                                records_by_id[current_sid]["document_origin"] = "مبيع خ ص: (جاهز ومفوتر)"
+                            elif "اد خ ص" in row_str and current_rank < 1:
+                                records_by_id[current_sid]["document_origin"] = "اد خ ص: (استلام للصيانة)"
                                 
-                    if current_record:
-                        new_records.append(current_record)
-
-                    valid_inserts = []
+                    new_records = list(records_by_id.values())
                     for rec in new_records:
-                        if not live_df.empty and rec['service_id'] in live_df['service_id'].values: continue 
                         rec['status'] = map_document_to_status(rec['document_origin'], rec['cost_debit'])
                         if "تم التسليم" in rec['status']: rec['date_resolved'] = datetime.now().strftime("%Y-%m-%d")
-                        valid_inserts.append(rec)
-
-                    if valid_inserts:
-                        save_ledger(pd.concat([live_df, pd.DataFrame(valid_inserts)], ignore_index=True))
-                        st.success(f"✅ تم استيراد وتحديث {len(valid_inserts)} سجل بشكل آلي بالكامل!")
-                        st.rerun()
-                    else:
-                        st.info("لا توجد سجلات جديدة لاستيرادها.")
+                    
+                    combined_df = pd.concat([live_df, pd.DataFrame(new_records)], ignore_index=True)
+                    final_df = deduplicate_ledger(combined_df)
+                    save_ledger(final_df)
+                    st.success(f"✅ تم دمج وتحديث {len(new_records)} جهاز بنجاح دون أي تكرار!")
+                    st.rerun()
 
     st.markdown("#### 📊 السجل المالي العام (General Ledger)")
     st.dataframe(live_df, use_container_width=True)
