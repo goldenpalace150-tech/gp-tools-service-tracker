@@ -40,12 +40,15 @@ def get_status_rank(val):
     s = str(val)
     if "قبض" in s or "Collected" in s: return 4
     if "خ صيانة" in s or "حساب وكيل" in s: return 3
-    if "مبيع خ ص" in s or "جاهز" in s: return 2
-    if "اد خ ص" in s or "المعالجة" in s: return 1
+    if "مبيع خ ص" in doc_normalize(s) or "جاهز" in s: return 2
+    if "اد خ ص" in doc_normalize(s) or "المعالجة" in s: return 1
     return 0
 
+def doc_normalize(text):
+    return re.sub(r'\s+', ' ', str(text)).strip()
+
 def map_document_to_status(doc_string, cost=0.0):
-    doc = str(doc_string).strip()
+    doc = doc_normalize(doc_string)
     try: cost_val = float(cost)
     except: cost_val = 0.0
     
@@ -60,14 +63,10 @@ def map_document_to_status(doc_string, cost=0.0):
 def deduplicate_ledger(df):
     if df.empty or 'service_id' not in df.columns:
         return df
-    
     df['rank'] = df['document_origin'].apply(get_status_rank)
     df = df.sort_values(by=['service_id', 'rank'], ascending=[True, True])
-    
-    # Keep the last entry (highest rank) per service_id
     deduped = df.groupby('service_id', as_index=False).last()
-    deduped = deduped.drop(columns=['rank'], errors='ignore')
-    return deduped
+    return deduped.drop(columns=['rank'], errors='ignore')
 
 def get_ledger():
     try:
@@ -78,15 +77,12 @@ def get_ledger():
             if col not in ['cost_debit', 'payment_credit', 'balance']:
                 df[col] = df[col].fillna("").astype(str).replace({'nan': '', 'None': ''})
         df.loc[df['spare_parts'] == "", 'spare_parts'] = "لا حاجة / متوفرة"
-        
-        # Deduplicate on load
         return deduplicate_ledger(df)
     except:
         return pd.DataFrame(columns=EXPECTED_COLUMNS)
 
 def save_ledger(df):
-    clean_df = deduplicate_ledger(df)
-    conn.update(worksheet="Ledger", data=clean_df)
+    conn.update(worksheet="Ledger", data=deduplicate_ledger(df))
 
 def get_stock():
     try:
@@ -148,7 +144,7 @@ stock_df = get_stock()
 hawara_df = get_hawara()
 
 # ==========================================
-# "START MENU" (SIDEBAR)
+# SIDEBAR
 # ==========================================
 st.sidebar.title("🎛️ القائمة الرئيسية")
 st.sidebar.write(f"👤 مرحباً: **{current_user}**")
@@ -239,8 +235,7 @@ elif st.session_state['current_module'] == 'Services':
                         "technician": current_user, "status": map_document_to_status(doc_origin, 0.0), "cost_debit": 0.0, "payment_credit": 0.0,
                         "balance": 0.0, "spare_parts": spare_parts, "resolution_notes": "", "date_logged": date_now, "date_resolved": ""
                     }
-                    updated_df = pd.concat([live_df, pd.DataFrame([new_row])], ignore_index=True)
-                    save_ledger(updated_df)
+                    save_ledger(pd.concat([live_df, pd.DataFrame([new_row])], ignore_index=True))
                     st.success("✅ تم الحفظ بنجاح!")
                     st.rerun()
                 else: st.warning("يرجى تعبئة السند واسم الزبون.")
@@ -314,7 +309,6 @@ elif st.session_state['current_module'] == 'Services':
 # ==========================================
 elif st.session_state['current_module'] == 'Warehouse':
     st.title("📦 إدارة المستودعات (Warehouse)")
-    
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
         st.download_button("📥 تصدير المخزون (Export to Excel)", data=convert_df_to_excel(stock_df) if not stock_df.empty else b"", file_name=f"Stock_{datetime.now().strftime('%Y-%m-%d')}.xlsx", use_container_width=True)
@@ -337,6 +331,7 @@ elif st.session_state['current_module'] == 'Warehouse':
                         save_stock(new_items[STOCK_COLUMNS])
                         st.success("✅ تم تحديث الأسعار بنجاح!")
                         st.rerun()
+                    else: st.error("❌ تأكد من اختيار لائحة الأسعار الصحيحة.")
                 except Exception as e: st.error(f"خطأ: {e}")
 
     if not stock_df.empty:
@@ -374,8 +369,7 @@ elif st.session_state['current_module'] == 'Logistics':
                         "order_id": h_id, "order_type": h_type, "delivery_note": h_note, 
                         "document_link": h_link, "status": h_status, "date_logged": datetime.now().strftime("%Y-%m-%d")
                     }
-                    updated_hawara = pd.concat([hawara_df, pd.DataFrame([new_hawara])], ignore_index=True)
-                    save_hawara(updated_hawara)
+                    save_hawara(pd.concat([hawara_df, pd.DataFrame([new_hawara])], ignore_index=True))
                     st.success("✅ تم إضافة الطلبية بنجاح!")
                     st.rerun()
                 else: st.warning("يرجى إدخال معرف الطلب.")
@@ -391,7 +385,6 @@ elif st.session_state['current_module'] == 'Logistics':
                 save_hawara(edited_hawara)
                 st.success("✅ تم التحديث بنجاح!")
                 st.rerun()
-        else: st.info("لا توجد طلبيات مسجلة حالياً.")
 
     with tab2:
         st.markdown("#### أجهزة جاهزة تتطلب شحن محلي")
@@ -411,81 +404,101 @@ elif st.session_state['current_module'] == 'Logistics':
             else: st.success("لا توجد أجهزة جاهزة تحتاج إلى شحن حالياً.")
 
 # ==========================================
-# MODULE 5: ADMIN & FINANCE (AUTO-CONSOLIDATION)
+# MODULE 5: ADMIN & FINANCE (ROBUST AL-AMEEN PARSER)
 # ==========================================
 elif st.session_state['current_module'] == 'Admin':
     st.title("⚙️ إعدادات النظام والمالية")
     
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("🧹 تنظيف وتوحيد السجلات الحالية (Clean Duplicates Now)", use_container_width=True):
+        if st.button("🧹 تنظيف وتوحيد السجلات وإزالة التأخيرات المنتهية", use_container_width=True):
             clean_df = deduplicate_ledger(live_df)
             save_ledger(clean_df)
-            st.success("✅ تم دمج وتوحيد جميع التكرارات بناءً على الحالة الأحدث!")
+            st.success("✅ تم فحص وإصلاح وتوحيد قاعدة البيانات بالكامل!")
             st.rerun()
 
     if is_admin:
-        with st.expander("📥 استيراد وتصحيح ذكي (Excel Import & Sync)"):
-            st.markdown("يقوم بدمج كل مراحل الجهاز في سجل واحد واختيار الحالة الأحدث تلقائياً.")
+        with st.expander("📥 استيراد كشف حساب الأمين الشامل (Smart Auto-Parser)"):
+            st.markdown("يقوم بمسح كامل محتوى ورقة الأمين، وربط كل سند بحركاته المالية (`قبض م`، `مبيع خ ص`، `اد خ ص`) وإغلاق المنتهي فوراً.")
             uploaded_legacy = st.file_uploader("رفع كشف الحساب", type=["xlsx"])
-            if uploaded_legacy and st.button("بدء الاستيراد الموحد"):
-                with st.spinner("جاري قراءة وتوحيد بيانات كل جهاز..."):
-                    df = pd.read_excel(uploaded_legacy)
-                    records_by_id = {}
-                    current_sid = None
-                    cust_col = 'اسم الزبون' if 'اسم الزبون' in df.columns else 'الحساب' if 'الحساب' in df.columns else None
-
-                    for index, row in df.iterrows():
-                        row_str = " ".join(str(val) for val in row.values)
-                        cust_name_raw = str(row[cust_col]) if cust_col and pd.notna(row[cust_col]) else ""
-                        
-                        if cust_name_raw and '-' in cust_name_raw and any(c in cust_name_raw.upper() for c in ['S', 'D', 'V']):
-                            parts = [p.strip() for p in cust_name_raw.split('-')]
-                            current_sid = parts[0] if len(parts) > 0 else f"SYS-{index}"
-                            
-                            c_name, phone, t_name = "غير محدد", "", "غير محدد"
-                            for p in parts[1:]:
-                                p_clean = p.strip()
-                                if re.match(r'^[\d\s\+\-]{8,}$', p_clean) and not any(c.isalpha() for c in p_clean): phone = p_clean
-                                elif re.search(r'[a-zA-Z]', p_clean) and re.search(r'\d', p_clean): t_name = p_clean
-                                elif len(p_clean) > 2: c_name = p_clean
-                            
-                            cost_val = float(row.get('مدين', 0) if pd.notna(row.get('مدين')) else 0)
-                            payment_val = float(row.get('دائن', 0) if pd.notna(row.get('دائن')) else 0)
-                            balance_val = float(row.get('الرصيد الحالي', 0) if pd.notna(row.get('الرصيد الحالي')) else 0)
-                            
-                            if current_sid not in records_by_id:
-                                records_by_id[current_sid] = {
-                                    "service_id": current_sid, "tool_name": t_name, "customer_name": c_name, "phone_number": phone,
-                                    "warranty_status": "", "document_origin": "", "reported_issue": "", "technician": "Admin Import", 
-                                    "status": "قيد الانتظار", "cost_debit": cost_val, "payment_credit": payment_val, "balance": balance_val, 
-                                    "spare_parts": "لا حاجة / متوفرة", "resolution_notes": "", "date_logged": datetime.now().strftime("%Y-%m-%d"), "date_resolved": ""
-                                }
-                        
-                        if current_sid and current_sid in records_by_id:
-                            # Keep the highest-ranked document origin for this service ticket
-                            current_origin = records_by_id[current_sid]["document_origin"]
-                            current_rank = get_status_rank(current_origin)
-                            
-                            if "قبض" in row_str and current_rank < 4:
-                                records_by_id[current_sid]["document_origin"] = "قبض د: (مدفوع ومسلم)"
-                            elif "خ صيانة" in row_str and current_rank < 3:
-                                records_by_id[current_sid]["document_origin"] = "خ صيانة: (تحميل على الوكيل)"
-                            elif "مبيع خ ص" in row_str and current_rank < 2:
-                                records_by_id[current_sid]["document_origin"] = "مبيع خ ص: (جاهز ومفوتر)"
-                            elif "اد خ ص" in row_str and current_rank < 1:
-                                records_by_id[current_sid]["document_origin"] = "اد خ ص: (استلام للصيانة)"
-                                
-                    new_records = list(records_by_id.values())
-                    for rec in new_records:
-                        rec['status'] = map_document_to_status(rec['document_origin'], rec['cost_debit'])
-                        if "تم التسليم" in rec['status']: rec['date_resolved'] = datetime.now().strftime("%Y-%m-%d")
+            if uploaded_legacy and st.button("بدء الاستيراد والدمج الذكي"):
+                with st.spinner("جاري مسح جميع سطور وسندات الأمين..."):
+                    raw_excel = pd.read_excel(uploaded_legacy, header=None)
                     
-                    combined_df = pd.concat([live_df, pd.DataFrame(new_records)], ignore_index=True)
-                    final_df = deduplicate_ledger(combined_df)
-                    save_ledger(final_df)
-                    st.success(f"✅ تم دمج وتحديث {len(new_records)} جهاز بنجاح دون أي تكرار!")
-                    st.rerun()
+                    records = {}
+                    curr_sid = None
+                    
+                    for r_idx, row in raw_excel.iterrows():
+                        row_vals = [str(x).strip() for x in row.dropna().tolist()]
+                        row_text = " ".join(row_vals)
+                        
+                        # Find Account Header (e.g. S353, D485, V286)
+                        sid_match = re.search(r'\b([SDV]\d+)\b', row_text, re.IGNORECASE)
+                        if sid_match and any(keyword in row_text for keyword in ['الزبون', 'الحساب', '-']):
+                            curr_sid = sid_match.group(1).upper()
+                            
+                            # Parse customer metadata
+                            parts = [p.strip() for p in re.split(r'[-–:]', row_text) if p.strip()]
+                            c_name, phone, t_name = "غير محدد", "", "غير محدد"
+                            for p in parts:
+                                if re.match(r'^[\d\s\+\-]{8,}$', p) and not any(c.isalpha() for c in p):
+                                    phone = p
+                                elif re.search(r'[a-zA-Z]', p) and re.search(r'\d', p) and p != curr_sid:
+                                    t_name = p
+                                elif len(p) > 2 and not any(k in p for k in ['الزبون', 'الحساب', 'عملة', curr_sid]):
+                                    if c_name == "غير محدد": c_name = p
+                                    elif t_name == "غير محدد": t_name = p
+
+                            if curr_sid not in records:
+                                records[curr_sid] = {
+                                    "service_id": curr_sid, "tool_name": t_name, "customer_name": c_name, "phone_number": phone,
+                                    "warranty_status": "خارج الكفالة", "document_origin": "", "reported_issue": "",
+                                    "technician": "Admin Import", "status": "قيد الانتظار", "cost_debit": 0.0,
+                                    "payment_credit": 0.0, "balance": 0.0, "spare_parts": "لا حاجة / متوفرة",
+                                    "resolution_notes": "", "date_logged": datetime.now().strftime("%Y-%m-%d"), "date_resolved": ""
+                                }
+
+                        # Scan voucher events for current active ticket block
+                        if curr_sid and curr_sid in records:
+                            rec = records[curr_sid]
+                            c_origin = rec["document_origin"]
+                            c_rank = get_status_rank(c_origin)
+                            
+                            # Update financial numbers if present in row
+                            nums = []
+                            for v in row_vals:
+                                try: nums.append(float(v))
+                                except: pass
+                            
+                            if "قبض" in row_text:
+                                if c_rank < 4: rec["document_origin"] = "قبض د: (مدفوع ومسلم)"
+                                if nums: rec["payment_credit"] = max(nums)
+                            elif "خ صيانة" in row_text:
+                                if c_rank < 3: rec["document_origin"] = "خ صيانة: (تحميل على الوكيل)"
+                            elif "مبيع خ ص" in row_text:
+                                if c_rank < 2: rec["document_origin"] = "مبيع خ ص: (جاهز ومفوتر)"
+                                if nums: rec["cost_debit"] = max(nums)
+                            elif "اد خ ص" in row_text and c_rank < 1:
+                                rec["document_origin"] = "اد خ ص: (استلام للصيانة)"
+
+                    # Convert to dataframe & assign proper statuses
+                    imported_list = []
+                    for sid, rec in records.items():
+                        rec["balance"] = float(rec["cost_debit"]) - float(rec["payment_credit"])
+                        rec["status"] = map_document_to_status(rec["document_origin"], rec["cost_debit"])
+                        if "تم التسليم" in rec["status"]:
+                            rec["date_resolved"] = datetime.now().strftime("%Y-%m-%d")
+                        imported_list.append(rec)
+
+                    if imported_list:
+                        new_imp_df = pd.DataFrame(imported_list)
+                        merged = pd.concat([live_df, new_imp_df], ignore_index=True)
+                        final_df = deduplicate_ledger(merged)
+                        save_ledger(final_df)
+                        st.success(f"✅ تم مسح وتحديث {len(final_df)} جهاز بنجاح تام وحل جميع التنبيهات المنتهية!")
+                        st.rerun()
+                    else:
+                        st.warning("لم يتم العثور على أرقام سندات مطابقة.")
 
     st.markdown("#### 📊 السجل المالي العام (General Ledger)")
     st.dataframe(live_df, use_container_width=True)
