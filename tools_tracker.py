@@ -23,19 +23,14 @@ st.markdown("""
         .stTabs [data-baseweb="tab"] { background-color: transparent; border-radius: 4px 4px 0 0; padding: 10px 20px; font-weight: 600; color: #4a5568; }
         .stTabs [aria-selected="true"] { border-bottom: 3px solid #3182ce; color: #2b6cb0; background-color: #ebf8ff; }
         .erp-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .erp-btn > button { width: 100%; height: 60px; font-size: 16px; font-weight: bold; border-radius: 6px; }
+        .locked-card { background: #fff5f5; padding: 20px; border: 1px solid #feb2b2; border-radius: 8px; margin-bottom: 20px; }
         .invoice-box { background: white; padding: 30px; border: 1px solid #e2e8f0; border-radius: 8px; max-width: 800px; margin: auto; }
         .invoice-header { text-align: center; border-bottom: 2px solid #2b6cb0; padding-bottom: 15px; margin-bottom: 20px; }
-        @media print {
-            body * { visibility: hidden; }
-            .invoice-box, .invoice-box * { visibility: visible; }
-            .invoice-box { position: absolute; left: 0; top: 0; width: 100%; border: none; box-shadow: none; }
-        }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# DATABASE ORM (DocType Simulation)
+# DATABASE ORM (DocType Engine)
 # ==========================================
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -101,6 +96,18 @@ def upload_to_cloud(file_buffer):
     except: return ""
     return ""
 
+# ERPNext Engine: Auto-Naming Series Generator
+def generate_next_id(branch_code, df):
+    if df.empty: return f"{branch_code}1"
+    branch_records = df[df['service_id'].str.startswith(branch_code, na=False)]
+    if branch_records.empty: return f"{branch_code}1"
+    
+    max_num = 0
+    for sid in branch_records['service_id']:
+        num_part = re.sub(r'\D', '', str(sid))
+        if num_part: max_num = max(max_num, int(num_part))
+    return f"{branch_code}{max_num + 1}"
+
 # ==========================================
 # AUTHENTICATION & WORKSPACE ROUTING
 # ==========================================
@@ -132,6 +139,8 @@ ledger_df = get_doctype("Ledger")
 stock_df = get_doctype("Stock")
 hawara_df = get_doctype("Hawara")
 dispatch_df = get_doctype("Dispatch")
+
+stock_list = stock_df['item_name'].dropna().unique().tolist() if not stock_df.empty else []
 
 # ==========================================
 # ERP SIDEBAR NAVIGATION
@@ -173,18 +182,12 @@ if st.session_state['current_module'] == 'Workspace':
     with col3:
         st.markdown("<div class='erp-card'><h3>💰 إجمالي الذمم/المبيعات</h3><h1>${:,.2f}</h1></div>".format(total_rev), unsafe_allow_html=True)
 
-    if not ledger_df.empty:
-        st.markdown("<div class='erp-card'>", unsafe_allow_html=True)
-        st.subheader("📊 تحليلات حالة الصيانة (Status Analytics)")
-        st.bar_chart(ledger_df['status'].value_counts())
-        st.markdown("</div>", unsafe_allow_html=True)
-
 # ==========================================
-# MODULE 2: SUPPORT & MAINTENANCE
+# MODULE 2: SUPPORT & MAINTENANCE (ERPNEXT LOGIC)
 # ==========================================
 elif st.session_state['current_module'] == 'Support':
     st.title("🛠️ وحدة الدعم والصيانة (Support Desk)")
-    tab1, tab2, tab3 = st.tabs(["➕ بطاقة صيانة جديدة (New Ticket)", "🔄 تحديث وإغلاق (Update & Close)", "⚠️ تنبيهات التأخير (SLA Alerts)"])
+    tab1, tab2, tab3 = st.tabs(["➕ بطاقة صيانة جديدة (New Ticket)", "🔄 تحديث الملف (Update & View)", "⚠️ تنبيهات التأخير (SLA Alerts)"])
     
     with tab1:
         st.markdown("<div class='erp-card'>", unsafe_allow_html=True)
@@ -192,11 +195,15 @@ elif st.session_state['current_module'] == 'Support':
             st.subheader("تفاصيل استلام جهاز")
             c1, c2, c3 = st.columns(3)
             with c1:
-                s_id = st.text_input("رقم السند (Ticket ID)")
+                # ERPNext Auto-Naming System
+                branch_select = st.selectbox("الفرع (Branch Prefix)", ["صيدا (S)", "درعا (D)", "وكيل / شريك (V)"])
                 c_name = st.text_input("اسم الزبون (Customer Name)")
             with c2:
                 c_phone = st.text_input("رقم الهاتف (Phone)")
-                t_name = st.text_input("كود/اسم الأداة (Item Name)")
+                # Master Data Lookup
+                t_name = st.selectbox("الجهاز / الأداة (Item Master Lookup)", options=["أخرى (إدخال يدوي)"] + stock_list)
+                if t_name == "أخرى (إدخال يدوي)":
+                    t_name = st.text_input("اسم الجهاز اليدوي")
             with c3:
                 doc_origin = st.selectbox("الحالة المحاسبية (Origin)", ["اد خ ص: (استلام للصيانة)", "مبيع خ ص: (جاهز ومفوتر)", "خ صيانة: (تحميل على الوكيل)"])
                 spare_parts = st.selectbox("حالة قطع الغيار (Parts Status)", ["لا حاجة / متوفرة", "بانتظار شحن مجاني", "بانتظار شحن عادي"])
@@ -205,79 +212,94 @@ elif st.session_state['current_module'] == 'Support':
             with c4: issue = st.text_area("العطل المرصود (Reported Issue)")
             with c5: remarks = st.text_area("ملاحظات إضافية (Internal Remarks)")
 
-            if st.form_submit_button("حفظ السجل (Save Document)", use_container_width=True):
-                if s_id and c_name:
+            if st.form_submit_button("إنشاء السند (Create Document)", use_container_width=True):
+                if c_name and t_name:
+                    # Execute Auto-Naming
+                    branch_code = "S" if "S" in branch_select else "D" if "D" in branch_select else "V"
+                    auto_id = generate_next_id(branch_code, ledger_df)
+                    
                     date_now = datetime.now().strftime("%Y-%m-%d")
                     new_row = {
-                        "service_id": s_id, "tool_name": t_name, "customer_name": c_name, "phone_number": c_phone,
+                        "service_id": auto_id, "tool_name": t_name, "customer_name": c_name, "phone_number": c_phone,
                         "warranty_status": "خارج الكفالة", "document_origin": doc_origin, "reported_issue": issue,
                         "technician": current_user, "status": map_document_to_status(doc_origin, 0.0), "cost_debit": 0.0, "payment_credit": 0.0,
                         "balance": 0.0, "spare_parts": spare_parts, "resolution_notes": "", "remarks": remarks, "date_logged": date_now, "date_resolved": ""
                     }
                     save_doctype("Ledger", pd.concat([ledger_df, pd.DataFrame([new_row])], ignore_index=True))
-                    st.success("✅ تم الحفظ بنجاح!")
+                    st.success(f"✅ تم إنشاء السند بنجاح برقم: {auto_id}")
                     st.rerun()
-                else: st.error("يرجى تعبئة الحقول الإلزامية.")
+                else: st.error("يرجى تعبئة الحقول الإلزامية (اسم الزبون والجهاز).")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with tab2:
-        st.markdown("<div class='erp-card'>", unsafe_allow_html=True)
-        filtered = ledger_df[~ledger_df['status'].str.contains('تم التسليم', na=False)] if not ledger_df.empty else pd.DataFrame()
-        if not filtered.empty:
-            opts = {f"{r['service_id']} - {r['customer_name']}": r['service_id'] for _, r in filtered.iterrows()}
-            sel_id = opts[st.selectbox("اختر السند للتحديث (Select Ticket):", list(opts.keys()))]
+        if not ledger_df.empty:
+            opts = {f"{r['service_id']} - {r['customer_name']}": r['service_id'] for _, r in ledger_df.iterrows()}
+            sel_id = opts[st.selectbox("ابحث عن السند (Search Document):", list(opts.keys()))]
             row_data = ledger_df[ledger_df['service_id'] == sel_id].iloc[0]
             
-            with st.form("update_form"):
-                doc_options = ["اد خ ص: (استلام للصيانة)", "مبيع خ ص: (جاهز ومفوتر)", "قبض د: (مدفوع ومسلم)", "خ صيانة: (تحميل على الوكيل)"]
-                try: curr_i = [i for i, o in enumerate(doc_options) if str(row_data['document_origin']) in o][0]
-                except: curr_i = 0
-                
-                c_a, c_b = st.columns(2)
-                with c_a: new_doc = st.selectbox("تحديث الحالة المحاسبية:", doc_options, index=curr_i)
-                with c_b: 
-                    sp_opts = ["لا حاجة / متوفرة", "بانتظار شحن مجاني", "بانتظار شحن عادي"]
-                    try: sp_i = sp_opts.index(str(row_data['spare_parts']))
-                    except: sp_i = 0
-                    new_spare = st.selectbox("حالة قطع الغيار:", sp_opts, index=sp_i)
-                
-                col1, col2, col3 = st.columns(3)
-                with col1: cost = st.number_input("التكلفة (Debit)", value=float(row_data['cost_debit'] or 0), step=1.0)
-                with col2: pay = st.number_input("الدفعة (Credit)", value=float(row_data['payment_credit'] or 0), step=1.0)
-                with col3: st.metric("الرصيد المتبقي (Balance)", f"${cost - pay:.2f}")
+            # ERPNext State Locking Logic
+            is_locked = "تم التسليم" in str(row_data['status'])
+            
+            if is_locked:
+                st.markdown("<div class='locked-card'>", unsafe_allow_html=True)
+                st.markdown(f"### 🔒 مستند مغلق (Submitted/Locked)")
+                st.write(f"**رقم السند:** {sel_id} | **الزبون:** {row_data['customer_name']}")
+                st.write(f"**حالة التسليم:** {row_data['status']} في تاريخ {row_data.get('date_resolved', '')}")
+                st.write(f"**التكلفة النهائية:** ${float(row_data['cost_debit']):.2f}")
+                st.write("هذا الملف مغلق نهائياً لحماية القيود المالية. للطباعة يرجى التوجه لقسم المحاسبة.")
+                st.markdown("</div>", unsafe_allow_html=True)
+            else:
+                st.markdown("<div class='erp-card'>", unsafe_allow_html=True)
+                with st.form("update_form"):
+                    doc_options = ["اد خ ص: (استلام للصيانة)", "مبيع خ ص: (جاهز ومفوتر)", "قبض د: (مدفوع ومسلم)", "خ صيانة: (تحميل على الوكيل)"]
+                    try: curr_i = [i for i, o in enumerate(doc_options) if str(row_data['document_origin']) in o][0]
+                    except: curr_i = 0
                     
-                new_status = map_document_to_status(new_doc, cost)
-                c_n1, c_n2 = st.columns(2)
-                with c_n1: notes = st.text_area("ملاحظات الإصلاح (Resolution)", value=str(row_data.get('resolution_notes', '')))
-                with c_n2: remarks_update = st.text_area("تحديثات إضافية (Remarks)", value=str(row_data.get('remarks', '')))
-                
-                confirm = True
-                if "تم التسليم" in new_status: confirm = st.checkbox("✅ تأكيد إغلاق الملف (Confirm Closure)")
+                    c_a, c_b = st.columns(2)
+                    with c_a: new_doc = st.selectbox("تحديث الحالة المحاسبية:", doc_options, index=curr_i)
+                    with c_b: 
+                        sp_opts = ["لا حاجة / متوفرة", "بانتظار شحن مجاني", "بانتظار شحن عادي"]
+                        try: sp_i = sp_opts.index(str(row_data['spare_parts']))
+                        except: sp_i = 0
+                        new_spare = st.selectbox("حالة قطع الغيار:", sp_opts, index=sp_i)
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1: cost = st.number_input("التكلفة (Debit)", value=float(row_data['cost_debit'] or 0), step=1.0)
+                    with col2: pay = st.number_input("الدفعة (Credit)", value=float(row_data['payment_credit'] or 0), step=1.0)
+                    with col3: st.metric("الرصيد المتبقي (Balance)", f"${cost - pay:.2f}")
+                        
+                    new_status = map_document_to_status(new_doc, cost)
+                    c_n1, c_n2 = st.columns(2)
+                    with c_n1: notes = st.text_area("ملاحظات الإصلاح (Resolution)", value=str(row_data.get('resolution_notes', '')))
+                    with c_n2: remarks_update = st.text_area("تحديثات إضافية (Remarks)", value=str(row_data.get('remarks', '')))
+                    
+                    confirm = True
+                    if "تم التسليم" in new_status: confirm = st.checkbox("✅ تأكيد إغلاق الملف (Confirm Document Submission & Lock)")
 
-                if st.form_submit_button("تحديث السجل (Update)", use_container_width=True):
-                    if "تم التسليم" in new_status and not confirm: st.error("❌ يرجى تأكيد الإغلاق.")
-                    else:
-                        idx = ledger_df.index[ledger_df['service_id'] == sel_id][0]
-                        ledger_df.at[idx, 'cost_debit'] = cost
-                        ledger_df.at[idx, 'payment_credit'] = pay
-                        ledger_df.at[idx, 'balance'] = cost - pay
-                        ledger_df.at[idx, 'resolution_notes'] = notes
-                        ledger_df.at[idx, 'remarks'] = remarks_update
-                        ledger_df.at[idx, 'document_origin'] = new_doc
-                        ledger_df.at[idx, 'status'] = new_status
-                        ledger_df.at[idx, 'spare_parts'] = new_spare
-                        ledger_df.at[idx, 'date_resolved'] = datetime.now().strftime("%Y-%m-%d") if "تم التسليم" in new_status else ""
-                        save_doctype("Ledger", ledger_df)
-                        st.success("✅ تم التحديث بنجاح!")
-                        st.rerun()
+                    if st.form_submit_button("تحديث السجل (Update Document)", use_container_width=True):
+                        if "تم التسليم" in new_status and not confirm: st.error("❌ يرجى تأكيد الإغلاق النهائي للملف.")
+                        else:
+                            idx = ledger_df.index[ledger_df['service_id'] == sel_id][0]
+                            ledger_df.at[idx, 'cost_debit'] = cost
+                            ledger_df.at[idx, 'payment_credit'] = pay
+                            ledger_df.at[idx, 'balance'] = cost - pay
+                            ledger_df.at[idx, 'resolution_notes'] = notes
+                            ledger_df.at[idx, 'remarks'] = remarks_update
+                            ledger_df.at[idx, 'document_origin'] = new_doc
+                            ledger_df.at[idx, 'status'] = new_status
+                            ledger_df.at[idx, 'spare_parts'] = new_spare
+                            ledger_df.at[idx, 'date_resolved'] = datetime.now().strftime("%Y-%m-%d") if "تم التسليم" in new_status else ""
+                            save_doctype("Ledger", ledger_df)
+                            st.success("✅ تم التحديث بنجاح!")
+                            st.rerun()
 
-            if row_data['phone_number']:
-                phone_clean = re.sub(r'\D', '', str(row_data['phone_number']))
-                wa_msg = f"مرحباً {row_data['customer_name']}, جهازك ({row_data['tool_name']}) جاهز للاستلام من القصر الذهبي."
-                wa_link = f"https://wa.me/{phone_clean}?text={urllib.parse.quote(wa_msg)}"
-                st.markdown(f"<a href='{wa_link}' target='_blank'><button style='background-color:#25D366; color:white; border:none; padding:10px 20px; border-radius:5px; cursor:pointer; width:100%; font-size:16px; font-weight:bold;'>💬 إرسال إشعار للزبون (WhatsApp)</button></a>", unsafe_allow_html=True)
-        else: st.info("لا توجد ملفات نشطة.")
-        st.markdown("</div>", unsafe_allow_html=True)
+                if row_data['phone_number']:
+                    phone_clean = re.sub(r'\D', '', str(row_data['phone_number']))
+                    wa_msg = f"مرحباً {row_data['customer_name']}, جهازك ({row_data['tool_name']}) جاهز للاستلام من القصر الذهبي."
+                    wa_link = f"https://wa.me/{phone_clean}?text={urllib.parse.quote(wa_msg)}"
+                    st.markdown(f"<a href='{wa_link}' target='_blank'><button style='background-color:#25D366; color:white; border:none; padding:10px 20px; border-radius:5px; cursor:pointer; width:100%; font-size:16px; font-weight:bold;'>💬 إرسال إشعار للزبون (WhatsApp)</button></a>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+        else: st.info("لا توجد ملفات.")
 
     with tab3:
         st.markdown("<div class='erp-card'>", unsafe_allow_html=True)
@@ -339,7 +361,7 @@ elif st.session_state['current_module'] == 'Stock':
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
-# MODULE 4: LOGISTICS (HAWARA & DISPATCH)
+# MODULE 4: LOGISTICS
 # ==========================================
 elif st.session_state['current_module'] == 'Logistics':
     st.title("🚚 وحدة الشحن واللوجستيات (Logistics)")
@@ -408,12 +430,11 @@ elif st.session_state['current_module'] == 'Logistics':
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
-# MODULE 5: ACCOUNTING & INVOICING
+# MODULE 5: ACCOUNTING
 # ==========================================
 elif st.session_state['current_module'] == 'Accounting':
     st.title("💰 الإدارة المالية والمحاسبة (Accounting)")
-    
-    tab1, tab2, tab3 = st.tabs(["🧾 طباعة الفواتير (Print Invoices)", "📊 التقارير ودفتر الأستاذ (General Ledger)", "⚙️ استيراد البيانات (Data Import)"])
+    tab1, tab2, tab3 = st.tabs(["🧾 طباعة الفواتير (Print Invoices)", "📊 دفتر الأستاذ (General Ledger)", "⚙️ استيراد البيانات (Legacy Import)"])
     
     with tab1:
         st.markdown("<div class='erp-card'>", unsafe_allow_html=True)
@@ -423,8 +444,6 @@ elif st.session_state['current_module'] == 'Accounting':
             
             if st.button("🖨️ توليد الفاتورة (Generate Invoice)", use_container_width=True):
                 inv_data = ledger_df[ledger_df['service_id'] == sel_inv].iloc[0]
-                
-                # HTML Invoice Template for clean printing
                 invoice_html = f"""
                 <div class="invoice-box">
                     <div class="invoice-header">
@@ -432,49 +451,26 @@ elif st.session_state['current_module'] == 'Accounting':
                         <p>Al-Qasr Al-Zahabi | صيانة - بيع - تأجير</p>
                     </div>
                     <table style="width:100%; margin-bottom:20px; text-align:right; direction:rtl;">
-                        <tr>
-                            <td><b>رقم السند:</b> {inv_data['service_id']}</td>
-                            <td><b>التاريخ:</b> {datetime.now().strftime("%Y-%m-%d")}</td>
-                        </tr>
-                        <tr>
-                            <td><b>الزبون:</b> {inv_data['customer_name']}</td>
-                            <td><b>الهاتف:</b> {inv_data['phone_number']}</td>
-                        </tr>
+                        <tr><td><b>رقم السند:</b> {inv_data['service_id']}</td><td><b>التاريخ:</b> {datetime.now().strftime("%Y-%m-%d")}</td></tr>
+                        <tr><td><b>الزبون:</b> {inv_data['customer_name']}</td><td><b>الهاتف:</b> {inv_data['phone_number']}</td></tr>
                     </table>
                     <hr>
                     <table style="width:100%; text-align:right; direction:rtl; border-collapse: collapse; margin-top:20px;">
-                        <tr style="background:#f7fafc; border-bottom:1px solid #cbd5e0;">
-                            <th style="padding:10px;">البيان (Description)</th>
-                            <th style="padding:10px;">المبلغ (Amount)</th>
-                        </tr>
-                        <tr style="border-bottom:1px solid #edf2f7;">
-                            <td style="padding:10px;">صيانة أداة: {inv_data['tool_name']}<br><small>ملاحظات: {inv_data['resolution_notes']}</small></td>
-                            <td style="padding:10px;">${float(inv_data['cost_debit']):.2f}</td>
-                        </tr>
-                        <tr style="border-bottom:1px solid #edf2f7;">
-                            <td style="padding:10px;">الدفعة المقدمة (Credit)</td>
-                            <td style="padding:10px;">${float(inv_data['payment_credit']):.2f}</td>
-                        </tr>
-                        <tr style="font-weight:bold; background:#ebf8ff;">
-                            <td style="padding:10px;">الرصيد المتبقي (Total Due)</td>
-                            <td style="padding:10px;">${float(inv_data['balance']):.2f}</td>
-                        </tr>
+                        <tr style="background:#f7fafc; border-bottom:1px solid #cbd5e0;"><th style="padding:10px;">البيان (Description)</th><th style="padding:10px;">المبلغ (Amount)</th></tr>
+                        <tr style="border-bottom:1px solid #edf2f7;"><td style="padding:10px;">صيانة أداة: {inv_data['tool_name']}<br><small>ملاحظات: {inv_data['resolution_notes']}</small></td><td style="padding:10px;">${float(inv_data['cost_debit']):.2f}</td></tr>
+                        <tr style="border-bottom:1px solid #edf2f7;"><td style="padding:10px;">الدفعة المقدمة (Credit)</td><td style="padding:10px;">${float(inv_data['payment_credit']):.2f}</td></tr>
+                        <tr style="font-weight:bold; background:#ebf8ff;"><td style="padding:10px;">الرصيد المتبقي (Total Due)</td><td style="padding:10px;">${float(inv_data['balance']):.2f}</td></tr>
                     </table>
-                    <div style="text-align:center; margin-top:40px; font-size:12px; color:#718096;">
-                        شكراً لتعاملكم معنا. (Thank you for your business.)<br>
-                        <i>يمكن طباعة هذه الصفحة باستخدام (Ctrl + P)</i>
-                    </div>
+                    <div style="text-align:center; margin-top:40px; font-size:12px; color:#718096;">شكراً لتعاملكم معنا. (Thank you for your business.)<br><i>اضغط (Ctrl + P) للطباعة</i></div>
                 </div>
                 """
                 st.components.v1.html(invoice_html, height=600, scrolling=True)
-                st.info("💡 اضغط `Ctrl + P` أو `Cmd + P` في المتصفح لطباعة الفاتورة أو حفظها كـ PDF.")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with tab2:
         st.markdown("<div class='erp-card'>", unsafe_allow_html=True)
         if not ledger_df.empty:
             view_type = st.radio("نوع العرض (View Type)", ["دفتر الأستاذ العام (General Ledger)", "حسابات الشركاء والوكلاء (Partner Ledger)"])
-            
             if view_type == "دفتر الأستاذ العام (General Ledger)":
                 st.dataframe(ledger_df, use_container_width=True)
                 st.download_button("📥 تصدير الدفتر (Export Ledger)", data=convert_df_to_excel(ledger_df), file_name="General_Ledger.xlsx")
@@ -494,11 +490,9 @@ elif st.session_state['current_module'] == 'Accounting':
                     raw_excel = pd.read_excel(uploaded_legacy, header=None)
                     records = {}
                     curr_sid = None
-                    
                     for r_idx, row in raw_excel.iterrows():
                         row_vals = [str(x).strip() for x in row.dropna().tolist()]
                         row_text = " ".join(row_vals)
-                        
                         row_date = ""
                         for v in row_vals:
                             date_match = re.search(r'\b(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\b', v)
@@ -506,16 +500,13 @@ elif st.session_state['current_module'] == 'Accounting':
                                 try: row_date = pd.to_datetime(date_match.group(1), dayfirst=True).strftime("%Y-%m-%d")
                                 except: row_date = date_match.group(1)
                                 break
-                        
                         header_cell = next((val for val in row_vals if re.search(r'\b[SDV]\d+\b', val, re.IGNORECASE) and '-' in val), "")
-                        
                         if header_cell:
                             curr_sid_match = re.search(r'\b([SDV]\d+)\b', header_cell, re.IGNORECASE)
                             if curr_sid_match:
                                 curr_sid = curr_sid_match.group(1).upper()
                                 clean_header = re.sub(r'^(الزبون:|الحساب:|الزبون|الحساب)\s*', '', header_cell).strip()
                                 parts = [p.strip() for p in re.split(r'[-–]', clean_header) if p.strip()]
-                                
                                 c_name, phone, t_name, issue, w_status = "غير محدد", "", "غير محدد", "", "خارج الكفالة"
                                 for p in parts[1:]:
                                     digits = re.sub(r'\D', '', p)
@@ -527,7 +518,6 @@ elif st.session_state['current_module'] == 'Accounting':
                                         if c_name == "غير محدد": c_name = p
                                         elif t_name == "غير محدد": t_name = p
                                         else: issue = p
-
                                 if curr_sid not in records:
                                     records[curr_sid] = {
                                         "service_id": curr_sid, "tool_name": t_name, "customer_name": c_name, "phone_number": phone,
@@ -537,13 +527,11 @@ elif st.session_state['current_module'] == 'Accounting':
                                         "resolution_notes": "", "remarks": "", 
                                         "date_logged": row_date if row_date else datetime.now().strftime("%Y-%m-%d"), "date_resolved": ""
                                     }
-
                         if curr_sid and curr_sid in records:
                             rec = records[curr_sid]
                             c_origin = rec["document_origin"]
                             c_rank = get_status_rank(c_origin)
                             nums = [float(v) for v in row_vals if v.replace('.','',1).isdigit()]
-                            
                             if "قبض" in row_text:
                                 if c_rank < 4: 
                                     rec["document_origin"] = "قبض د: (مدفوع ومسلم)"
@@ -567,7 +555,6 @@ elif st.session_state['current_module'] == 'Accounting':
                         if "تم التسليم" in rec["status"] and not rec["date_resolved"]:
                             rec["date_resolved"] = datetime.now().strftime("%Y-%m-%d")
                         imported_list.append(rec)
-
                     if imported_list:
                         save_doctype("Ledger", pd.concat([ledger_df, pd.DataFrame(imported_list)], ignore_index=True))
                         st.success(f"✅ Imported {len(imported_list)} records successfully.")
