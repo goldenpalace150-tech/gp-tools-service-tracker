@@ -26,6 +26,7 @@ st.markdown("""
         .locked-card { background: #fff5f5; padding: 20px; border: 1px solid #feb2b2; border-radius: 8px; margin-bottom: 20px; }
         .invoice-box { background: white; padding: 30px; border: 1px solid #e2e8f0; border-radius: 8px; max-width: 800px; margin: auto; }
         .invoice-header { text-align: center; border-bottom: 2px solid #2b6cb0; padding-bottom: 15px; margin-bottom: 20px; }
+        .urgent-tag { background-color: #ffe5e5; color: #e53e3e; padding: 2px 8px; border-radius: 12px; font-weight: bold; font-size: 12px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -34,8 +35,14 @@ st.markdown("""
 # ==========================================
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+# NEW COLUMNS ADDED TO LEDGER
 SCHEMA = {
-    "Ledger": ["service_id", "tool_name", "customer_name", "phone_number", "warranty_status", "document_origin", "reported_issue", "technician", "status", "cost_debit", "payment_credit", "balance", "spare_parts", "resolution_notes", "remarks", "date_logged", "date_resolved"],
+    "Ledger": [
+        "service_id", "tool_name", "customer_name", "phone_number", "warranty_status", "document_origin", 
+        "reported_issue", "technician", "status", "cost_debit", "payment_credit", "balance", 
+        "spare_parts", "resolution_notes", "remarks", "date_logged", "date_resolved",
+        "accessories", "loaner_item", "priority", "tool_photo_link"
+    ],
     "Stock": ["item_code", "item_name", "quantity", "price"],
     "Hawara": ["order_id", "order_type", "linked_service_id", "courier", "delivery_note", "document_link", "status", "date_logged"],
     "Dispatch": ["dispatch_id", "service_id", "customer_name", "courier", "delivery_note", "document_link", "date"]
@@ -96,7 +103,6 @@ def upload_to_cloud(file_buffer):
     except: return ""
     return ""
 
-# ERPNext Engine: Auto-Naming Series Generator
 def generate_next_id(branch_code, df):
     if df.empty: return f"{branch_code}1"
     branch_records = df[df['service_id'].astype(str).str.startswith(branch_code, na=False)]
@@ -175,72 +181,105 @@ if st.session_state['current_module'] == 'Workspace':
     total_rev = float(ledger_df['cost_debit'].astype(float).sum()) if not ledger_df.empty else 0.0
 
     col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown("<div class='erp-card'><h3>🛠️ صيانة مفتوحة</h3><h1>{}</h1></div>".format(active_count), unsafe_allow_html=True)
-    with col2:
-        st.markdown("<div class='erp-card'><h3>✅ أجهزة جاهزة للتسليم</h3><h1>{}</h1></div>".format(ready_count), unsafe_allow_html=True)
-    with col3:
-        st.markdown("<div class='erp-card'><h3>💰 إجمالي الذمم/المبيعات</h3><h1>${:,.2f}</h1></div>".format(total_rev), unsafe_allow_html=True)
+    with col1: st.markdown(f"<div class='erp-card'><h3>🛠️ صيانة مفتوحة</h3><h1>{active_count}</h1></div>", unsafe_allow_html=True)
+    with col2: st.markdown(f"<div class='erp-card'><h3>✅ أجهزة جاهزة للتسليم</h3><h1>{ready_count}</h1></div>", unsafe_allow_html=True)
+    with col3: st.markdown(f"<div class='erp-card'><h3>💰 إجمالي المبيعات</h3><h1>${total_rev:,.2f}</h1></div>", unsafe_allow_html=True)
+
+    c_chart1, c_chart2 = st.columns(2)
+    if not ledger_df.empty:
+        with c_chart1:
+            st.markdown("<div class='erp-card'>", unsafe_allow_html=True)
+            st.subheader("📊 توزع حالات الصيانة")
+            st.bar_chart(ledger_df['status'].value_counts())
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+        with c_chart2:
+            st.markdown("<div class='erp-card'>", unsafe_allow_html=True)
+            st.subheader("👨‍🔧 أداء الفنيين (الأجهزة المسلمة)")
+            completed_df = ledger_df[ledger_df['status'].str.contains('تم التسليم', na=False)]
+            if not completed_df.empty:
+                tech_perf = completed_df['technician'].value_counts()
+                st.bar_chart(tech_perf, color="#38A169")
+            else:
+                st.info("لا توجد أجهزة مسلمة بعد لحساب الأداء.")
+            st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
 # MODULE 2: SUPPORT & MAINTENANCE (ERPNEXT LOGIC)
 # ==========================================
 elif st.session_state['current_module'] == 'Support':
     st.title("🛠️ وحدة الدعم والصيانة (Support Desk)")
-    tab1, tab2, tab3 = st.tabs(["➕ بطاقة صيانة جديدة (New Ticket)", "🔄 تحديث الملف (Update & View)", "⚠️ تنبيهات التأخير (SLA Alerts)"])
+    tab1, tab2, tab3 = st.tabs(["➕ بطاقة صيانة جديدة (New Ticket)", "🔄 تحديث الملف (Update & View)", "⚠️ قائمة المهام (SLA / Queue)"])
     
     with tab1:
         st.markdown("<div class='erp-card'>", unsafe_allow_html=True)
-        # BUG FIX: clear_on_submit=True prevents the silent fail/rerun wipe issue!
         with st.form("intake_form", clear_on_submit=True):
-            st.subheader("تفاصيل استلام جهاز")
+            st.subheader("تفاصيل استلام جهاز (Intake Form)")
+            
+            # Anti-Amnesia row
+            c_amn1, c_amn2, c_amn3 = st.columns(3)
+            with c_amn1:
+                warranty = st.selectbox("حالة الكفالة (Warranty)", ["خارج الكفالة", "ضمن كفالة"])
+            with c_amn2:
+                priority = st.selectbox("أولوية العمل (Priority)", ["عادي (Normal)", "عاجل 🔥 (Rush Job)"])
+            with c_amn3:
+                loaner = st.text_input("جهاز بديل معار للزبون (Loaner Item S/N - اختياري)")
+            
+            st.divider()
+            
             c1, c2, c3 = st.columns(3)
             with c1:
                 branch_select = st.selectbox("الفرع (Branch Prefix)", ["صيدا (S)", "درعا (D)", "وكيل / شريك (V)"])
                 c_name = st.text_input("اسم الزبون (Customer Name)")
             with c2:
                 c_phone = st.text_input("رقم الهاتف (Phone)")
-                # BUG FIX: Render both widgets safely without dynamic IF statements
                 t_name_dropdown = st.selectbox("الجهاز (Item Lookup)", options=["أخرى (إدخال يدوي)"] + stock_list)
-                t_name_manual = st.text_input("اسم الجهاز اليدوي (Manual Entry - إن وجد)")
+                t_name_manual = st.text_input("اسم الجهاز اليدوي (Manual Entry)")
             with c3:
                 doc_origin = st.selectbox("الحالة المحاسبية (Origin)", ["اد خ ص: (استلام للصيانة)", "مبيع خ ص: (جاهز ومفوتر)", "خ صيانة: (تحميل على الوكيل)"])
-                spare_parts = st.selectbox("حالة قطع الغيار (Parts Status)", ["لا حاجة / متوفرة", "بانتظار شحن مجاني", "بانتظار شحن عادي"])
+                accessories = st.text_input("الملحقات المستلمة (Accessories) ⚠️ إلزامي", placeholder="مثال: بطارية، شاحن، حقيبة أو 'لا يوجد'")
                 
-            c4, c5 = st.columns(2)
-            with c4: issue = st.text_area("العطل المرصود (Reported Issue)")
-            with c5: remarks = st.text_area("ملاحظات إضافية (Internal Remarks)")
+            issue = st.text_area("العطل المرصود (Reported Issue)")
+            
+            # Live Camera Documentation
+            st.markdown("📷 **التوثيق البصري (Media Documentation)**")
+            photo_buffer = st.camera_input("التقاط صورة للجهاز أو الملحقات كإثبات حالة (Take Photo)")
 
             if st.form_submit_button("إنشاء السند (Create Document)", use_container_width=True):
-                # Determine final tool name securely
                 final_t_name = t_name_manual if t_name_dropdown == "أخرى (إدخال يدوي)" and t_name_manual else t_name_dropdown
                 
-                if c_name and final_t_name and final_t_name != "أخرى (إدخال يدوي)":
+                if not accessories.strip():
+                    st.error("❌ حقل 'الملحقات المستلمة' إلزامي لمنع فقدان الأغراض. (اكتب 'لا يوجد' إن لم يسلمك شيء).")
+                elif c_name and final_t_name and final_t_name != "أخرى (إدخال يدوي)":
                     branch_code = "S" if "S" in branch_select else "D" if "D" in branch_select else "V"
                     auto_id = generate_next_id(branch_code, ledger_df)
                     date_now = datetime.now().strftime("%Y-%m-%d")
                     
+                    # Upload Photo if taken
+                    photo_url = upload_to_cloud(photo_buffer) if photo_buffer else ""
+                    
                     new_row = {
                         "service_id": auto_id, "tool_name": final_t_name, "customer_name": c_name, "phone_number": c_phone,
-                        "warranty_status": "خارج الكفالة", "document_origin": doc_origin, "reported_issue": issue,
+                        "warranty_status": warranty, "document_origin": doc_origin, "reported_issue": issue,
                         "technician": current_user, "status": map_document_to_status(doc_origin, 0.0), "cost_debit": 0.0, "payment_credit": 0.0,
-                        "balance": 0.0, "spare_parts": spare_parts, "resolution_notes": "", "remarks": remarks, "date_logged": date_now, "date_resolved": ""
+                        "balance": 0.0, "spare_parts": "لا حاجة / متوفرة", "resolution_notes": "", "remarks": "", 
+                        "date_logged": date_now, "date_resolved": "",
+                        "accessories": accessories, "loaner_item": loaner, "priority": priority, "tool_photo_link": photo_url
                     }
                     save_doctype("Ledger", pd.concat([ledger_df, pd.DataFrame([new_row])], ignore_index=True))
-                    
-                    # Success message will now stay on screen!
-                    st.success(f"✅ تم إنشاء السند بنجاح برقم التتبع: {auto_id}")
+                    st.success(f"✅ تم إنشاء السند بنجاح برقم: {auto_id}")
                 else: 
-                    st.error("❌ يرجى تعبئة الحقول الإلزامية (اسم الزبون واسم الجهاز).")
+                    st.error("❌ يرجى تعبئة اسم الزبون واسم الجهاز.")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with tab2:
         if not ledger_df.empty:
-            opts = {f"{r['service_id']} - {r['customer_name']}": r['service_id'] for _, r in ledger_df.iterrows()}
+            opts = {f"{r.get('priority', '')} {r['service_id']} - {r['customer_name']}": r['service_id'] for _, r in ledger_df.iterrows()}
             sel_id = opts[st.selectbox("ابحث عن السند (Search Document):", list(opts.keys()))]
             row_data = ledger_df[ledger_df['service_id'] == sel_id].iloc[0]
             
             is_locked = "تم التسليم" in str(row_data['status'])
+            is_warranty = "ضمن" in str(row_data.get('warranty_status', ''))
             
             if is_locked:
                 st.markdown("<div class='locked-card'>", unsafe_allow_html=True)
@@ -248,10 +287,20 @@ elif st.session_state['current_module'] == 'Support':
                 st.write(f"**رقم السند:** {sel_id} | **الزبون:** {row_data['customer_name']}")
                 st.write(f"**حالة التسليم:** {row_data['status']} في تاريخ {row_data.get('date_resolved', '')}")
                 st.write(f"**التكلفة النهائية:** ${float(row_data['cost_debit']):.2f}")
+                if row_data.get('tool_photo_link'): st.markdown(f"[📸 عرض صورة الجهاز عند الاستلام]({row_data['tool_photo_link']})")
                 st.write("هذا الملف مغلق نهائياً لحماية القيود المالية. للطباعة يرجى التوجه لقسم المحاسبة.")
                 st.markdown("</div>", unsafe_allow_html=True)
             else:
                 st.markdown("<div class='erp-card'>", unsafe_allow_html=True)
+                
+                # Show key intake info
+                c_info1, c_info2 = st.columns(2)
+                with c_info1:
+                    st.caption("الملحقات المستلمة (Accessories):")
+                    st.write(f"🎒 {row_data.get('accessories', 'غير مسجل')}")
+                with c_info2:
+                    if row_data.get('tool_photo_link'): st.markdown(f"📸 [عرض الصورة المرفقة للصيانة]({row_data['tool_photo_link']})")
+                
                 with st.form("update_form"):
                     doc_options = ["اد خ ص: (استلام للصيانة)", "مبيع خ ص: (جاهز ومفوتر)", "قبض د: (مدفوع ومسلم)", "خ صيانة: (تحميل على الوكيل)"]
                     try: curr_i = [i for i, o in enumerate(doc_options) if str(row_data['document_origin']) in o][0]
@@ -265,10 +314,16 @@ elif st.session_state['current_module'] == 'Support':
                         except: sp_i = 0
                         new_spare = st.selectbox("حالة قطع الغيار:", sp_opts, index=sp_i)
                     
-                    col1, col2, col3 = st.columns(3)
-                    with col1: cost = st.number_input("التكلفة (Debit)", value=float(row_data['cost_debit'] or 0), step=1.0)
-                    with col2: pay = st.number_input("الدفعة (Credit)", value=float(row_data['payment_credit'] or 0), step=1.0)
-                    with col3: st.metric("الرصيد المتبقي (Balance)", f"${cost - pay:.2f}")
+                    # Warranty Auto-Costing
+                    if is_warranty:
+                        st.info("🛡️ هذا الجهاز ضمن الكفالة، تم تصفير التكلفة تلقائياً.")
+                        cost = 0.0
+                        pay = 0.0
+                    else:
+                        col1, col2, col3 = st.columns(3)
+                        with col1: cost = st.number_input("التكلفة (Debit)", value=float(row_data['cost_debit'] or 0), step=1.0)
+                        with col2: pay = st.number_input("الدفعة (Credit)", value=float(row_data['payment_credit'] or 0), step=1.0)
+                        with col3: st.metric("الرصيد المتبقي (Balance)", f"${cost - pay:.2f}")
                         
                     new_status = map_document_to_status(new_doc, cost)
                     c_n1, c_n2 = st.columns(2)
@@ -276,7 +331,7 @@ elif st.session_state['current_module'] == 'Support':
                     with c_n2: remarks_update = st.text_area("تحديثات إضافية (Remarks)", value=str(row_data.get('remarks', '')))
                     
                     confirm = True
-                    if "تم التسليم" in new_status: confirm = st.checkbox("✅ تأكيد إغلاق الملف (Confirm Document Submission & Lock)")
+                    if "تم التسليم" in new_status: confirm = st.checkbox("✅ تأكيد إغلاق الملف نهائياً (Confirm Lock)")
 
                     if st.form_submit_button("تحديث السجل (Update Document)", use_container_width=True):
                         if "تم التسليم" in new_status and not confirm: st.error("❌ يرجى تأكيد الإغلاق النهائي للملف.")
@@ -311,13 +366,31 @@ elif st.session_state['current_module'] == 'Support':
             for _, r in open_jobs.iterrows():
                 try: days = (datetime.now() - datetime.strptime(str(r['date_logged']).split(' ')[0], "%Y-%m-%d")).days
                 except: days = 0
+                
+                # Priority Flagging
+                is_urgent = "عاجل" in str(r.get('priority', ''))
+                
                 alert = "✅ طبيعي"
                 if "المعالجة" in str(r['status']) or "الانتظار" in str(r['status']):
                     if days > 5: alert = "🔴 متأخر جداً"
                     elif days > 3: alert = "🟠 متأخر"
                 elif "جاهز" in str(r['status']) and days > 7: alert = "🔴 تأخر بالاستلام"
-                alerts.append({"الحالة (SLA)": alert, "أيام التوقف": days, "السند": r['service_id'], "الزبون": r['customer_name'], "الوضع": r['status']})
-            st.dataframe(pd.DataFrame(alerts).sort_values(by="أيام التوقف", ascending=False), use_container_width=True)
+                
+                alerts.append({
+                    "أولوية": "عاجل 🔥" if is_urgent else "عادي",
+                    "الحالة (SLA)": alert, 
+                    "أيام التوقف": days, 
+                    "السند": r['service_id'], 
+                    "الزبون": r['customer_name'], 
+                    "الجهاز": r['tool_name'],
+                    "الوضع": r['status']
+                })
+            
+            # Sort: Urgent first, then by days delayed
+            df_alerts = pd.DataFrame(alerts)
+            if not df_alerts.empty:
+                df_alerts = df_alerts.sort_values(by=["أولوية", "أيام التوقف"], ascending=[False, False])
+                st.dataframe(df_alerts, use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
@@ -559,7 +632,8 @@ elif st.session_state['current_module'] == 'Accounting':
                                         "technician": "Admin Import", "status": "قيد الانتظار", "cost_debit": 0.0,
                                         "payment_credit": 0.0, "balance": 0.0, "spare_parts": "لا حاجة / متوفرة",
                                         "resolution_notes": "", "remarks": "", 
-                                        "date_logged": row_date if row_date else datetime.now().strftime("%Y-%m-%d"), "date_resolved": ""
+                                        "date_logged": row_date if row_date else datetime.now().strftime("%Y-%m-%d"), "date_resolved": "",
+                                        "accessories": "", "loaner_item": "", "priority": "عادي", "tool_photo_link": ""
                                     }
 
                         if curr_sid and curr_sid in records:
