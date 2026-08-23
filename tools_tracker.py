@@ -26,7 +26,6 @@ st.markdown("""
         .locked-card { background: #fff5f5; padding: 20px; border: 1px solid #feb2b2; border-radius: 8px; margin-bottom: 20px; }
         .invoice-box { background: white; padding: 30px; border: 1px solid #e2e8f0; border-radius: 8px; max-width: 800px; margin: auto; }
         .invoice-header { text-align: center; border-bottom: 2px solid #2b6cb0; padding-bottom: 15px; margin-bottom: 20px; }
-        .urgent-tag { background-color: #ffe5e5; color: #e53e3e; padding: 2px 8px; border-radius: 12px; font-weight: bold; font-size: 12px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -35,7 +34,6 @@ st.markdown("""
 # ==========================================
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# NEW COLUMNS ADDED TO LEDGER
 SCHEMA = {
     "Ledger": [
         "service_id", "tool_name", "customer_name", "phone_number", "warranty_status", "document_origin", 
@@ -158,6 +156,7 @@ with st.sidebar:
     
     st.caption("العمليات الأساسية (CORE MODULES)")
     if st.button("🏠 مساحة العمل (Workspace)", use_container_width=True): st.session_state['current_module'] = 'Workspace'
+    if st.button("📺 شاشة الورشة (TV Display)", use_container_width=True): st.session_state['current_module'] = 'TV_Display'
     if st.button("🛠️ الدعم والصيانة (Support)", use_container_width=True): st.session_state['current_module'] = 'Support'
     if st.button("📦 المخزون (Stock)", use_container_width=True): st.session_state['current_module'] = 'Stock'
     if st.button("🚚 اللوجستيات (Logistics)", use_container_width=True): st.session_state['current_module'] = 'Logistics'
@@ -205,7 +204,65 @@ if st.session_state['current_module'] == 'Workspace':
             st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
-# MODULE 2: SUPPORT & MAINTENANCE (ERPNEXT LOGIC)
+# MODULE 2: TV WORKSHOP DISPLAY (KIOSK MODE)
+# ==========================================
+elif st.session_state['current_module'] == 'TV_Display':
+    st.components.v1.html("<script>setTimeout(function(){window.parent.location.reload();}, 60000);</script>", height=0)
+    
+    st.markdown("""
+        <style>
+            header {visibility: hidden;}
+            .tv-card-urgent { background: #ffe5e5; border-right: 15px solid #e53e3e; padding: 25px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+            .tv-card-delayed { background: #fffaf0; border-right: 15px solid #dd6b20; padding: 25px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+            .tv-title { font-size: 32px; font-weight: bold; color: #1a202c; margin-bottom: 10px; }
+            .tv-details { font-size: 24px; color: #4a5568; }
+            .tv-days { font-size: 35px; font-weight: bold; float: left; margin-top: -10px; }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<h1 style='text-align: center; font-size: 60px; margin-bottom: 40px;'>شاشة متابعة الورشة (Live Queue)</h1>", unsafe_allow_html=True)
+
+    if not ledger_df.empty:
+        open_jobs = ledger_df[~ledger_df['status'].str.contains('تم التسليم', na=False)]
+        display_items = []
+        for _, r in open_jobs.iterrows():
+            try: days = (datetime.now() - datetime.strptime(str(r['date_logged']).split(' ')[0], "%Y-%m-%d")).days
+            except: days = 0
+            
+            is_urgent = "عاجل" in str(r.get('priority', ''))
+            
+            if is_urgent or days >= 3:
+                display_items.append({
+                    "days": days,
+                    "urgent": is_urgent,
+                    "sid": r['service_id'],
+                    "tool": r['tool_name'],
+                    "issue": r['reported_issue'],
+                    "status": r['status']
+                })
+        
+        display_items = sorted(display_items, key=lambda x: (not x['urgent'], -x['days']))
+        
+        if display_items:
+            for item in display_items:
+                card_class = "tv-card-urgent" if item['urgent'] else "tv-card-delayed"
+                tag = "🔥 عاجل جداً" if item['urgent'] else "⚠️ متأخر"
+                color = "#e53e3e" if item['urgent'] else "#dd6b20"
+                
+                st.markdown(f"""
+                <div class="{card_class}">
+                    <div class="tv-days" style="color: {color};">{item['days']}<br><span style="font-size:16px;">أيام</span></div>
+                    <div class="tv-title">{tag} | {item['sid']} - {item['tool']}</div>
+                    <div class="tv-details"><b>العطل:</b> {item['issue']} <br> <b>الحالة الآن:</b> {item['status']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.markdown("<h1 style='text-align: center; color: #38a169; margin-top: 100px;'>✅ لا يوجد أجهزة متأخرة أو عاجلة. العمل ممتاز!</h1>", unsafe_allow_html=True)
+    else:
+        st.markdown("<h1 style='text-align: center; color: #38a169; margin-top: 100px;'>✅ لا يوجد أجهزة متأخرة أو عاجلة. العمل ممتاز!</h1>", unsafe_allow_html=True)
+
+# ==========================================
+# MODULE 3: SUPPORT & MAINTENANCE (ERPNEXT LOGIC)
 # ==========================================
 elif st.session_state['current_module'] == 'Support':
     st.title("🛠️ وحدة الدعم والصيانة (Support Desk)")
@@ -216,7 +273,6 @@ elif st.session_state['current_module'] == 'Support':
         with st.form("intake_form", clear_on_submit=True):
             st.subheader("تفاصيل استلام جهاز (Intake Form)")
             
-            # Anti-Amnesia row
             c_amn1, c_amn2, c_amn3 = st.columns(3)
             with c_amn1:
                 warranty = st.selectbox("حالة الكفالة (Warranty)", ["خارج الكفالة", "ضمن كفالة"])
@@ -241,7 +297,6 @@ elif st.session_state['current_module'] == 'Support':
                 
             issue = st.text_area("العطل المرصود (Reported Issue)")
             
-            # Live Camera Documentation
             st.markdown("📷 **التوثيق البصري (Media Documentation)**")
             photo_buffer = st.camera_input("التقاط صورة للجهاز أو الملحقات كإثبات حالة (Take Photo)")
 
@@ -255,7 +310,6 @@ elif st.session_state['current_module'] == 'Support':
                     auto_id = generate_next_id(branch_code, ledger_df)
                     date_now = datetime.now().strftime("%Y-%m-%d")
                     
-                    # Upload Photo if taken
                     photo_url = upload_to_cloud(photo_buffer) if photo_buffer else ""
                     
                     new_row = {
@@ -293,7 +347,6 @@ elif st.session_state['current_module'] == 'Support':
             else:
                 st.markdown("<div class='erp-card'>", unsafe_allow_html=True)
                 
-                # Show key intake info
                 c_info1, c_info2 = st.columns(2)
                 with c_info1:
                     st.caption("الملحقات المستلمة (Accessories):")
@@ -314,7 +367,6 @@ elif st.session_state['current_module'] == 'Support':
                         except: sp_i = 0
                         new_spare = st.selectbox("حالة قطع الغيار:", sp_opts, index=sp_i)
                     
-                    # Warranty Auto-Costing
                     if is_warranty:
                         st.info("🛡️ هذا الجهاز ضمن الكفالة، تم تصفير التكلفة تلقائياً.")
                         cost = 0.0
@@ -367,7 +419,6 @@ elif st.session_state['current_module'] == 'Support':
                 try: days = (datetime.now() - datetime.strptime(str(r['date_logged']).split(' ')[0], "%Y-%m-%d")).days
                 except: days = 0
                 
-                # Priority Flagging
                 is_urgent = "عاجل" in str(r.get('priority', ''))
                 
                 alert = "✅ طبيعي"
@@ -386,7 +437,6 @@ elif st.session_state['current_module'] == 'Support':
                     "الوضع": r['status']
                 })
             
-            # Sort: Urgent first, then by days delayed
             df_alerts = pd.DataFrame(alerts)
             if not df_alerts.empty:
                 df_alerts = df_alerts.sort_values(by=["أولوية", "أيام التوقف"], ascending=[False, False])
@@ -394,7 +444,7 @@ elif st.session_state['current_module'] == 'Support':
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
-# MODULE 3: STOCK & INVENTORY
+# MODULE 4: STOCK & INVENTORY
 # ==========================================
 elif st.session_state['current_module'] == 'Stock':
     st.title("📦 وحدة المستودعات والمخزون (Stock Module)")
@@ -436,7 +486,7 @@ elif st.session_state['current_module'] == 'Stock':
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
-# MODULE 4: LOGISTICS (HAWARA & DISPATCH)
+# MODULE 5: LOGISTICS (HAWARA & DISPATCH)
 # ==========================================
 elif st.session_state['current_module'] == 'Logistics':
     st.title("🚚 وحدة الشحن واللوجستيات (Logistics)")
@@ -505,7 +555,7 @@ elif st.session_state['current_module'] == 'Logistics':
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
-# MODULE 5: ACCOUNTING & INVOICING
+# MODULE 6: ACCOUNTING & INVOICING
 # ==========================================
 elif st.session_state['current_module'] == 'Accounting':
     st.title("💰 الإدارة المالية والمحاسبة (Accounting)")
@@ -521,7 +571,6 @@ elif st.session_state['current_module'] == 'Accounting':
             if st.button("🖨️ توليد الفاتورة (Generate Invoice)", use_container_width=True):
                 inv_data = ledger_df[ledger_df['service_id'] == sel_inv].iloc[0]
                 
-                # HTML Invoice Template for clean printing
                 invoice_html = f"""
                 <div class="invoice-box">
                     <div class="invoice-header">
