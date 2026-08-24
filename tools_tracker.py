@@ -15,19 +15,34 @@ IMGBB_API_KEY = "c6e484b83af4bb39c92e1782cc6ce5e6"
 
 st.set_page_config(page_title="Al-Qasr Al-Zahabi ERP", layout="wide", page_icon="🏢")
 
-st.markdown("""
-    <style>
-        .stApp { background-color: #f8f9fa; direction: rtl; text-align: right; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        h1, h2, h3, h4, p, span, label, div { text-align: right; }
-        .stTabs [data-baseweb="tab-list"] { gap: 10px; border-bottom: 2px solid #e2e8f0; }
-        .stTabs [data-baseweb="tab"] { background-color: transparent; border-radius: 4px 4px 0 0; padding: 10px 20px; font-weight: 600; color: #4a5568; }
-        .stTabs [aria-selected="true"] { border-bottom: 3px solid #3182ce; color: #2b6cb0; background-color: #ebf8ff; }
-        .erp-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .locked-card { background: #fff5f5; padding: 20px; border: 1px solid #feb2b2; border-radius: 8px; margin-bottom: 20px; }
-        .invoice-box { background: white; padding: 30px; border: 1px solid #e2e8f0; border-radius: 8px; max-width: 800px; margin: auto; }
-        .invoice-header { text-align: center; border-bottom: 2px solid #2b6cb0; padding-bottom: 15px; margin-bottom: 20px; }
-    </style>
-""", unsafe_allow_html=True)
+# Check TV Mode immediately at the very top
+query_params = st.query_params
+is_tv_mode = query_params.get("mode") == "tv"
+
+if is_tv_mode:
+    # Force hide sidebar and header for TV screens
+    st.markdown("""
+        <style>
+            [data-testid='stSidebar'] {display: none !important;}
+            header {visibility: hidden !important;}
+            .stApp { background-color: #f8f9fa; direction: rtl; text-align: right; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+            h1, h2, h3, h4, p, span, label, div { text-align: right; }
+        </style>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+        <style>
+            .stApp { background-color: #f8f9fa; direction: rtl; text-align: right; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+            h1, h2, h3, h4, p, span, label, div { text-align: right; }
+            .stTabs [data-baseweb="tab-list"] { gap: 10px; border-bottom: 2px solid #e2e8f0; }
+            .stTabs [data-baseweb="tab"] { background-color: transparent; border-radius: 4px 4px 0 0; padding: 10px 20px; font-weight: 600; color: #4a5568; }
+            .stTabs [aria-selected="true"] { border-bottom: 3px solid #3182ce; color: #2b6cb0; background-color: #ebf8ff; }
+            .erp-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
+            .locked-card { background: #fff5f5; padding: 20px; border: 1px solid #feb2b2; border-radius: 8px; margin-bottom: 20px; }
+            .invoice-box { background: white; padding: 30px; border: 1px solid #e2e8f0; border-radius: 8px; max-width: 800px; margin: auto; }
+            .invoice-header { text-align: center; border-bottom: 2px solid #2b6cb0; padding-bottom: 15px; margin-bottom: 20px; }
+        </style>
+    """, unsafe_allow_html=True)
 
 # ==========================================
 # DATABASE ORM (DocType Engine)
@@ -136,15 +151,9 @@ def generate_next_id(branch_code, df):
 if 'logged_in_user' not in st.session_state: st.session_state['logged_in_user'] = None
 if 'current_module' not in st.session_state: st.session_state['current_module'] = 'Workspace'
 
-# KIOSK MODE LINK DETECTION (?mode=tv)
-query_params = st.query_params
-is_tv_mode = query_params.get("mode") == "tv"
-
 if is_tv_mode:
     st.session_state['logged_in_user'] = "TV_Guest"
     st.session_state['current_module'] = 'TV_Display'
-    # Permanently hide sidebar on TV
-    st.markdown("<style>[data-testid='stSidebar'] {display: none !important;} header {visibility: hidden;}</style>", unsafe_allow_html=True)
 
 USERS = {"admin": {"pass": "123", "role": "System Administrator"}, "tech": {"pass": "123", "role": "Support Agent"}}
 
@@ -185,7 +194,7 @@ if not is_tv_mode:
         
         st.caption("العمليات الأساسية (CORE MODULES)")
         if st.button("🏠 مساحة العمل (Workspace)", use_container_width=True): st.session_state['current_module'] = 'Workspace'
-        if st.button("📺 شاشة الورشة (TV Preview)", use_container_width=True): st.session_state['current_module'] = 'TV_Display'
+        if st.button("📺 شاشة الورشة (TV Display)", use_container_width=True): st.session_state['current_module'] = 'TV_Display'
         if st.button("🛠️ الدعم والصيانة (Support)", use_container_width=True): st.session_state['current_module'] = 'Support'
         if st.button("📦 المخزون (Stock)", use_container_width=True): st.session_state['current_module'] = 'Stock'
         if st.button("🚚 اللوجستيات (Logistics)", use_container_width=True): st.session_state['current_module'] = 'Logistics'
@@ -237,7 +246,6 @@ if st.session_state['current_module'] == 'Workspace':
 # ==========================================
 elif st.session_state['current_module'] == 'TV_Display':
     
-    # SAFETY SWITCH: Only auto-scroll, refresh, and play sound if actually on the TV link
     if is_tv_mode:
         html_injection = """
         <script>
@@ -246,28 +254,20 @@ elif st.session_state['current_module'] == 'TV_Display':
             const intervalTime = 40; 
             let scrollInterval = setInterval(() => {
                 window.parent.scrollBy(0, scrollSpeed);
-                // Check if page reached bottom
                 if ((window.parent.innerHeight + window.parent.scrollY) >= window.parent.document.body.offsetHeight - 5) {
                     clearInterval(scrollInterval);
-                    setTimeout(() => { window.parent.location.reload(); }, 3000); // Wait 3 seconds at bottom, then refresh
+                    setTimeout(() => { window.parent.location.reload(); }, 3000); 
                 }
             }, intervalTime);
             
-            // Failsafe auto-refresh every 60 seconds if page is too short to scroll
             setTimeout(() => { window.parent.location.reload(); }, 60000);
         </script>
         
-        <!-- ============================================================== -->
-        <!-- CHANGE SOUNDTRACK HERE: Paste any MP3 link inside the src=""   -->
-        <!-- ============================================================== -->
         <audio autoplay loop>
             <source src="https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3" type="audio/mpeg">
         </audio>
         """
         st.components.v1.html(html_injection, height=0)
-    else:
-        # Preview mode warning for Main PC
-        st.info("💡 **وضع المعاينة (Preview Mode)**: أنت تشاهد شاشة الورشة الآن من حسابك. تم تعطيل الصوت والتحديث التلقائي لمنع خروجك من النظام. لتشغيل الشاشة الحقيقية في الورشة استخدم الرابط المخصص: `http://[IP-Address]:8501/?mode=tv`")
 
     st.markdown("""
         <style>
@@ -283,7 +283,6 @@ elif st.session_state['current_module'] == 'TV_Display':
     st.markdown("<h1 style='text-align: center; font-size: 60px; margin-bottom: 40px;'>شاشة متابعة الورشة (Live Queue)</h1>", unsafe_allow_html=True)
 
     if not ledger_df.empty:
-        # Filter purely for devices actively in the workshop (Waiting or In Progress)
         open_jobs = ledger_df[ledger_df['status'].str.contains('الانتظار|المعالجة', na=False, regex=True)]
         
         display_items = []
