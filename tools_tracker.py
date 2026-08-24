@@ -144,7 +144,7 @@ if is_tv_mode:
     st.session_state['logged_in_user'] = "TV_Guest"
     st.session_state['current_module'] = 'TV_Display'
     # Permanently hide sidebar on TV
-    st.markdown("<style>[data-testid='stSidebar'] {display: none !important;}</style>", unsafe_allow_html=True)
+    st.markdown("<style>[data-testid='stSidebar'] {display: none !important;} header {visibility: hidden;}</style>", unsafe_allow_html=True)
 
 USERS = {"admin": {"pass": "123", "role": "System Administrator"}, "tech": {"pass": "123", "role": "Support Agent"}}
 
@@ -185,7 +185,7 @@ if not is_tv_mode:
         
         st.caption("العمليات الأساسية (CORE MODULES)")
         if st.button("🏠 مساحة العمل (Workspace)", use_container_width=True): st.session_state['current_module'] = 'Workspace'
-        if st.button("📺 شاشة الورشة (TV Display)", use_container_width=True): st.session_state['current_module'] = 'TV_Display'
+        if st.button("📺 شاشة الورشة (TV Preview)", use_container_width=True): st.session_state['current_module'] = 'TV_Display'
         if st.button("🛠️ الدعم والصيانة (Support)", use_container_width=True): st.session_state['current_module'] = 'Support'
         if st.button("📦 المخزون (Stock)", use_container_width=True): st.session_state['current_module'] = 'Stock'
         if st.button("🚚 اللوجستيات (Logistics)", use_container_width=True): st.session_state['current_module'] = 'Logistics'
@@ -236,35 +236,41 @@ if st.session_state['current_module'] == 'Workspace':
 # MODULE 2: TV WORKSHOP DISPLAY (KIOSK MODE)
 # ==========================================
 elif st.session_state['current_module'] == 'TV_Display':
-    # Automated scrolling, refresh, and ambient audio engine
-    html_injection = """
-    <script>
-        // Smooth auto-scroll logic
-        const scrollSpeed = 1; 
-        const intervalTime = 40; 
-        let scrollInterval = setInterval(() => {
-            window.parent.scrollBy(0, scrollSpeed);
-            // Check if page reached bottom
-            if ((window.parent.innerHeight + window.parent.scrollY) >= window.parent.document.body.offsetHeight - 5) {
-                clearInterval(scrollInterval);
-                setTimeout(() => { window.parent.location.reload(); }, 3000); // Wait 3 seconds at bottom, then refresh
-            }
-        }, intervalTime);
+    
+    # SAFETY SWITCH: Only auto-scroll, refresh, and play sound if actually on the TV link
+    if is_tv_mode:
+        html_injection = """
+        <script>
+            // Smooth auto-scroll logic
+            const scrollSpeed = 1; 
+            const intervalTime = 40; 
+            let scrollInterval = setInterval(() => {
+                window.parent.scrollBy(0, scrollSpeed);
+                // Check if page reached bottom
+                if ((window.parent.innerHeight + window.parent.scrollY) >= window.parent.document.body.offsetHeight - 5) {
+                    clearInterval(scrollInterval);
+                    setTimeout(() => { window.parent.location.reload(); }, 3000); // Wait 3 seconds at bottom, then refresh
+                }
+            }, intervalTime);
+            
+            // Failsafe auto-refresh every 60 seconds if page is too short to scroll
+            setTimeout(() => { window.parent.location.reload(); }, 60000);
+        </script>
         
-        // Failsafe auto-refresh every 60 seconds if page is too short to scroll
-        setTimeout(() => { window.parent.location.reload(); }, 60000);
-    </script>
-    
-    <!-- Warm Ambient Track Loop -->
-    <audio autoplay loop>
-        <source src="https://cdn.pixabay.com/download/audio/2022/02/10/audio_fcda0229eb.mp3" type="audio/mpeg">
-    </audio>
-    """
-    st.components.v1.html(html_injection, height=0)
-    
+        <!-- ============================================================== -->
+        <!-- CHANGE SOUNDTRACK HERE: Paste any MP3 link inside the src=""   -->
+        <!-- ============================================================== -->
+        <audio autoplay loop>
+            <source src="https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3" type="audio/mpeg">
+        </audio>
+        """
+        st.components.v1.html(html_injection, height=0)
+    else:
+        # Preview mode warning for Main PC
+        st.info("💡 **وضع المعاينة (Preview Mode)**: أنت تشاهد شاشة الورشة الآن من حسابك. تم تعطيل الصوت والتحديث التلقائي لمنع خروجك من النظام. لتشغيل الشاشة الحقيقية في الورشة استخدم الرابط المخصص: `http://[IP-Address]:8501/?mode=tv`")
+
     st.markdown("""
         <style>
-            header {visibility: hidden;}
             .tv-card-urgent { background: #ffe5e5; border-right: 15px solid #e53e3e; padding: 25px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
             .tv-card-delayed { background: #fffaf0; border-right: 15px solid #dd6b20; padding: 25px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
             .tv-card-normal { background: #ebf8ff; border-right: 15px solid #3182ce; padding: 25px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
