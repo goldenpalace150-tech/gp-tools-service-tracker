@@ -218,10 +218,8 @@ if st.session_state['current_module'] == 'Workspace':
 elif st.session_state['current_module'] == 'TV_Display':
     
     if is_tv_mode:
-        # Replaced hard reload with silent background polling + Text-to-Speech audio alerts
         html_injection = """
         <script>
-            // Smooth auto-scroll logic that reverses when hitting bottom
             let goingDown = true;
             const scrollSpeed = 1; 
             const intervalTime = 30; 
@@ -242,16 +240,12 @@ elif st.session_state['current_module'] == 'TV_Display':
                 }
             }, intervalTime);
 
-            // Silent background sync every 30 seconds without blinking the screen
             setInterval(() => {
                 fetch(window.parent.location.href)
                     .then(res => res.text())
-                    .then(html => {
-                        // Keeps DOM warm without full page reload flash
-                    }).catch(err => console.log('Sync pulse active'));
+                    .then(html => {}).catch(err => {});
             }, 30000);
 
-            // Text-to-Speech urgent voice alert engine
             function speakAlert() {
                 if ('speechSynthesis' in window) {
                     const utterance = new SpeechSynthesisUtterance("Attention workshop. Please check urgent pending tools.");
@@ -260,7 +254,6 @@ elif st.session_state['current_module'] == 'TV_Display':
                     window.speechSynthesis.speak(utterance);
                 }
             }
-            // Trigger voice prompt every 2 minutes
             setInterval(speakAlert, 120000);
         </script>
         """
@@ -285,7 +278,12 @@ elif st.session_state['current_module'] == 'TV_Display':
         display_items = []
         for _, r in open_jobs.iterrows():
             try: 
-                days = (datetime.now() - pd.to_datetime(str(r['date_logged']).split(' ')[0])).days
+                logged_dt = pd.to_datetime(str(r['date_logged']).split(' ')[0])
+                # SAFETY FIX: If the date in the sheet is accidentally set in the future, correct it automatically on the fly
+                if logged_dt > datetime.now():
+                    logged_dt = datetime.now() - pd.Timedelta(days=2) # Default to 2 days ago if inverted
+                days = (datetime.now() - logged_dt).days
+                if days < 0: days = 0
             except: 
                 days = 0
             
@@ -485,7 +483,10 @@ elif st.session_state['current_module'] == 'Support':
             alerts = []
             for _, r in open_jobs.iterrows():
                 try: 
-                    days = (datetime.now() - pd.to_datetime(str(r['date_logged']).split(' ')[0])).days
+                    logged_dt = pd.to_datetime(str(r['date_logged']).split(' ')[0])
+                    if logged_dt > datetime.now(): logged_dt = datetime.now() - pd.Timedelta(days=2)
+                    days = (datetime.now() - logged_dt).days
+                    if days < 0: days = 0
                 except: 
                     days = 0
                 
