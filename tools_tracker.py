@@ -226,8 +226,11 @@ elif st.session_state['current_module'] == 'TV_Display':
         open_jobs = ledger_df[~ledger_df['status'].str.contains('تم التسليم', na=False)]
         display_items = []
         for _, r in open_jobs.iterrows():
-            try: days = (datetime.now() - datetime.strptime(str(r['date_logged']).split(' ')[0], "%Y-%m-%d")).days
-            except: days = 0
+            # Robust Date Parsing for SLA Math
+            try: 
+                days = (datetime.now() - pd.to_datetime(str(r['date_logged']).split(' ')[0])).days
+            except: 
+                days = 0
             
             is_urgent = "عاجل" in str(r.get('priority', ''))
             
@@ -416,8 +419,11 @@ elif st.session_state['current_module'] == 'Support':
             open_jobs = ledger_df[~ledger_df['status'].str.contains('تم التسليم', na=False)]
             alerts = []
             for _, r in open_jobs.iterrows():
-                try: days = (datetime.now() - datetime.strptime(str(r['date_logged']).split(' ')[0], "%Y-%m-%d")).days
-                except: days = 0
+                # Robust Date Parsing for SLA Math
+                try: 
+                    days = (datetime.now() - pd.to_datetime(str(r['date_logged']).split(' ')[0])).days
+                except: 
+                    days = 0
                 
                 is_urgent = "عاجل" in str(r.get('priority', ''))
                 
@@ -439,7 +445,6 @@ elif st.session_state['current_module'] == 'Support':
             
             df_alerts = pd.DataFrame(alerts)
             if not df_alerts.empty:
-                # Add the interactive filter and counter
                 c_filt1, c_filt2 = st.columns([3, 1])
                 with c_filt1:
                     all_statuses = df_alerts['الوضع'].unique().tolist()
@@ -450,7 +455,6 @@ elif st.session_state['current_module'] == 'Support':
                 with c_filt2:
                     st.metric("العدد (Count)", len(filtered_alerts))
                 
-                # Sort and display the filtered results
                 filtered_alerts = filtered_alerts.sort_values(by=["أولوية", "أيام التوقف"], ascending=[False, False])
                 st.dataframe(filtered_alerts, use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
@@ -657,12 +661,16 @@ elif st.session_state['current_module'] == 'Accounting':
                         row_vals = [str(x).strip() for x in row.dropna().tolist()]
                         row_text = " ".join(row_vals)
                         
+                        # Robust Pandas-powered date extraction
                         row_date = ""
                         for v in row_vals:
-                            date_match = re.search(r'\b(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\b', v)
+                            date_match = re.search(r'\b(\d{1,4}[-/]\d{1,2}[-/]\d{1,4})\b', v)
                             if date_match:
-                                try: row_date = pd.to_datetime(date_match.group(1), dayfirst=True).strftime("%Y-%m-%d")
-                                except: row_date = date_match.group(1)
+                                parsed = pd.to_datetime(date_match.group(1), errors='ignore')
+                                try: 
+                                    row_date = parsed.strftime("%Y-%m-%d")
+                                except: 
+                                    row_date = str(parsed)[:10]
                                 break
                         
                         header_cell = next((val for val in row_vals if re.search(r'\b[SDV]\d+\b', val, re.IGNORECASE) and '-' in val), "")
