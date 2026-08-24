@@ -218,7 +218,7 @@ if st.session_state['current_module'] == 'Workspace':
 elif st.session_state['current_module'] == 'TV_Display':
     
     if is_tv_mode:
-        # British Female Voice Engine + 10-second staff encouragement rotator
+        # Smooth auto-scrolling engine (Voice completely removed)
         html_injection = """
         <script>
             let goingDown = true;
@@ -246,39 +246,6 @@ elif st.session_state['current_module'] == 'TV_Display':
                     .then(res => res.text())
                     .then(html => {}).catch(err => {});
             }, 30000);
-
-            // British Female Voice Rotator for Staff
-            const staffMembers = ["Abdulrazzaq", "Othman", "Omar"];
-            let staffIndex = 0;
-
-            function speakStaffEncouragement() {
-                if ('speechSynthesis' in window) {
-                    const currentStaff = staffMembers[staffIndex];
-                    const phrases = [
-                        `Great work today, ${currentStaff}. Keep pushing forward!`,
-                        `Fantastic effort in the workshop, ${currentStaff}!`,
-                        `Keep up the brilliant momentum, ${currentStaff}.`
-                    ];
-                    const randomPhrase = phrases[Math.floor(Math.random() * phrases.length)];
-                    
-                    const utterance = new SpeechSynthesisUtterance(randomPhrase);
-                    utterance.rate = 1.0;
-                    utterance.pitch = 1.1;
-                    
-                    // Select British Female Voice if available
-                    const voices = window.speechSynthesis.getVoices();
-                    const ukFemaleVoice = voices.find(v => v.lang === 'en-GB' && (v.name.includes('Female') || v.name.includes('Hazel') || v.name.includes('Susan') || v.name.includes('Libby')));
-                    if (ukFemaleVoice) {
-                        utterance.voice = ukFemaleVoice;
-                    }
-                    
-                    window.speechSynthesis.speak(utterance);
-                    staffIndex = (staffIndex + 1) % staffMembers.length;
-                }
-            }
-            
-            // Trigger encouragement precisely every 10 seconds
-            setInterval(speakStaffEncouragement, 10000);
         </script>
         """
         st.components.v1.html(html_injection, height=0)
