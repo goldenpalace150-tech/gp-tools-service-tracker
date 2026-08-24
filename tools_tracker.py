@@ -66,6 +66,7 @@ def map_document_to_status(doc_string, cost=0.0):
 
 def deduplicate_ledger(df):
     if df.empty or 'service_id' not in df.columns: return df
+    df['service_id'] = df['service_id'].astype(str) # Double protection against Pandas float sorting crashes
     df['rank'] = df['document_origin'].apply(get_status_rank)
     df = df.sort_values(by=['service_id', 'rank'], ascending=[True, True])
     return df.groupby('service_id', as_index=False).last().drop(columns=['rank'], errors='ignore')
@@ -73,19 +74,39 @@ def deduplicate_ledger(df):
 def get_doctype(doctype_name):
     try:
         df = conn.read(worksheet=doctype_name, ttl=0)
+        
+        # FIX: Drop phantom blank rows returned by Google Sheets to prevent math crashes
+        df = df.dropna(how='all')
+        
         for col in SCHEMA[doctype_name]:
             if col not in df.columns: df[col] = ""
+            
         if doctype_name == "Ledger":
+            # FIX: Clean empty/NaN service IDs BEFORE processing
+            df['service_id'] = df['service_id'].astype(str).replace({'nan': '', 'None': ''})
+            df = df[df['service_id'].str.strip() != ""]
+            
             for col in SCHEMA["Ledger"]:
                 if col not in ['cost_debit', 'payment_credit', 'balance']:
                     df[col] = df[col].fillna("").astype(str).replace({'nan': '', 'None': ''})
+            
+            # FIX: Force strict numeric types for financial fields so the dashboard never crashes
+            for col in ['cost_debit', 'payment_credit', 'balance']:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+                
             df.loc[df['spare_parts'] == "", 'spare_parts'] = "لا حاجة / متوفرة"
             return deduplicate_ledger(df)
+            
         return df
-    except: return pd.DataFrame(columns=SCHEMA[doctype_name])
+    except Exception as e: 
+        # FIX: Never fail silently again. Show the exact error if Google Sheets rejects the connection.
+        st.error(f"⚠️ خطأ في قراءة قاعدة البيانات ({doctype_name}): {str(e)}")
+        return pd.DataFrame(columns=SCHEMA[doctype_name])
 
 def save_doctype(doctype_name, df):
-    if doctype_name == "Ledger": df = deduplicate_ledger(df)
+    if doctype_name == "Ledger": 
+        df = deduplicate_ledger(df)
+        df = df[df['service_id'].astype(str).str.strip() != ""] # Clean before saving
     conn.update(worksheet=doctype_name, data=df)
 
 def convert_df_to_excel(df):
@@ -177,7 +198,7 @@ if st.session_state['current_module'] == 'Workspace':
     
     active_count = len(ledger_df[~ledger_df['status'].str.contains('تم التسليم', na=False)]) if not ledger_df.empty else 0
     ready_count = len(ledger_df[ledger_df['status'].str.contains('جاهز', na=False)]) if not ledger_df.empty else 0
-    total_rev = float(ledger_df['cost_debit'].astype(float).sum()) if not ledger_df.empty else 0.0
+    total_rev = float(ledger_df['cost_debit'].sum()) if not ledger_df.empty else 0.0
 
     col1, col2, col3 = st.columns(3)
     with col1: st.markdown(f"<div class='erp-card'><h3>🛠️ صيانة مفتوحة</h3><h1>{active_count}</h1></div>", unsafe_allow_html=True)
@@ -547,7 +568,7 @@ elif st.session_state['current_module'] == 'Logistics':
         with st.form("dispatch_form", clear_on_submit=True):
             c1, c2, c3 = st.columns(3)
             with c1:
-                disp_id = text_input("رقم الإرسالية (Dispatch ID)")
+                disp_id = st.text_input("رقم الإرسالية (Dispatch ID)")
                 ready_list = ledger_df[ledger_df['status'].str.contains('جاهز', na=False)] if not ledger_df.empty else pd.DataFrame()
                 sel_service = st.selectbox("الجهاز (Ready Tool)", options=ready_list['service_id'].tolist() if not ready_list.empty else [])
             with c2:
@@ -663,7 +684,6 @@ elif st.session_state['current_module'] == 'Accounting':
                         row_vals = [str(x).strip() for x in row.dropna().tolist()]
                         row_text = " ".join(row_vals)
                         
-                        # Robust Pandas-powered date extraction
                         row_date = ""
                         for v in row_vals:
                             date_match = re.search(r'\b(\d{1,4}[-/]\d{1,2}[-/]\d{1,4})\b', v)
@@ -682,8 +702,7 @@ elif st.session_state['current_module'] == 'Accounting':
                                 except:
                                     pass
                         
-                        # SMART PARSER: Finds the ID anywhere in the cell without relying on hyphens
-                        header_cell = next((val for val in row_vals if re.search(r'\b[SDV]\d+\b', val, re.IGNORECASE)), "")
+                        header_cell = next((val for val in row_vals if re.search(r'\b[SDV]\d+\b', val, re.IGNORECASE) and '-' in val), "")
                         
                         if header_cell:
                             curr_sid_match = re.search(r'\b([SDV]\d+)\b', header_cell, re.IGNORECASE)
@@ -694,7 +713,6 @@ elif st.session_state['current_module'] == 'Accounting':
                                 
                                 c_name, phone, t_name, issue, w_status = "غير محدد", "", "غير محدد", "", "خارج الكفالة"
                                 
-                                # Process tool name whether it has hyphens or not
                                 if len(parts) > 1:
                                     for p in parts[1:]:
                                         digits = re.sub(r'\D', '', p)
@@ -707,7 +725,6 @@ elif st.session_state['current_module'] == 'Accounting':
                                             elif t_name == "غير محدد": t_name = p
                                             else: issue = p
                                 else:
-                                    # Safe fallback if Al-Ameen output has no hyphens
                                     t_name = clean_header.replace(curr_sid, '').strip()
                                     if not t_name: t_name = "غير محدد"
 
@@ -757,5 +774,5 @@ elif st.session_state['current_module'] == 'Accounting':
                         st.success(f"✅ تم استيراد {len(imported_list)} سجل بنجاح.")
                         st.rerun()
                     else:
-                        st.warning("⚠️ لم يتم العثور على أي قيود صالحة تحتوي على أرقام بطاقات صيانة (مثل V720 أو S123) في الملف المرفوع.")
+                        st.warning("⚠️ لم يتم العثور على أي قيود صالحة تحتوي على أرقام بطاقات صيانة في الملف المرفوع.")
             st.markdown("</div>", unsafe_allow_html=True)
