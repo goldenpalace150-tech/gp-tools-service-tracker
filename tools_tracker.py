@@ -662,11 +662,17 @@ elif st.session_state['current_module'] == 'Accounting':
                         # Robust Pandas-powered date extraction with crash protection
                         row_date = ""
                         for v in row_vals:
-                            date_match = re.search(r'\b(\d{1,4}[-/]\d{1,2}[-/]\d{1,4})\b', v)
+                            date_match = re.search(r'\b(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\b', v)
                             if date_match:
                                 try:
-                                    # We coerce errors to prevent Pandas AssertionError on weird string matches
-                                    parsed = pd.to_datetime(date_match.group(1), errors='coerce', dayfirst=True)
+                                    date_str = date_match.group(1).replace('/', '-')
+                                    # Force DD-MM-YYYY first to absolutely prevent American MM-DD-YYYY swapping
+                                    parsed = pd.to_datetime(date_str, format='%d-%m-%Y', errors='coerce')
+                                    if pd.isna(parsed):
+                                        parsed = pd.to_datetime(date_str, format='%d-%m-%y', errors='coerce')
+                                    if pd.isna(parsed):
+                                        parsed = pd.to_datetime(date_str, dayfirst=True, errors='coerce')
+                                        
                                     if pd.notna(parsed):
                                         row_date = parsed.strftime("%Y-%m-%d")
                                         break
