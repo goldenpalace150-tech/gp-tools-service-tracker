@@ -259,9 +259,9 @@ elif st.session_state['current_module'] == 'TV_Display':
                 </div>
                 """, unsafe_allow_html=True)
         else:
-            st.markdown("<h1 style='text-align: center; color: #38a169; margin-top: 100px;'>✅ لا يوجد أجهزة متأخرة أو عاجلة. العمل ممتاز!</h1>", unsafe_allow_html=True)
+            st.markdown("<h1 style='text-align: center; color: #38a169; margin-top: 100px;'>✅ العمل ممتاز! جميع الأجهزة جاهزة.</h1>", unsafe_allow_html=True)
     else:
-        st.markdown("<h1 style='text-align: center; color: #38a169; margin-top: 100px;'>✅ لا يوجد أجهزة متأخرة أو عاجلة. العمل ممتاز!</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align: center; color: #38a169; margin-top: 100px;'>✅ العمل ممتاز! لا توجد مهام حالياً.</h1>", unsafe_allow_html=True)
 
 # ==========================================
 # MODULE 3: SUPPORT & MAINTENANCE
@@ -410,7 +410,7 @@ elif st.session_state['current_module'] == 'Support':
                     wa_link = f"https://wa.me/{phone_clean}?text={urllib.parse.quote(wa_msg)}"
                     st.markdown(f"<a href='{wa_link}' target='_blank'><button style='background-color:#25D366; color:white; border:none; padding:10px 20px; border-radius:5px; cursor:pointer; width:100%; font-size:16px; font-weight:bold;'>💬 إرسال إشعار للزبون (WhatsApp)</button></a>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
-        else: st.info("لا توجد ملفات.")
+        else: st.info("لا توجد ملفات حالياً. يرجى إنشاء سند صيانة جديد.")
 
     with tab3:
         st.markdown("<div class='erp-card'>", unsafe_allow_html=True)
@@ -455,6 +455,10 @@ elif st.session_state['current_module'] == 'Support':
                 
                 filtered_alerts = filtered_alerts.sort_values(by=["أولوية", "أيام التوقف"], ascending=[False, False])
                 st.dataframe(filtered_alerts, use_container_width=True)
+            else:
+                st.success("✅ ممتاز! جميع الأجهزة جاهزة أو تم تسليمها، ولا توجد مهام متأخرة أو قيد المعالجة.")
+        else:
+            st.info("📂 قاعدة البيانات فارغة. يرجى إنشاء سند جديد أو استيراد ملف الأمين.")
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
@@ -543,7 +547,7 @@ elif st.session_state['current_module'] == 'Logistics':
         with st.form("dispatch_form", clear_on_submit=True):
             c1, c2, c3 = st.columns(3)
             with c1:
-                disp_id = st.text_input("رقم الإرسالية (Dispatch ID)")
+                disp_id = text_input("رقم الإرسالية (Dispatch ID)")
                 ready_list = ledger_df[ledger_df['status'].str.contains('جاهز', na=False)] if not ledger_df.empty else pd.DataFrame()
                 sel_service = st.selectbox("الجهاز (Ready Tool)", options=ready_list['service_id'].tolist() if not ready_list.empty else [])
             with c2:
@@ -659,14 +663,13 @@ elif st.session_state['current_module'] == 'Accounting':
                         row_vals = [str(x).strip() for x in row.dropna().tolist()]
                         row_text = " ".join(row_vals)
                         
-                        # Robust Pandas-powered date extraction with crash protection
+                        # Robust Pandas-powered date extraction
                         row_date = ""
                         for v in row_vals:
-                            date_match = re.search(r'\b(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\b', v)
+                            date_match = re.search(r'\b(\d{1,4}[-/]\d{1,2}[-/]\d{1,4})\b', v)
                             if date_match:
                                 try:
                                     date_str = date_match.group(1).replace('/', '-')
-                                    # Force DD-MM-YYYY first to absolutely prevent American MM-DD-YYYY swapping
                                     parsed = pd.to_datetime(date_str, format='%d-%m-%Y', errors='coerce')
                                     if pd.isna(parsed):
                                         parsed = pd.to_datetime(date_str, format='%d-%m-%y', errors='coerce')
@@ -679,7 +682,8 @@ elif st.session_state['current_module'] == 'Accounting':
                                 except:
                                     pass
                         
-                        header_cell = next((val for val in row_vals if re.search(r'\b[SDV]\d+\b', val, re.IGNORECASE) and '-' in val), "")
+                        # SMART PARSER: Finds the ID anywhere in the cell without relying on hyphens
+                        header_cell = next((val for val in row_vals if re.search(r'\b[SDV]\d+\b', val, re.IGNORECASE)), "")
                         
                         if header_cell:
                             curr_sid_match = re.search(r'\b([SDV]\d+)\b', header_cell, re.IGNORECASE)
@@ -689,16 +693,23 @@ elif st.session_state['current_module'] == 'Accounting':
                                 parts = [p.strip() for p in re.split(r'[-–]', clean_header) if p.strip()]
                                 
                                 c_name, phone, t_name, issue, w_status = "غير محدد", "", "غير محدد", "", "خارج الكفالة"
-                                for p in parts[1:]:
-                                    digits = re.sub(r'\D', '', p)
-                                    if any(kw in p for kw in ['كفالة', 'ضمان', 'مجاني']): w_status = "ضمن كفالة"
-                                    elif 8 <= len(digits) <= 15 and len(p) < 20: phone = digits
-                                    elif any(kw in p for kw in ['فولت', 'فولط', 'واط', 'امبير', 'مثقب', 'صاروخ', 'مضخة', 'جلخ', 'كسارة']): t_name = p
-                                    elif any(kw in p for kw in ['عطل', 'لايعمل', 'تبديل', 'صيانة', 'ماس', 'صوت', 'فواشة']): issue = p
-                                    elif len(p) > 2:
-                                        if c_name == "غير محدد": c_name = p
-                                        elif t_name == "غير محدد": t_name = p
-                                        else: issue = p
+                                
+                                # Process tool name whether it has hyphens or not
+                                if len(parts) > 1:
+                                    for p in parts[1:]:
+                                        digits = re.sub(r'\D', '', p)
+                                        if any(kw in p for kw in ['كفالة', 'ضمان', 'مجاني']): w_status = "ضمن كفالة"
+                                        elif 8 <= len(digits) <= 15 and len(p) < 20: phone = digits
+                                        elif any(kw in p for kw in ['فولت', 'فولط', 'واط', 'امبير', 'مثقب', 'صاروخ', 'مضخة', 'جلخ', 'كسارة', 'دباسة']): t_name = p
+                                        elif any(kw in p for kw in ['عطل', 'لايعمل', 'تبديل', 'صيانة', 'ماس', 'صوت', 'فواشة']): issue = p
+                                        elif len(p) > 2:
+                                            if c_name == "غير محدد": c_name = p
+                                            elif t_name == "غير محدد": t_name = p
+                                            else: issue = p
+                                else:
+                                    # Safe fallback if Al-Ameen output has no hyphens
+                                    t_name = clean_header.replace(curr_sid, '').strip()
+                                    if not t_name: t_name = "غير محدد"
 
                                 if curr_sid not in records:
                                     records[curr_sid] = {
@@ -715,7 +726,7 @@ elif st.session_state['current_module'] == 'Accounting':
                             rec = records[curr_sid]
                             c_origin = rec["document_origin"]
                             c_rank = get_status_rank(c_origin)
-                            nums = [float(v) for v in row_vals if v.replace('.','',1).isdigit()]
+                            nums = [float(v) for v in row_vals if str(v).replace('.','',1).isdigit()]
                             
                             if "قبض" in row_text:
                                 if c_rank < 4: 
@@ -743,6 +754,8 @@ elif st.session_state['current_module'] == 'Accounting':
 
                     if imported_list:
                         save_doctype("Ledger", pd.concat([ledger_df, pd.DataFrame(imported_list)], ignore_index=True))
-                        st.success(f"✅ Imported {len(imported_list)} records successfully.")
+                        st.success(f"✅ تم استيراد {len(imported_list)} سجل بنجاح.")
                         st.rerun()
+                    else:
+                        st.warning("⚠️ لم يتم العثور على أي قيود صالحة تحتوي على أرقام بطاقات صيانة (مثل V720 أو S123) في الملف المرفوع.")
             st.markdown("</div>", unsafe_allow_html=True)
