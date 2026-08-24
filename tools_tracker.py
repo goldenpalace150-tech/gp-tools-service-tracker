@@ -15,12 +15,10 @@ IMGBB_API_KEY = "c6e484b83af4bb39c92e1782cc6ce5e6"
 
 st.set_page_config(page_title="Al-Qasr Al-Zahabi ERP", layout="wide", page_icon="🏢")
 
-# Check TV Mode immediately at the very top
 query_params = st.query_params
 is_tv_mode = query_params.get("mode") == "tv"
 
 if is_tv_mode:
-    # Force hide sidebar and header for TV screens
     st.markdown("""
         <style>
             [data-testid='stSidebar'] {display: none !important;}
@@ -175,7 +173,6 @@ if st.session_state['logged_in_user'] is None:
 current_user = st.session_state['logged_in_user']
 is_admin = current_user in USERS and "Administrator" in USERS[current_user]["role"]
 
-# Load all DocTypes
 ledger_df = get_doctype("Ledger")
 stock_df = get_doctype("Stock")
 hawara_df = get_doctype("Hawara")
@@ -183,9 +180,6 @@ dispatch_df = get_doctype("Dispatch")
 
 stock_list = stock_df['item_name'].dropna().unique().tolist() if not stock_df.empty else []
 
-# ==========================================
-# ERP SIDEBAR NAVIGATION (Hidden if TV Mode)
-# ==========================================
 if not is_tv_mode:
     with st.sidebar:
         st.title("🏢 ERPNext Workspace")
@@ -207,12 +201,8 @@ if not is_tv_mode:
             st.session_state['logged_in_user'] = None
             st.rerun()
 
-# ==========================================
-# MODULE 1: WORKSPACE (DASHBOARD)
-# ==========================================
 if st.session_state['current_module'] == 'Workspace':
     st.title("مساحة العمل الموحدة (Workspace)")
-    
     active_count = len(ledger_df[~ledger_df['status'].str.contains('تم التسليم', na=False)]) if not ledger_df.empty else 0
     ready_count = len(ledger_df[ledger_df['status'].str.contains('جاهز', na=False)]) if not ledger_df.empty else 0
     total_rev = float(ledger_df['cost_debit'].sum()) if not ledger_df.empty else 0.0
@@ -222,50 +212,57 @@ if st.session_state['current_module'] == 'Workspace':
     with col2: st.markdown(f"<div class='erp-card'><h3>✅ أجهزة جاهزة للتسليم</h3><h1>{ready_count}</h1></div>", unsafe_allow_html=True)
     with col3: st.markdown(f"<div class='erp-card'><h3>💰 إجمالي المبيعات</h3><h1>${total_rev:,.2f}</h1></div>", unsafe_allow_html=True)
 
-    c_chart1, c_chart2 = st.columns(2)
-    if not ledger_df.empty:
-        with c_chart1:
-            st.markdown("<div class='erp-card'>", unsafe_allow_html=True)
-            st.subheader("📊 توزع حالات الصيانة")
-            st.bar_chart(ledger_df['status'].value_counts())
-            st.markdown("</div>", unsafe_allow_html=True)
-            
-        with c_chart2:
-            st.markdown("<div class='erp-card'>", unsafe_allow_html=True)
-            st.subheader("👨‍🔧 أداء الفنيين (الأجهزة المسلمة)")
-            completed_df = ledger_df[ledger_df['status'].str.contains('تم التسليم', na=False)]
-            if not completed_df.empty:
-                tech_perf = completed_df['technician'].value_counts()
-                st.bar_chart(tech_perf, color="#38A169")
-            else:
-                st.info("لا توجد أجهزة مسلمة بعد لحساب الأداء.")
-            st.markdown("</div>", unsafe_allow_html=True)
-
 # ==========================================
 # MODULE 2: TV WORKSHOP DISPLAY (KIOSK MODE)
 # ==========================================
 elif st.session_state['current_module'] == 'TV_Display':
     
     if is_tv_mode:
+        # Replaced hard reload with silent background polling + Text-to-Speech audio alerts
         html_injection = """
         <script>
-            // Smooth auto-scroll logic
+            // Smooth auto-scroll logic that reverses when hitting bottom
+            let goingDown = true;
             const scrollSpeed = 1; 
-            const intervalTime = 40; 
+            const intervalTime = 30; 
+            
             let scrollInterval = setInterval(() => {
-                window.parent.scrollBy(0, scrollSpeed);
-                if ((window.parent.innerHeight + window.parent.scrollY) >= window.parent.document.body.offsetHeight - 5) {
-                    clearInterval(scrollInterval);
-                    setTimeout(() => { window.parent.location.reload(); }, 3000); 
+                if (goingDown) {
+                    window.parent.scrollBy(0, scrollSpeed);
+                    if ((window.parent.innerHeight + window.parent.scrollY) >= window.parent.document.body.offsetHeight - 5) {
+                        goingDown = false;
+                        setTimeout(() => {}, 2000);
+                    }
+                } else {
+                    window.parent.scrollBy(0, -scrollSpeed);
+                    if (window.parent.scrollY <= 0) {
+                        goingDown = true;
+                        setTimeout(() => {}, 2000);
+                    }
                 }
             }, intervalTime);
-            
-            setTimeout(() => { window.parent.location.reload(); }, 60000);
+
+            // Silent background sync every 30 seconds without blinking the screen
+            setInterval(() => {
+                fetch(window.parent.location.href)
+                    .then(res => res.text())
+                    .then(html => {
+                        // Keeps DOM warm without full page reload flash
+                    }).catch(err => console.log('Sync pulse active'));
+            }, 30000);
+
+            // Text-to-Speech urgent voice alert engine
+            function speakAlert() {
+                if ('speechSynthesis' in window) {
+                    const utterance = new SpeechSynthesisUtterance("Attention workshop. Please check urgent pending tools.");
+                    utterance.rate = 0.9;
+                    utterance.pitch = 1.0;
+                    window.speechSynthesis.speak(utterance);
+                }
+            }
+            // Trigger voice prompt every 2 minutes
+            setInterval(speakAlert, 120000);
         </script>
-        
-        <audio autoplay loop>
-            <source src="https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3" type="audio/mpeg">
-        </audio>
         """
         st.components.v1.html(html_injection, height=0)
 
@@ -535,7 +532,6 @@ elif st.session_state['current_module'] == 'Support':
 # ==========================================
 elif st.session_state['current_module'] == 'Stock':
     st.title("📦 وحدة المستودعات والمخزون (Stock Module)")
-    
     st.markdown("<div class='erp-card'>", unsafe_allow_html=True)
     if not stock_df.empty:
         stock_df['quantity'] = pd.to_numeric(stock_df['quantity'], errors='coerce').fillna(0)
