@@ -226,7 +226,6 @@ elif st.session_state['current_module'] == 'TV_Display':
         open_jobs = ledger_df[~ledger_df['status'].str.contains('تم التسليم', na=False)]
         display_items = []
         for _, r in open_jobs.iterrows():
-            # Robust Date Parsing for SLA Math
             try: 
                 days = (datetime.now() - pd.to_datetime(str(r['date_logged']).split(' ')[0])).days
             except: 
@@ -419,7 +418,6 @@ elif st.session_state['current_module'] == 'Support':
             open_jobs = ledger_df[~ledger_df['status'].str.contains('تم التسليم', na=False)]
             alerts = []
             for _, r in open_jobs.iterrows():
-                # Robust Date Parsing for SLA Math
                 try: 
                     days = (datetime.now() - pd.to_datetime(str(r['date_logged']).split(' ')[0])).days
                 except: 
@@ -661,17 +659,19 @@ elif st.session_state['current_module'] == 'Accounting':
                         row_vals = [str(x).strip() for x in row.dropna().tolist()]
                         row_text = " ".join(row_vals)
                         
-                        # Robust Pandas-powered date extraction
+                        # Robust Pandas-powered date extraction with crash protection
                         row_date = ""
                         for v in row_vals:
                             date_match = re.search(r'\b(\d{1,4}[-/]\d{1,2}[-/]\d{1,4})\b', v)
                             if date_match:
-                                parsed = pd.to_datetime(date_match.group(1), errors='ignore')
-                                try: 
-                                    row_date = parsed.strftime("%Y-%m-%d")
-                                except: 
-                                    row_date = str(parsed)[:10]
-                                break
+                                try:
+                                    # We coerce errors to prevent Pandas AssertionError on weird string matches
+                                    parsed = pd.to_datetime(date_match.group(1), errors='coerce', dayfirst=True)
+                                    if pd.notna(parsed):
+                                        row_date = parsed.strftime("%Y-%m-%d")
+                                        break
+                                except:
+                                    pass
                         
                         header_cell = next((val for val in row_vals if re.search(r'\b[SDV]\d+\b', val, re.IGNORECASE) and '-' in val), "")
                         
