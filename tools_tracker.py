@@ -74,15 +74,12 @@ def deduplicate_ledger(df):
 def get_doctype(doctype_name):
     try:
         df = conn.read(worksheet=doctype_name, ttl=0)
-        
-        # Drop phantom blank rows returned by Google Sheets
         df = df.dropna(how='all')
         
         for col in SCHEMA[doctype_name]:
             if col not in df.columns: df[col] = ""
             
         if doctype_name == "Ledger":
-            # Clean empty/NaN service IDs BEFORE processing
             df['service_id'] = df['service_id'].astype(str).replace({'nan': '', 'None': ''})
             df = df[df['service_id'].str.strip() != ""]
             
@@ -90,7 +87,6 @@ def get_doctype(doctype_name):
                 if col not in ['cost_debit', 'payment_credit', 'balance']:
                     df[col] = df[col].fillna("").astype(str).replace({'nan': '', 'None': ''})
             
-            # Force strict numeric types for financial fields
             for col in ['cost_debit', 'payment_credit', 'balance']:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
                 
@@ -99,7 +95,6 @@ def get_doctype(doctype_name):
             
         return df
     except Exception as e: 
-        # TV-Safe Error Handler: Silently return empty table if tab is merely missing
         error_msg = str(e).strip()
         if error_msg != doctype_name and "not found" not in error_msg.lower() and "HTTPError" in error_msg:
             st.error(f"⚠️ خطأ في الاتصال (Connection Error): {error_msg}")
@@ -108,7 +103,7 @@ def get_doctype(doctype_name):
 def save_doctype(doctype_name, df):
     if doctype_name == "Ledger": 
         df = deduplicate_ledger(df)
-        df = df[df['service_id'].astype(str).str.strip() != ""] # Clean before saving
+        df = df[df['service_id'].astype(str).str.strip() != ""]
     conn.update(worksheet=doctype_name, data=df)
 
 def convert_df_to_excel(df):
@@ -141,6 +136,16 @@ def generate_next_id(branch_code, df):
 if 'logged_in_user' not in st.session_state: st.session_state['logged_in_user'] = None
 if 'current_module' not in st.session_state: st.session_state['current_module'] = 'Workspace'
 
+# KIOSK MODE LINK DETECTION (?mode=tv)
+query_params = st.query_params
+is_tv_mode = query_params.get("mode") == "tv"
+
+if is_tv_mode:
+    st.session_state['logged_in_user'] = "TV_Guest"
+    st.session_state['current_module'] = 'TV_Display'
+    # Permanently hide sidebar on TV
+    st.markdown("<style>[data-testid='stSidebar'] {display: none !important;}</style>", unsafe_allow_html=True)
+
 USERS = {"admin": {"pass": "123", "role": "System Administrator"}, "tech": {"pass": "123", "role": "Support Agent"}}
 
 if st.session_state['logged_in_user'] is None:
@@ -159,7 +164,7 @@ if st.session_state['logged_in_user'] is None:
     st.stop()
 
 current_user = st.session_state['logged_in_user']
-is_admin = ("Administrator" in USERS[current_user]["role"])
+is_admin = current_user in USERS and "Administrator" in USERS[current_user]["role"]
 
 # Load all DocTypes
 ledger_df = get_doctype("Ledger")
@@ -170,27 +175,28 @@ dispatch_df = get_doctype("Dispatch")
 stock_list = stock_df['item_name'].dropna().unique().tolist() if not stock_df.empty else []
 
 # ==========================================
-# ERP SIDEBAR NAVIGATION
+# ERP SIDEBAR NAVIGATION (Hidden if TV Mode)
 # ==========================================
-with st.sidebar:
-    st.title("🏢 ERPNext Workspace")
-    st.markdown(f"**المستخدم:** {current_user} <br> **الدور:** {USERS[current_user]['role']}", unsafe_allow_html=True)
-    st.divider()
-    
-    st.caption("العمليات الأساسية (CORE MODULES)")
-    if st.button("🏠 مساحة العمل (Workspace)", use_container_width=True): st.session_state['current_module'] = 'Workspace'
-    if st.button("📺 شاشة الورشة (TV Display)", use_container_width=True): st.session_state['current_module'] = 'TV_Display'
-    if st.button("🛠️ الدعم والصيانة (Support)", use_container_width=True): st.session_state['current_module'] = 'Support'
-    if st.button("📦 المخزون (Stock)", use_container_width=True): st.session_state['current_module'] = 'Stock'
-    if st.button("🚚 اللوجستيات (Logistics)", use_container_width=True): st.session_state['current_module'] = 'Logistics'
-    
-    st.caption("المالية والتقارير (ACCOUNTING)")
-    if st.button("💰 المحاسبة (Accounting)", use_container_width=True): st.session_state['current_module'] = 'Accounting'
-    
-    st.divider()
-    if st.button("🚪 تسجيل الخروج (Logout)", use_container_width=True):
-        st.session_state['logged_in_user'] = None
-        st.rerun()
+if not is_tv_mode:
+    with st.sidebar:
+        st.title("🏢 ERPNext Workspace")
+        st.markdown(f"**المستخدم:** {current_user} <br> **الدور:** {USERS.get(current_user, {}).get('role', 'Viewer')}", unsafe_allow_html=True)
+        st.divider()
+        
+        st.caption("العمليات الأساسية (CORE MODULES)")
+        if st.button("🏠 مساحة العمل (Workspace)", use_container_width=True): st.session_state['current_module'] = 'Workspace'
+        if st.button("📺 شاشة الورشة (TV Display)", use_container_width=True): st.session_state['current_module'] = 'TV_Display'
+        if st.button("🛠️ الدعم والصيانة (Support)", use_container_width=True): st.session_state['current_module'] = 'Support'
+        if st.button("📦 المخزون (Stock)", use_container_width=True): st.session_state['current_module'] = 'Stock'
+        if st.button("🚚 اللوجستيات (Logistics)", use_container_width=True): st.session_state['current_module'] = 'Logistics'
+        
+        st.caption("المالية والتقارير (ACCOUNTING)")
+        if st.button("💰 المحاسبة (Accounting)", use_container_width=True): st.session_state['current_module'] = 'Accounting'
+        
+        st.divider()
+        if st.button("🚪 تسجيل الخروج (Logout)", use_container_width=True):
+            st.session_state['logged_in_user'] = None
+            st.rerun()
 
 # ==========================================
 # MODULE 1: WORKSPACE (DASHBOARD)
@@ -230,23 +236,50 @@ if st.session_state['current_module'] == 'Workspace':
 # MODULE 2: TV WORKSHOP DISPLAY (KIOSK MODE)
 # ==========================================
 elif st.session_state['current_module'] == 'TV_Display':
-    st.components.v1.html("<script>setTimeout(function(){window.parent.location.reload();}, 60000);</script>", height=0)
+    # Automated scrolling, refresh, and ambient audio engine
+    html_injection = """
+    <script>
+        // Smooth auto-scroll logic
+        const scrollSpeed = 1; 
+        const intervalTime = 40; 
+        let scrollInterval = setInterval(() => {
+            window.parent.scrollBy(0, scrollSpeed);
+            // Check if page reached bottom
+            if ((window.parent.innerHeight + window.parent.scrollY) >= window.parent.document.body.offsetHeight - 5) {
+                clearInterval(scrollInterval);
+                setTimeout(() => { window.parent.location.reload(); }, 3000); // Wait 3 seconds at bottom, then refresh
+            }
+        }, intervalTime);
+        
+        // Failsafe auto-refresh every 60 seconds if page is too short to scroll
+        setTimeout(() => { window.parent.location.reload(); }, 60000);
+    </script>
+    
+    <!-- Warm Ambient Track Loop -->
+    <audio autoplay loop>
+        <source src="https://cdn.pixabay.com/download/audio/2022/02/10/audio_fcda0229eb.mp3" type="audio/mpeg">
+    </audio>
+    """
+    st.components.v1.html(html_injection, height=0)
     
     st.markdown("""
         <style>
             header {visibility: hidden;}
             .tv-card-urgent { background: #ffe5e5; border-right: 15px solid #e53e3e; padding: 25px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
             .tv-card-delayed { background: #fffaf0; border-right: 15px solid #dd6b20; padding: 25px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+            .tv-card-normal { background: #ebf8ff; border-right: 15px solid #3182ce; padding: 25px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
             .tv-title { font-size: 32px; font-weight: bold; color: #1a202c; margin-bottom: 10px; }
             .tv-details { font-size: 24px; color: #4a5568; }
-            .tv-days { font-size: 35px; font-weight: bold; float: left; margin-top: -10px; }
+            .tv-days { font-size: 35px; font-weight: bold; float: left; margin-top: -10px; text-align: center; }
         </style>
     """, unsafe_allow_html=True)
 
     st.markdown("<h1 style='text-align: center; font-size: 60px; margin-bottom: 40px;'>شاشة متابعة الورشة (Live Queue)</h1>", unsafe_allow_html=True)
 
     if not ledger_df.empty:
-        open_jobs = ledger_df[~ledger_df['status'].str.contains('تم التسليم', na=False)]
+        # Filter purely for devices actively in the workshop (Waiting or In Progress)
+        open_jobs = ledger_df[ledger_df['status'].str.contains('الانتظار|المعالجة', na=False, regex=True)]
+        
         display_items = []
         for _, r in open_jobs.iterrows():
             try: 
@@ -256,23 +289,31 @@ elif st.session_state['current_module'] == 'TV_Display':
             
             is_urgent = "عاجل" in str(r.get('priority', ''))
             
-            if is_urgent or days >= 3:
-                display_items.append({
-                    "days": days,
-                    "urgent": is_urgent,
-                    "sid": r['service_id'],
-                    "tool": r['tool_name'],
-                    "issue": r['reported_issue'],
-                    "status": r['status']
-                })
+            display_items.append({
+                "days": days,
+                "urgent": is_urgent,
+                "sid": r['service_id'],
+                "tool": r['tool_name'],
+                "issue": r['reported_issue'],
+                "status": r['status']
+            })
         
         display_items = sorted(display_items, key=lambda x: (not x['urgent'], -x['days']))
         
         if display_items:
             for item in display_items:
-                card_class = "tv-card-urgent" if item['urgent'] else "tv-card-delayed"
-                tag = "🔥 عاجل جداً" if item['urgent'] else "⚠️ متأخر"
-                color = "#e53e3e" if item['urgent'] else "#dd6b20"
+                if item['urgent']:
+                    card_class = "tv-card-urgent"
+                    tag = "🔥 عاجل جداً"
+                    color = "#e53e3e"
+                elif item['days'] >= 3:
+                    card_class = "tv-card-delayed"
+                    tag = "⚠️ متأخر"
+                    color = "#dd6b20"
+                else:
+                    card_class = "tv-card-normal"
+                    tag = "⚙️ قيد العمل"
+                    color = "#3182ce"
                 
                 st.markdown(f"""
                 <div class="{card_class}">
@@ -282,7 +323,7 @@ elif st.session_state['current_module'] == 'TV_Display':
                 </div>
                 """, unsafe_allow_html=True)
         else:
-            st.markdown("<h1 style='text-align: center; color: #38a169; margin-top: 100px;'>✅ العمل ممتاز! جميع الأجهزة جاهزة.</h1>", unsafe_allow_html=True)
+            st.markdown("<h1 style='text-align: center; color: #38a169; margin-top: 100px;'>✅ لا توجد أجهزة قيد الصيانة. الورشة خالية!</h1>", unsafe_allow_html=True)
     else:
         st.markdown("<h1 style='text-align: center; color: #38a169; margin-top: 100px;'>✅ العمل ممتاز! لا توجد مهام حالياً.</h1>", unsafe_allow_html=True)
 
