@@ -16,7 +16,7 @@ IMGBB_API_KEY = "c6e484b83af4bb39c92e1782cc6ce5e6"
 st.set_page_config(page_title="Al-Qasr Al-Zahabi ERP", layout="wide", page_icon="🏢")
 
 query_params = st.query_params
-is_tv_mode = query_params.get("mode") == "tv"
+is_tv_mode = "tv" in query_params or query_params.get("mode") == "tv"
 
 if is_tv_mode:
     st.markdown("""
@@ -218,6 +218,7 @@ if st.session_state['current_module'] == 'Workspace':
 elif st.session_state['current_module'] == 'TV_Display':
     
     if is_tv_mode:
+        # British Female Voice Engine + 10-second staff encouragement rotator
         html_injection = """
         <script>
             let goingDown = true;
@@ -246,15 +247,38 @@ elif st.session_state['current_module'] == 'TV_Display':
                     .then(html => {}).catch(err => {});
             }, 30000);
 
-            function speakAlert() {
+            // British Female Voice Rotator for Staff
+            const staffMembers = ["Abdulrazzaq", "Othman", "Omar"];
+            let staffIndex = 0;
+
+            function speakStaffEncouragement() {
                 if ('speechSynthesis' in window) {
-                    const utterance = new SpeechSynthesisUtterance("Attention workshop. Please check urgent pending tools.");
-                    utterance.rate = 0.9;
-                    utterance.pitch = 1.0;
+                    const currentStaff = staffMembers[staffIndex];
+                    const phrases = [
+                        `Great work today, ${currentStaff}. Keep pushing forward!`,
+                        `Fantastic effort in the workshop, ${currentStaff}!`,
+                        `Keep up the brilliant momentum, ${currentStaff}.`
+                    ];
+                    const randomPhrase = phrases[Math.floor(Math.random() * phrases.length)];
+                    
+                    const utterance = new SpeechSynthesisUtterance(randomPhrase);
+                    utterance.rate = 1.0;
+                    utterance.pitch = 1.1;
+                    
+                    // Select British Female Voice if available
+                    const voices = window.speechSynthesis.getVoices();
+                    const ukFemaleVoice = voices.find(v => v.lang === 'en-GB' && (v.name.includes('Female') || v.name.includes('Hazel') || v.name.includes('Susan') || v.name.includes('Libby')));
+                    if (ukFemaleVoice) {
+                        utterance.voice = ukFemaleVoice;
+                    }
+                    
                     window.speechSynthesis.speak(utterance);
+                    staffIndex = (staffIndex + 1) % staffMembers.length;
                 }
             }
-            setInterval(speakAlert, 120000);
+            
+            // Trigger encouragement precisely every 10 seconds
+            setInterval(speakStaffEncouragement, 10000);
         </script>
         """
         st.components.v1.html(html_injection, height=0)
@@ -279,9 +303,7 @@ elif st.session_state['current_module'] == 'TV_Display':
         for _, r in open_jobs.iterrows():
             try: 
                 logged_dt = pd.to_datetime(str(r['date_logged']).split(' ')[0])
-                # SAFETY FIX: If the date in the sheet is accidentally set in the future, correct it automatically on the fly
-                if logged_dt > datetime.now():
-                    logged_dt = datetime.now() - pd.Timedelta(days=2) # Default to 2 days ago if inverted
+                if logged_dt > datetime.now(): logged_dt = datetime.now() - pd.Timedelta(days=2)
                 days = (datetime.now() - logged_dt).days
                 if days < 0: days = 0
             except: 
@@ -295,7 +317,8 @@ elif st.session_state['current_module'] == 'TV_Display':
                 "sid": r['service_id'],
                 "tool": r['tool_name'],
                 "issue": r['reported_issue'],
-                "status": r['status']
+                "status": r['status'],
+                "remarks": r.get('remarks', '')
             })
         
         display_items = sorted(display_items, key=lambda x: (not x['urgent'], -x['days']))
@@ -319,9 +342,26 @@ elif st.session_state['current_module'] == 'TV_Display':
                 <div class="{card_class}">
                     <div class="tv-days" style="color: {color};">{item['days']}<br><span style="font-size:16px;">أيام</span></div>
                     <div class="tv-title">{tag} | {item['sid']} - {item['tool']}</div>
-                    <div class="tv-details"><b>العطل:</b> {item['issue']} <br> <b>الحالة الآن:</b> {item['status']}</div>
+                    <div class="tv-details"><b>العطل:</b> {item['issue']} <br> <b>الحالة الآن:</b> {item['status']} <br> <b>ملاحظات:</b> {item['remarks']}</div>
                 </div>
                 """, unsafe_allow_html=True)
+                
+                # Interactive Workshop Quick-Update Form
+                with st.expander(f"⚡ تحديث سريع للسند ({item['sid']})"):
+                    with st.form(f"quick_form_{item['sid']}"):
+                        q_action = st.selectbox("الإجراء:", ["تحديث الملاحظات فقط", "إنجاز وجاهز للتسليم (Ready)"], key=f"act_{item['sid']}")
+                        q_remark = st.text_input("إضافة ملاحظة ورشة:", value=item['remarks'], key=f"rem_{item['sid']}")
+                        
+                        if st.form_submit_button("حفظ التحديث (Save)", use_container_width=True):
+                            idx = ledger_df.index[ledger_df['service_id'] == item['sid']][0]
+                            ledger_df.at[idx, 'remarks'] = q_remark
+                            if "إنجاز" in q_action:
+                                ledger_df.at[idx, 'document_origin'] = "مبيع خ ص: (جاهز ومفوتر)"
+                                ledger_df.at[idx, 'status'] = "جاهز للتسليم (Ready)"
+                                ledger_df.at[idx, 'date_resolved'] = datetime.now().strftime("%Y-%m-%d")
+                            save_doctype("Ledger", ledger_df)
+                            st.success("✅ تم التحديث بنجاح!")
+                            st.rerun()
         else:
             st.markdown("<h1 style='text-align: center; color: #38a169; margin-top: 100px;'>✅ لا توجد أجهزة قيد الصيانة. الورشة خالية!</h1>", unsafe_allow_html=True)
     else:
