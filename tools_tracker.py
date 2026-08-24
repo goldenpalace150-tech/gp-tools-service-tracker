@@ -262,7 +262,7 @@ elif st.session_state['current_module'] == 'TV_Display':
         st.markdown("<h1 style='text-align: center; color: #38a169; margin-top: 100px;'>✅ لا يوجد أجهزة متأخرة أو عاجلة. العمل ممتاز!</h1>", unsafe_allow_html=True)
 
 # ==========================================
-# MODULE 3: SUPPORT & MAINTENANCE (ERPNEXT LOGIC)
+# MODULE 3: SUPPORT & MAINTENANCE
 # ==========================================
 elif st.session_state['current_module'] == 'Support':
     st.title("🛠️ وحدة الدعم والصيانة (Support Desk)")
@@ -439,8 +439,20 @@ elif st.session_state['current_module'] == 'Support':
             
             df_alerts = pd.DataFrame(alerts)
             if not df_alerts.empty:
-                df_alerts = df_alerts.sort_values(by=["أولوية", "أيام التوقف"], ascending=[False, False])
-                st.dataframe(df_alerts, use_container_width=True)
+                # Add the interactive filter and counter
+                c_filt1, c_filt2 = st.columns([3, 1])
+                with c_filt1:
+                    all_statuses = df_alerts['الوضع'].unique().tolist()
+                    selected_statuses = st.multiselect("🔍 تصفية حسب الوضع (Filter by Status):", options=all_statuses, default=all_statuses)
+                
+                filtered_alerts = df_alerts[df_alerts['الوضع'].isin(selected_statuses)]
+                
+                with c_filt2:
+                    st.metric("العدد (Count)", len(filtered_alerts))
+                
+                # Sort and display the filtered results
+                filtered_alerts = filtered_alerts.sort_values(by=["أولوية", "أيام التوقف"], ascending=[False, False])
+                st.dataframe(filtered_alerts, use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
