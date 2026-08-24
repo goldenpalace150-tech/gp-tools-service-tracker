@@ -66,7 +66,7 @@ def map_document_to_status(doc_string, cost=0.0):
 
 def deduplicate_ledger(df):
     if df.empty or 'service_id' not in df.columns: return df
-    df['service_id'] = df['service_id'].astype(str) # Double protection against Pandas float sorting crashes
+    df['service_id'] = df['service_id'].astype(str) 
     df['rank'] = df['document_origin'].apply(get_status_rank)
     df = df.sort_values(by=['service_id', 'rank'], ascending=[True, True])
     return df.groupby('service_id', as_index=False).last().drop(columns=['rank'], errors='ignore')
@@ -75,14 +75,14 @@ def get_doctype(doctype_name):
     try:
         df = conn.read(worksheet=doctype_name, ttl=0)
         
-        # FIX: Drop phantom blank rows returned by Google Sheets to prevent math crashes
+        # Drop phantom blank rows returned by Google Sheets
         df = df.dropna(how='all')
         
         for col in SCHEMA[doctype_name]:
             if col not in df.columns: df[col] = ""
             
         if doctype_name == "Ledger":
-            # FIX: Clean empty/NaN service IDs BEFORE processing
+            # Clean empty/NaN service IDs BEFORE processing
             df['service_id'] = df['service_id'].astype(str).replace({'nan': '', 'None': ''})
             df = df[df['service_id'].str.strip() != ""]
             
@@ -90,7 +90,7 @@ def get_doctype(doctype_name):
                 if col not in ['cost_debit', 'payment_credit', 'balance']:
                     df[col] = df[col].fillna("").astype(str).replace({'nan': '', 'None': ''})
             
-            # FIX: Force strict numeric types for financial fields so the dashboard never crashes
+            # Force strict numeric types for financial fields
             for col in ['cost_debit', 'payment_credit', 'balance']:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
                 
@@ -99,8 +99,10 @@ def get_doctype(doctype_name):
             
         return df
     except Exception as e: 
-        # FIX: Never fail silently again. Show the exact error if Google Sheets rejects the connection.
-        st.error(f"⚠️ خطأ في قراءة قاعدة البيانات ({doctype_name}): {str(e)}")
+        # TV-Safe Error Handler: Silently return empty table if tab is merely missing
+        error_msg = str(e).strip()
+        if error_msg != doctype_name and "not found" not in error_msg.lower() and "HTTPError" in error_msg:
+            st.error(f"⚠️ خطأ في الاتصال (Connection Error): {error_msg}")
         return pd.DataFrame(columns=SCHEMA[doctype_name])
 
 def save_doctype(doctype_name, df):
