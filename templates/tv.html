@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>شاشة متابعة الورشة</title>
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            font-size: 60px;
+            color: #1a202c;
+            margin-bottom: 40px;
+        }
+        .card {
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .card-urgent { background: #ffe5e5; border-right: 15px solid #e53e3e; }
+        .card-delayed { background: #fffaf0; border-right: 15px solid #dd6b20; }
+        .card-normal { background: #ebf8ff; border-right: 15px solid #3182ce; }
+        
+        .tv-days { font-size: 35px; font-weight: bold; float: left; margin-top: -10px; text-align: center; }
+        .tv-title { font-size: 32px; font-weight: bold; margin-bottom: 10px; }
+        .tv-details { font-size: 24px; color: #4a5568; }
+    </style>
+</head>
+<body>
+
+    <h1>شاشة متابعة الورشة (Live Queue)</h1>
+
+    {% for item in jobs %}
+        {% if item.priority == 'عاجل' %}
+            <div class="card card-urgent">
+                <div class="tv-days" style="color: #e53e3e;">{{ item.days }}<br><span style="font-size:16px;">أيام</span></div>
+                <div class="tv-title">🔥 عاجل جداً | {{ item.service_id }} - {{ item.tool_name }}</div>
+                <div class="tv-details"><b>العطل:</b> {{ item.reported_issue }} <br> <b>الحالة الآن:</b> {{ item.status }} <br> <b>ملاحظات:</b> {{ item.remarks }}</div>
+            </div>
+        {% elif item.days >= 3 %}
+            <div class="card card-delayed">
+                <div class="tv-days" style="color: #dd6b20;">{{ item.days }}<br><span style="font-size:16px;">أيام</span></div>
+                <div class="tv-title">⚠️ متأخر | {{ item.service_id }} - {{ item.tool_name }}</div>
+                <div class="tv-details"><b>العطل:</b> {{ item.reported_issue }} <br> <b>الحالة الآن:</b> {{ item.status }} <br> <b>ملاحظات:</b> {{ item.remarks }}</div>
+            </div>
+        {% else %}
+            <div class="card card-normal">
+                <div class="tv-days" style="color: #3182ce;">{{ item.days }}<br><span style="font-size:16px;">أيام</span></div>
+                <div class="tv-title">⚙️ قيد العمل | {{ item.service_id }} - {{ item.tool_name }}</div>
+                <div class="tv-details"><b>العطل:</b> {{ item.reported_issue }} <br> <b>الحالة الآن:</b> {{ item.status }} <br> <b>ملاحظات:</b> {{ item.remarks }}</div>
+            </div>
+        {% endif %}
+    {% endfor %}
+
+    <script>
+        let scrollAmount = 1;
+        setInterval(() => {
+            window.scrollBy(0, scrollAmount);
+            if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 5 || window.scrollY === 0) {
+                scrollAmount = -scrollAmount; 
+            }
+        }, 50);
+
+        // Silent refresh every 30 seconds to fetch new data without freezing
+        setTimeout(() => { location.reload(); }, 30000);
+    </script>
+</body>
+</html>
