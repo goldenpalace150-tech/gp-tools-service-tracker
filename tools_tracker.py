@@ -335,6 +335,52 @@ def apply_workflow_columns(df):
     return df
 
 
+def deduplicate_ledger(df):
+    """Keep one row per service case while preserving the furthest known workflow stage."""
+    if df is None or df.empty:
+        return pd.DataFrame() if df is None else df
+
+    work = df.copy()
+    if "service_id" not in work.columns:
+        return work
+
+    work["service_id"] = work["service_id"].astype(str).replace({"nan": "", "None": ""})
+    work = work[work["service_id"].str.strip() != ""].copy()
+    if work.empty:
+        return work
+
+    # A repeated service reference represents the same repair case.
+    # Prefer the highest workflow stage, then the newest known date.
+    if "document_origin" in work.columns:
+        work["_workflow_rank"] = work["document_origin"].apply(get_status_rank)
+    elif "repair_stage" in work.columns:
+        stage_rank = {
+            "قيد الانتظار": 0,
+            "قيد المعالجة": 1,
+            "جاهز للتسليم": 2,
+            "تم التحصيل والتسليم": 4,
+        }
+        work["_workflow_rank"] = work["repair_stage"].map(stage_rank).fillna(0)
+    else:
+        work["_workflow_rank"] = 0
+
+    date_series = pd.Series(pd.NaT, index=work.index, dtype="datetime64[ns]")
+    for col in ("date_resolved", "date_logged"):
+        if col in work.columns:
+            parsed = pd.to_datetime(work[col], dayfirst=True, errors="coerce")
+            date_series = date_series.fillna(parsed)
+    work["_workflow_date"] = date_series
+
+    work = work.sort_values(
+        ["service_id", "_workflow_rank", "_workflow_date"],
+        ascending=[True, True, True],
+        kind="stable",
+        na_position="first",
+    )
+    work = work.groupby("service_id", as_index=False, sort=False).tail(1)
+    return work.drop(columns=["_workflow_rank", "_workflow_date"], errors="ignore").reset_index(drop=True)
+
+
 def get_doctype(doctype_name):
     try:
         df = conn.read(worksheet=doctype_name, ttl=0)
