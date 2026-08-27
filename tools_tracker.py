@@ -52,37 +52,288 @@ SCHEMA = {
         "service_id", "tool_name", "customer_name", "phone_number", "warranty_status", "document_origin", 
         "reported_issue", "technician", "status", "cost_debit", "payment_credit", "balance", 
         "spare_parts", "resolution_notes", "remarks", "date_logged", "date_resolved",
-        "accessories", "loaner_item", "priority", "tool_photo_link"
+        "accessories", "loaner_item", "priority", "tool_photo_link",
+        "source_account", "source_account_g", "source_document_count", "document_history",
+        "repair_stage", "collection_status", "special_case", "partner_claim_status", "partner_claim_amount"
     ],
     "Stock": ["item_code", "item_name", "quantity", "price"],
     "Hawara": ["order_id", "order_type", "linked_service_id", "courier", "delivery_note", "document_link", "status", "date_logged"],
     "Dispatch": ["dispatch_id", "service_id", "customer_name", "courier", "delivery_note", "document_link", "date"]
 }
 
+def normalize_doc_string(val):
+    return re.sub(r'\s+', ' ', str(val or '')).strip()
+
+
 def get_status_rank(val):
-    s = str(val)
-    if "قبض" in s or "Collected" in s: return 4
-    if "خ صيانة" in s or "حساب وكيل" in s: return 3
-    if "مبيع خ ص" in re.sub(r'\s+', ' ', s).strip() or "جاهز" in s: return 2
-    if "اد خ ص" in re.sub(r'\s+', ' ', s).strip() or "المعالجة" in s: return 1
+    """Ranking used only for source-document stage comparison."""
+    s = normalize_doc_string(val)
+    if "قبض" in s or "Collected" in s:
+        return 4
+    if "خ صيانة" in s or "حساب وكيل" in s:
+        return 3
+    if "مبيع خ ص" in s or "جاهز" in s:
+        return 2
+    if "اد خ ص" in s or "المعالجة" in s:
+        return 1
     return 0
 
-def map_document_to_status(doc_string, cost=0.0):
-    doc = re.sub(r'\s+', ' ', str(doc_string)).strip()
-    try: cost_val = float(cost)
-    except: cost_val = 0.0
-    if "قبض" in doc: return "تم التسليم للزبون (Customer Collected)"
-    if "خ صيانة" in doc: return "تم التسليم - حساب وكيل (Partner Collected)"
-    if "مبيع خ ص" in doc: return "جاهز للتسليم (بدون تكلفة/كفالة)" if cost_val == 0.0 else "جاهز للتسليم (Ready)"
-    if "اد خ ص" in doc: return "قيد المعالجة (In Progress)"
-    return "قيد الانتظار"
 
-def deduplicate_ledger(df):
-    if df.empty or 'service_id' not in df.columns: return df
-    df['service_id'] = df['service_id'].astype(str) 
-    df['rank'] = df['document_origin'].apply(get_status_rank)
-    df = df.sort_values(by=['service_id', 'rank'], ascending=[True, True])
-    return df.groupby('service_id', as_index=False).last().drop(columns=['rank'], errors='ignore')
+def map_document_to_status(doc_string, cost=0.0, collection_status="", special_case="", partner_claim_status=""):
+    doc = normalize_doc_string(doc_string)
+    special = normalize_doc_string(special_case)
+    collection = normalize_doc_string(collection_status)
+    partner = normalize_doc_string(partner_claim_status)
+
+    if "قبض" in doc or "تم التحصيل والتسليم" in collection:
+        return "تم التحصيل والتسليم (Collected & Delivered)"
+    if "الزبون رفض" in special:
+        return "الزبون رفض الإصلاح (Customer Refused)"
+    if "غير قابل للإصلاح" in special:
+        return "غير قابل للإصلاح (Not Repairable)"
+    if "خ صيانة" in doc and "بانتظار" not in partner:
+        return "مغلق محاسبياً - حساب شريك (Partner Claimed)"
+    if "مبيع خ ص" in doc or "جاهز" in doc:
+        return "جاهز للتسليم - بانتظار الاستلام (Ready / Awaiting Collection)"
+    if "اد خ ص" in doc or "المعالجة" in doc:
+        return "قيد المعالجة (In Progress)"
+    return "قيد الانتظار (Waiting)"
+
+
+def parse_excel_date(value):
+    try:
+        if value is None or str(value).strip() in ("", "nan", "NaT"):
+            return ""
+        if isinstance(value, (int, float)) and not pd.isna(value):
+            return (pd.Timestamp("1899-12-30") + pd.to_timedelta(float(value), unit="D")).strftime("%Y-%m-%d")
+        parsed = pd.to_datetime(value, dayfirst=True, errors="coerce")
+        return parsed.strftime("%Y-%m-%d") if pd.notna(parsed) else ""
+    except Exception:
+        return ""
+
+
+def extract_service_id(account_value, account_g_value=""):
+    text = f"{account_g_value} {account_value}"
+    m = re.search(r'\b([SDV]\d+)\b', text, re.IGNORECASE)
+    return m.group(1).upper() if m else ""
+
+
+def clean_text(value):
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    return str(value).replace("\n", " ").strip()
+
+
+def parse_account_details(account_text, service_id=""):
+    """Best-effort parsing of Ameen account description without assuming a fixed customer position."""
+    text = clean_text(account_text)
+    if not text:
+        return "", "", "", "", ""
+    parts = [p.strip() for p in re.split(r'[-–—]+', text) if p.strip()]
+    if service_id and parts and parts[0].upper() == service_id.upper():
+        parts = parts[1:]
+
+    phone = ""
+    phone_idx = None
+    for i, p in enumerate(parts):
+        digits = re.sub(r'\D', '', p)
+        if 8 <= len(digits) <= 15:
+            phone = digits
+            phone_idx = i
+            break
+
+    known_code_idx = None
+    for i, p in enumerate(parts):
+        if re.fullmatch(r'[A-Za-z]{2,}\d+[A-Za-z0-9]*', p) or re.fullmatch(r'[A-Za-z0-9]{5,}', p):
+            if re.search(r'[A-Za-z]', p) and re.search(r'\d', p):
+                known_code_idx = i
+                break
+
+    warranty = "ضمن كفالة" if any(k in text for k in ["كفالة", "ضمان", "مجاني"]) else "خارج الكفالة"
+
+    item = ""
+    customer = ""
+    issue = ""
+    if known_code_idx is not None:
+        item_parts = parts[:known_code_idx]
+        code = parts[known_code_idx]
+        if item_parts:
+            if len(item_parts) >= 2:
+                customer = item_parts[-1]
+                item = " - ".join(item_parts[:-1])
+            else:
+                item = item_parts[0]
+        tail_start = known_code_idx + 1
+        tail = parts[tail_start:]
+        if phone_idx is not None and phone_idx >= tail_start:
+            if phone_idx + 1 < len(parts):
+                issue = " - ".join(parts[phone_idx + 1:])
+        elif tail:
+            issue = " - ".join(tail)
+    else:
+        pre = parts[:phone_idx] if phone_idx is not None else parts
+        if len(pre) >= 2:
+            item = pre[0]
+            customer = " - ".join(pre[1:])
+        elif len(pre) == 1:
+            item = pre[0]
+        if phone_idx is not None and phone_idx + 1 < len(parts):
+            issue = " - ".join(parts[phone_idx + 1:])
+
+    issue = issue or text
+    return item or "غير محدد", customer or "غير محدد", phone, warranty, issue
+
+
+def special_case_from_remarks(text):
+    t = normalize_doc_string(text)
+    if any(k in t for k in ["رفض الإصلاح", "الزبون رفض", "رفض الصيانة", "رفض التصليح", "لم يوافق على الإصلاح"]):
+        return "الزبون رفض الإصلاح"
+    if any(k in t for k in ["غير قابل للإصلاح", "غير قابل للصيانة", "لاتصلح", "لا تصلح", "لا يمكن إصلاح"]):
+        return "غير قابل للإصلاح"
+    if "لايوجد عطل" in t or "لا يوجد عطل" in t:
+        return "لا يوجد عطل"
+    return ""
+
+
+def normalize_ameen_dataframe(raw_excel):
+    """Turn Ameen's A:L ledger into one row per service ticket while retaining document history."""
+    df = raw_excel.copy()
+    if df.empty:
+        return pd.DataFrame()
+
+    # Ameen export is fixed A:L. Headers are not unique ("مدين"/"دائن" repeat),
+    # therefore we deliberately map by position rather than by header text.
+    expected = ["account", "prev_balance", "debit", "credit", "uncolllected", "current_balance", "account_name", "date", "origin", "debit_line", "credit_line", "statement"]
+    if df.shape[1] >= 12:
+        df = df.iloc[:, :12].copy()
+        df.columns = expected
+    else:
+        return pd.DataFrame()
+
+    # Drop header rows repeated inside an export.
+    df = df[df["origin"].astype(str).str.strip().str.lower() != "أصل السند"].copy()
+    df["service_id"] = [extract_service_id(a, g) for a, g in zip(df["account"], df["account_name"])]
+    df = df[df["service_id"].str.strip() != ""].copy()
+    if df.empty:
+        return pd.DataFrame()
+
+    df["date_parsed"] = df["date"].apply(parse_excel_date)
+    for c in ["debit_line", "credit_line", "debit", "credit"]:
+        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
+    df["origin_clean"] = df["origin"].apply(normalize_doc_string)
+    df["statement_clean"] = df["statement"].apply(clean_text)
+    df["source_account"] = df["account"].apply(clean_text)
+    df["source_account_g"] = df["account_name"].apply(clean_text)
+
+    records = []
+    for sid, grp in df.groupby("service_id", sort=False):
+        # Preserve source order, then use dates to identify the latest row.
+        grp = grp.copy()
+        grp["sort_date"] = pd.to_datetime(grp["date_parsed"], errors="coerce")
+        grp["origin_rank"] = grp["origin_clean"].apply(get_status_rank)
+        grp = grp.sort_values(["sort_date", "origin_rank"]).reset_index(drop=True)
+
+        header_text = next((x for x in grp["source_account_g"] if x), "") or next((x for x in grp["source_account"] if x), "")
+        item, customer, phone, warranty, issue = parse_account_details(header_text, sid)
+        all_statements = [x for x in grp["statement_clean"].tolist() if x and x not in ("13", "nan")]
+        special_cases = [special_case_from_remarks(x) for x in all_statements]
+        special_case = next((x for x in special_cases if x), "")
+        has_entry = grp["origin_clean"].str.contains("اد خ ص", na=False).any()
+        has_sale = grp["origin_clean"].str.contains("مبيع خ ص", na=False).any()
+        has_collect = grp["origin_clean"].str.contains("قبض", na=False).any()
+        has_partner_claim = grp["origin_clean"].str.contains("خ صيانة", na=False).any()
+        is_partner = sid.upper().startswith("V")
+
+        cost_debit = float(grp.loc[grp["origin_clean"].str.contains("مبيع خ ص", na=False), "debit_line"].sum())
+        payment_credit = float(grp.loc[grp["origin_clean"].str.contains("قبض", na=False), "credit_line"].sum())
+        partner_claim_amount = float(grp.loc[grp["origin_clean"].str.contains("خ صيانة", na=False), "credit_line"].sum())
+
+        if has_collect:
+            collection_status = "تم التحصيل والتسليم"
+        elif has_sale:
+            collection_status = "بانتظار تأكيد الاستلام"
+        elif special_case:
+            collection_status = "حالة خاصة - بانتظار معالجة/استلام"
+        else:
+            collection_status = "لم يجهز للتسليم بعد"
+
+        if not is_partner:
+            partner_claim_status = "غير منطبق"
+        elif has_partner_claim:
+            partner_claim_status = "تمت مطالبة الشريك / تم التحصيل"
+        elif has_sale or has_entry:
+            partner_claim_status = "بانتظار مطالبة الشريك"
+        else:
+            partner_claim_status = "غير محدد"
+
+        if has_collect:
+            repair_stage = "تم التحصيل والتسليم"
+        elif special_case == "الزبون رفض الإصلاح":
+            repair_stage = "الزبون رفض الإصلاح"
+        elif special_case == "غير قابل للإصلاح":
+            repair_stage = "غير قابل للإصلاح"
+        elif has_sale:
+            repair_stage = "جاهز للتسليم"
+        elif has_entry:
+            repair_stage = "قيد المعالجة"
+        else:
+            repair_stage = "قيد الانتظار"
+
+        latest = grp.iloc[-1]
+        date_logged = next((x for x in grp["date_parsed"].tolist() if x), datetime.now().strftime("%Y-%m-%d"))
+        date_resolved = next((x for x, o in zip(grp["date_parsed"].tolist()[::-1], grp["origin_clean"].tolist()[::-1]) if x and "قبض" in o), "")
+
+        # The source remarks are preserved verbatim; don't assign meanings to unconfirmed document types.
+        doc_history = " | ".join(f"{d} :: {o}" for d, o in zip(grp["date_parsed"], grp["origin_clean"]) if o)
+        remarks = " | ".join(dict.fromkeys(all_statements))
+        latest_origin = latest["origin_clean"]
+        status = map_document_to_status(latest_origin, cost_debit, collection_status, special_case, partner_claim_status)
+
+        records.append({
+            "service_id": sid, "tool_name": item, "customer_name": customer, "phone_number": phone,
+            "warranty_status": warranty, "document_origin": latest_origin, "reported_issue": issue,
+            "technician": "Ameen Import", "status": status, "cost_debit": cost_debit, "payment_credit": payment_credit,
+            "balance": max(cost_debit - payment_credit, 0.0), "spare_parts": "لا حاجة / متوفرة", "resolution_notes": "",
+            "remarks": remarks, "date_logged": date_logged, "date_resolved": date_resolved,
+            "accessories": "", "loaner_item": "", "priority": "عادي", "tool_photo_link": "",
+            "source_account": next((x for x in grp["source_account"] if x), ""),
+            "source_account_g": next((x for x in grp["source_account_g"] if x), ""),
+            "source_document_count": int(len(grp)), "document_history": doc_history,
+            "repair_stage": repair_stage, "collection_status": collection_status,
+            "special_case": special_case, "partner_claim_status": partner_claim_status,
+            "partner_claim_amount": partner_claim_amount,
+        })
+    return pd.DataFrame(records)
+
+
+def apply_workflow_columns(df):
+    """Backfill the new derived fields for existing Google Sheet rows."""
+    if df.empty:
+        return df
+    for c, default in {
+        "source_account": "", "source_account_g": "", "source_document_count": 1, "document_history": "",
+        "repair_stage": "", "collection_status": "", "special_case": "", "partner_claim_status": "غير منطبق", "partner_claim_amount": 0.0
+    }.items():
+        if c not in df.columns:
+            df[c] = default
+    df["source_document_count"] = pd.to_numeric(df["source_document_count"], errors="coerce").fillna(1).astype(int)
+    df["partner_claim_amount"] = pd.to_numeric(df["partner_claim_amount"], errors="coerce").fillna(0.0)
+    for idx, r in df.iterrows():
+        doc = normalize_doc_string(r.get("document_origin", ""))
+        sid = str(r.get("service_id", ""))
+        special = special_case_from_remarks(r.get("remarks", ""))
+        if not r.get("special_case"):
+            df.at[idx, "special_case"] = special
+        if not r.get("collection_status"):
+            df.at[idx, "collection_status"] = "تم التحصيل والتسليم" if "قبض" in doc else "بانتظار تأكيد الاستلام" if "مبيع خ ص" in doc else "لم يجهز للتسليم بعد"
+        if not r.get("partner_claim_status") or r.get("partner_claim_status") == "غير منطبق":
+            if sid.upper().startswith("V"):
+                df.at[idx, "partner_claim_status"] = "تمت مطالبة الشريك / تم التحصيل" if "خ صيانة" in doc else "بانتظار مطالبة الشريك"
+        if not r.get("repair_stage"):
+            df.at[idx, "repair_stage"] = "تم التحصيل والتسليم" if "قبض" in doc else "جاهز للتسليم" if "مبيع خ ص" in doc else "قيد المعالجة" if "اد خ ص" in doc else "قيد الانتظار"
+        df.at[idx, "status"] = map_document_to_status(doc, float(r.get("cost_debit", 0) or 0), df.at[idx, "collection_status"], df.at[idx, "special_case"], df.at[idx, "partner_claim_status"])
+    return df
+
 
 def get_doctype(doctype_name):
     try:
@@ -104,6 +355,7 @@ def get_doctype(doctype_name):
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
                 
             df.loc[df['spare_parts'] == "", 'spare_parts'] = "لا حاجة / متوفرة"
+            df = apply_workflow_columns(df)
             return deduplicate_ledger(df)
             
         return df
@@ -264,7 +516,10 @@ elif st.session_state['current_module'] == 'TV_Display':
     st.markdown("<h1 style='text-align: center; font-size: 60px; margin-bottom: 40px;'>شاشة متابعة الورشة (Live Queue)</h1>", unsafe_allow_html=True)
 
     if not ledger_df.empty:
-        open_jobs = ledger_df[ledger_df['status'].str.contains('الانتظار|المعالجة', na=False, regex=True)]
+        open_jobs = ledger_df[~ledger_df['status'].str.contains('تم التحصيل والتسليم', na=False)]
+        waiting_collection_df = ledger_df[ledger_df['collection_status'].eq('بانتظار تأكيد الاستلام')] if not ledger_df.empty else pd.DataFrame()
+        partner_claim_df = ledger_df[ledger_df['partner_claim_status'].eq('بانتظار مطالبة الشريك')] if not ledger_df.empty else pd.DataFrame()
+        special_df = ledger_df[ledger_df['special_case'].astype(str).str.strip() != ''] if not ledger_df.empty else pd.DataFrame()
         
         display_items = []
         for _, r in open_jobs.iterrows():
@@ -285,7 +540,10 @@ elif st.session_state['current_module'] == 'TV_Display':
                 "tool": r['tool_name'],
                 "issue": r['reported_issue'],
                 "status": r['status'],
-                "remarks": r.get('remarks', '')
+                "remarks": r.get('remarks', ''),
+                "collection_status": r.get('collection_status', ''),
+                "partner_claim_status": r.get('partner_claim_status', ''),
+                "special_case": r.get('special_case', '')
             })
         
         display_items = sorted(display_items, key=lambda x: (not x['urgent'], -x['days']))
@@ -309,7 +567,7 @@ elif st.session_state['current_module'] == 'TV_Display':
                 <div class="{card_class}">
                     <div class="tv-days" style="color: {color};">{item['days']}<br><span style="font-size:16px;">أيام</span></div>
                     <div class="tv-title">{tag} | {item['sid']} - {item['tool']}</div>
-                    <div class="tv-details"><b>العطل:</b> {item['issue']} <br> <b>الحالة الآن:</b> {item['status']} <br> <b>ملاحظات:</b> {item['remarks']}</div>
+                    <div class="tv-details"><b>العطل:</b> {item['issue']} <br> <b>الحالة:</b> {item['status']} <br> <b>الاستلام:</b> {item['collection_status']} <br> <b>ملاحظة خاصة:</b> {item['special_case']} <br> <b>مطالبة الشريك:</b> {item['partner_claim_status']} <br> <b>ملاحظات:</b> {item['remarks']}</div>
                 </div>
                 """, unsafe_allow_html=True)
                 
@@ -329,6 +587,16 @@ elif st.session_state['current_module'] == 'TV_Display':
                             save_doctype("Ledger", ledger_df)
                             st.success("✅ تم التحديث بنجاح!")
                             st.rerun()
+
+        st.divider()
+        c1, c2, c3 = st.columns(3)
+        with c1: st.metric("📦 بانتظار تأكيد الاستلام", len(waiting_collection_df))
+        with c2: st.metric("💼 مطالبات شركاء معلقة", len(partner_claim_df))
+        with c3: st.metric("⚠️ حالات خاصة", len(special_df))
+        if not partner_claim_df.empty:
+            st.warning("💼 توجد حالات V لم تُسجّل لها خ صيانة بعد — راجع مطالبة الشريك.")
+        if not special_df.empty:
+            st.info("ℹ️ توجد حالات خاصة في البيان مثل كفالة/رفض/غير قابل للإصلاح؛ لا تُعامل تلقائياً كحالة مالية جديدة.")
         else:
             st.markdown("<h1 style='text-align: center; color: #38a169; margin-top: 100px;'>✅ لا توجد أجهزة قيد الصيانة. الورشة خالية!</h1>", unsafe_allow_html=True)
     else:
@@ -391,7 +659,9 @@ elif st.session_state['current_module'] == 'Support':
                         "technician": current_user, "status": map_document_to_status(doc_origin, 0.0), "cost_debit": 0.0, "payment_credit": 0.0,
                         "balance": 0.0, "spare_parts": "لا حاجة / متوفرة", "resolution_notes": "", "remarks": "", 
                         "date_logged": date_now, "date_resolved": "",
-                        "accessories": accessories, "loaner_item": loaner, "priority": priority, "tool_photo_link": photo_url
+                        "accessories": accessories, "loaner_item": loaner, "priority": priority, "tool_photo_link": photo_url,
+                        "source_account": "", "source_account_g": "", "source_document_count": 1, "document_history": doc_origin,
+                        "repair_stage": "قيد المعالجة", "collection_status": "لم يجهز للتسليم بعد", "special_case": "", "partner_claim_status": "غير منطبق", "partner_claim_amount": 0.0
                     }
                     save_doctype("Ledger", pd.concat([ledger_df, pd.DataFrame([new_row])], ignore_index=True))
                     st.success(f"✅ تم إنشاء السند بنجاح برقم: {auto_id}")
@@ -428,7 +698,7 @@ elif st.session_state['current_module'] == 'Support':
                     if row_data.get('tool_photo_link'): st.markdown(f"📸 [عرض الصورة المرفقة للصيانة]({row_data['tool_photo_link']})")
                 
                 with st.form("update_form"):
-                    doc_options = ["اد خ ص: (استلام للصيانة)", "مبيع خ ص: (جاهز ومفوتر)", "قبض د: (مدفوع ومسلم)", "خ صيانة: (تحميل على الوكيل)"]
+                    doc_options = ["اد خ ص: (استلام للصيانة)", "مبيع خ ص: (جاهز ومفوتر)", "قبض د: (مدفوع ومسلم)", "قبض م: (مدفوع ومسلم)", "خ صيانة: (تحميل على الوكيل)"]
                     try: curr_i = [i for i, o in enumerate(doc_options) if str(row_data['document_origin']) in o][0]
                     except: curr_i = 0
                     
@@ -450,7 +720,22 @@ elif st.session_state['current_module'] == 'Support':
                         with col2: pay = st.number_input("الدفعة (Credit)", value=float(row_data['payment_credit'] or 0), step=1.0)
                         with col3: st.metric("الرصيد المتبقي (Balance)", f"${cost - pay:.2f}")
                         
-                    new_status = map_document_to_status(new_doc, cost)
+                    collection_options = ["لم يتم الاستلام", "بانتظار تأكيد الاستلام", "تم التحصيل والتسليم"]
+                    current_collection = str(row_data.get("collection_status", ""))
+                    try: collection_i = collection_options.index(current_collection)
+                    except: collection_i = 1 if "جاهز" in str(new_status) else 0
+                    new_collection = st.selectbox("حالة الاستلام الفعلية (Collection Verification):", collection_options, index=collection_i)
+                    special_options = ["", "الزبون رفض الإصلاح", "غير قابل للإصلاح", "لا يوجد عطل"]
+                    current_special = str(row_data.get("special_case", ""))
+                    try: special_i = special_options.index(current_special)
+                    except: special_i = 0
+                    new_special = st.selectbox("حالة خاصة (Special Case):", special_options, index=special_i)
+                    partner_options = ["غير منطبق", "بانتظار مطالبة الشريك", "تمت مطالبة الشريك / تم التحصيل"]
+                    current_partner = str(row_data.get("partner_claim_status", "غير منطبق"))
+                    try: partner_i = partner_options.index(current_partner)
+                    except: partner_i = 0
+                    new_partner_claim = st.selectbox("حالة مطالبة الشريك (Partner Claim):", partner_options, index=partner_i)
+                    new_status = map_document_to_status(new_doc, cost, new_collection, new_special, new_partner_claim)
                     c_n1, c_n2 = st.columns(2)
                     with c_n1: notes = st.text_area("ملاحظات الإصلاح (Resolution)", value=str(row_data.get('resolution_notes', '')))
                     with c_n2: remarks_update = st.text_area("تحديثات إضافية (Remarks)", value=str(row_data.get('remarks', '')))
@@ -470,7 +755,11 @@ elif st.session_state['current_module'] == 'Support':
                             ledger_df.at[idx, 'document_origin'] = new_doc
                             ledger_df.at[idx, 'status'] = new_status
                             ledger_df.at[idx, 'spare_parts'] = new_spare
-                            ledger_df.at[idx, 'date_resolved'] = datetime.now().strftime("%Y-%m-%d") if "تم التسليم" in new_status else ""
+                            ledger_df.at[idx, 'collection_status'] = new_collection
+                            ledger_df.at[idx, 'special_case'] = new_special
+                            ledger_df.at[idx, 'partner_claim_status'] = new_partner_claim
+                            ledger_df.at[idx, 'repair_stage'] = 'تم التحصيل والتسليم' if 'تم التحصيل' in new_status else 'جاهز للتسليم' if 'جاهز' in new_status else 'قيد المعالجة'
+                            ledger_df.at[idx, 'date_resolved'] = datetime.now().strftime("%Y-%m-%d") if "تم التحصيل" in new_status else ""
                             save_doctype("Ledger", ledger_df)
                             st.success("✅ تم التحديث بنجاح!")
                             st.rerun()
@@ -727,104 +1016,28 @@ elif st.session_state['current_module'] == 'Accounting':
             st.subheader("📥 استيراد كشوفات الأمين (Legacy Import Tool)")
             uploaded_legacy = st.file_uploader("رفع ملف Excel", type=["xlsx"])
             if uploaded_legacy and st.button("تنفيذ الاستيراد (Run Import)"):
-                with st.spinner("Processing documents..."):
-                    raw_excel = pd.read_excel(uploaded_legacy, header=None)
-                    records = {}
-                    curr_sid = None
-                    
-                    for r_idx, row in raw_excel.iterrows():
-                        row_vals = [str(x).strip() for x in row.dropna().tolist()]
-                        row_text = " ".join(row_vals)
-                        
-                        row_date = ""
-                        for v in row_vals:
-                            date_match = re.search(r'\b(\d{1,4}[-/]\d{1,2}[-/]\d{1,4})\b', v)
-                            if date_match:
-                                try:
-                                    date_str = date_match.group(1).replace('/', '-')
-                                    parsed = pd.to_datetime(date_str, format='%d-%m-%Y', errors='coerce')
-                                    if pd.isna(parsed):
-                                        parsed = pd.to_datetime(date_str, format='%d-%m-%y', errors='coerce')
-                                    if pd.isna(parsed):
-                                        parsed = pd.to_datetime(date_str, dayfirst=True, errors='coerce')
-                                        
-                                    if pd.notna(parsed):
-                                        row_date = parsed.strftime("%Y-%m-%d")
-                                        break
-                                except:
-                                    pass
-                        
-                        header_cell = next((val for val in row_vals if re.search(r'\b[SDV]\d+\b', val, re.IGNORECASE) and '-' in val), "")
-                        
-                        if header_cell:
-                            curr_sid_match = re.search(r'\b([SDV]\d+)\b', header_cell, re.IGNORECASE)
-                            if curr_sid_match:
-                                curr_sid = curr_sid_match.group(1).upper()
-                                clean_header = re.sub(r'^(الزبون:|الحساب:|الزبون|الحساب)\s*', '', header_cell).strip()
-                                parts = [p.strip() for p in re.split(r'[-–]', clean_header) if p.strip()]
-                                
-                                c_name, phone, t_name, issue, w_status = "غير محدد", "", "غير محدد", "", "خارج الكفالة"
-                                
-                                if len(parts) > 1:
-                                    for p in parts[1:]:
-                                        digits = re.sub(r'\D', '', p)
-                                        if any(kw in p for kw in ['كفالة', 'ضمان', 'مجاني']): w_status = "ضمن كفالة"
-                                        elif 8 <= len(digits) <= 15 and len(p) < 20: phone = digits
-                                        elif any(kw in p for kw in ['فولت', 'فولط', 'واط', 'امبير', 'مثقب', 'صاروخ', 'مضخة', 'جلخ', 'كسارة', 'دباسة']): t_name = p
-                                        elif any(kw in p for kw in ['عطل', 'لايعمل', 'تبديل', 'صيانة', 'ماس', 'صوت', 'فواشة']): issue = p
-                                        elif len(p) > 2:
-                                            if c_name == "غير محدد": c_name = p
-                                            elif t_name == "غير محدد": t_name = p
-                                            else: issue = p
-                                else:
-                                    t_name = clean_header.replace(curr_sid, '').strip()
-                                    if not t_name: t_name = "غير محدد"
+                with st.spinner("Processing Ameen repair ledger..."):
+                    raw_excel = pd.read_excel(uploaded_legacy, sheet_name=0, header=0)
+                    imported_df = normalize_ameen_dataframe(raw_excel)
 
-                                if curr_sid not in records:
-                                    records[curr_sid] = {
-                                        "service_id": curr_sid, "tool_name": t_name, "customer_name": c_name, "phone_number": phone,
-                                        "warranty_status": w_status, "document_origin": "", "reported_issue": issue,
-                                        "technician": "Admin Import", "status": "قيد الانتظار", "cost_debit": 0.0,
-                                        "payment_credit": 0.0, "balance": 0.0, "spare_parts": "لا حاجة / متوفرة",
-                                        "resolution_notes": "", "remarks": "", 
-                                        "date_logged": row_date if row_date else datetime.now().strftime("%Y-%m-%d"), "date_resolved": "",
-                                        "accessories": "", "loaner_item": "", "priority": "عادي", "tool_photo_link": ""
-                                    }
-
-                        if curr_sid and curr_sid in records:
-                            rec = records[curr_sid]
-                            c_origin = rec["document_origin"]
-                            c_rank = get_status_rank(c_origin)
-                            nums = [float(v) for v in row_vals if str(v).replace('.','',1).isdigit()]
-                            
-                            if "قبض" in row_text:
-                                if c_rank < 4: 
-                                    rec["document_origin"] = "قبض د: (مدفوع ومسلم)"
-                                    if row_date: rec["date_resolved"] = row_date
-                                if nums: rec["payment_credit"] = max(nums)
-                            elif "خ صيانة" in row_text:
-                                if c_rank < 3: 
-                                    rec["document_origin"] = "خ صيانة: (تحميل على الوكيل)"
-                                    if row_date: rec["date_resolved"] = row_date
-                            elif "مبيع خ ص" in row_text:
-                                if c_rank < 2: rec["document_origin"] = "مبيع خ ص: (جاهز ومفوتر)"
-                                if nums: rec["cost_debit"] = max(nums)
-                            elif "اد خ ص" in row_text and c_rank < 1:
-                                rec["document_origin"] = "اد خ ص: (استلام للصيانة)"
-                                if row_date: rec["date_logged"] = row_date
-
-                    imported_list = []
-                    for sid, rec in records.items():
-                        rec["balance"] = float(rec["cost_debit"]) - float(rec["payment_credit"])
-                        rec["status"] = map_document_to_status(rec["document_origin"], rec["cost_debit"])
-                        if "تم التسليم" in rec["status"] and not rec["date_resolved"]:
-                            rec["date_resolved"] = datetime.now().strftime("%Y-%m-%d")
-                        imported_list.append(rec)
-
-                    if imported_list:
-                        save_doctype("Ledger", pd.concat([ledger_df, pd.DataFrame(imported_list)], ignore_index=True))
-                        st.success(f"✅ تم استيراد {len(imported_list)} سجل بنجاح.")
-                        st.rerun()
+                    if imported_df.empty:
+                        st.error("❌ لم يتم العثور على سجلات صيانة صالحة في أعمدة A:L.")
                     else:
-                        st.warning("⚠️ لم يتم العثور على أي قيود صالحة تحتوي على أرقام بطاقات صيانة في الملف المرفوع.")
+                        # Merge by service_id so repeated Ameen lines become one repair case.
+                        existing = ledger_df.copy()
+                        if not existing.empty:
+                            existing = apply_workflow_columns(existing)
+                            existing = existing[~existing["service_id"].astype(str).isin(imported_df["service_id"].astype(str))]
+                        merged = pd.concat([existing, imported_df], ignore_index=True)
+                        merged = apply_workflow_columns(merged)
+                        save_doctype("Ledger", merged)
+
+                        st.success(f"✅ تم استيراد {len(imported_df)} حالات صيانة من كشف الأمين.")
+                        c1, c2, c3, c4 = st.columns(4)
+                        c1.metric("قيد المعالجة", int((imported_df["repair_stage"] == "قيد المعالجة").sum()))
+                        c2.metric("جاهزة للتسليم", int((imported_df["repair_stage"] == "جاهز للتسليم").sum()))
+                        c3.metric("بانتظار الاستلام", int((imported_df["collection_status"] == "بانتظار تأكيد الاستلام").sum()))
+                        c4.metric("مطالبات الشركاء", int((imported_df["partner_claim_status"] == "بانتظار مطالبة الشريك").sum()))
+                        st.dataframe(imported_df[["service_id", "customer_name", "tool_name", "document_origin", "repair_stage", "collection_status", "special_case", "partner_claim_status", "remarks"]], use_container_width=True)
+                        st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
