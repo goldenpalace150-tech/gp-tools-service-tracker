@@ -6,12 +6,24 @@ import io
 import requests
 import base64
 import urllib.parse
+import os
 from streamlit_gsheets import GSheetsConnection
 
 # ==========================================
 # SYSTEM CONFIGURATION & API
 # ==========================================
-IMGBB_API_KEY = "c6e484b83af4bb39c92e1782cc6ce5e6"
+def get_runtime_secret(name):
+    """Load deployment secrets without committing them to the public repository."""
+    try:
+        value = st.secrets.get(name, "")
+        if value:
+            return str(value).strip()
+    except Exception:
+        pass
+    return str(os.environ.get(name, "")).strip()
+
+
+IMGBB_API_KEY = get_runtime_secret("IMGBB_API_KEY")
 
 st.set_page_config(page_title="Al-Qasr Al-Zahabi ERP", layout="wide", page_icon="🏢")
 
@@ -47,6 +59,13 @@ else:
 # ==========================================
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+CASE_STATUS_OPEN = "مفتوح"
+CASE_STATUS_CLOSED = "مغلق"
+COLLECTION_NOT_READY = "لم يجهز للتسليم بعد"
+COLLECTION_AWAITING = "بانتظار تأكيد الاستلام"
+COLLECTION_PAID_AWAITING_CLOSE = "تم تسجيل القبض - بانتظار إغلاق الحالة"
+COLLECTION_CLOSED = "تم الاستلام وإغلاق الحالة"
+
 SCHEMA = {
     "Ledger": [
         "service_id", "tool_name", "customer_name", "phone_number", "warranty_status", "document_origin", 
@@ -54,7 +73,8 @@ SCHEMA = {
         "spare_parts", "resolution_notes", "remarks", "date_logged", "date_resolved",
         "accessories", "loaner_item", "priority", "tool_photo_link",
         "source_account", "source_account_g", "source_document_count", "document_history",
-        "repair_stage", "collection_status", "special_case", "partner_claim_status", "partner_claim_amount"
+        "repair_stage", "collection_status", "special_case", "partner_claim_status", "partner_claim_amount",
+        "case_status", "closed_at", "closed_by", "close_note"
     ],
     "Stock": ["item_code", "item_name", "quantity", "price"],
     "Hawara": ["order_id", "order_type", "linked_service_id", "courier", "delivery_note", "document_link", "status", "date_logged"],
@@ -79,20 +99,23 @@ def get_status_rank(val):
     return 0
 
 
-def map_document_to_status(doc_string, cost=0.0, collection_status="", special_case="", partner_claim_status=""):
+def map_document_to_status(doc_string, cost=0.0, collection_status="", special_case="", partner_claim_status="", case_status=""):
     doc = normalize_doc_string(doc_string)
     special = normalize_doc_string(special_case)
     collection = normalize_doc_string(collection_status)
     partner = normalize_doc_string(partner_claim_status)
+    case = normalize_doc_string(case_status)
 
-    if "قبض" in doc or "تم التحصيل والتسليم" in collection:
-        return "تم التحصيل والتسليم (Collected & Delivered)"
+    if case == CASE_STATUS_CLOSED or COLLECTION_CLOSED in collection:
+        return "مغلق - تم الاستلام (Closed)"
     if "الزبون رفض" in special:
         return "الزبون رفض الإصلاح (Customer Refused)"
     if "غير قابل للإصلاح" in special:
         return "غير قابل للإصلاح (Not Repairable)"
     if "خ صيانة" in doc and "بانتظار" not in partner:
         return "مغلق محاسبياً - حساب شريك (Partner Claimed)"
+    if "قبض" in doc:
+        return "تم تسجيل القبض - بانتظار إغلاق الحالة (Paid / Awaiting Close)"
     if "مبيع خ ص" in doc or "جاهز" in doc:
         return "جاهز للتسليم - بانتظار الاستلام (Ready / Awaiting Collection)"
     if "اد خ ص" in doc or "المعالجة" in doc:
@@ -249,13 +272,13 @@ def normalize_ameen_dataframe(raw_excel):
         partner_claim_amount = float(grp.loc[grp["origin_clean"].str.contains("خ صيانة", na=False), "credit_line"].sum())
 
         if has_collect:
-            collection_status = "تم التحصيل والتسليم"
+            collection_status = COLLECTION_PAID_AWAITING_CLOSE
         elif has_sale:
-            collection_status = "بانتظار تأكيد الاستلام"
+            collection_status = COLLECTION_AWAITING
         elif special_case:
             collection_status = "حالة خاصة - بانتظار معالجة/استلام"
         else:
-            collection_status = "لم يجهز للتسليم بعد"
+            collection_status = COLLECTION_NOT_READY
 
         if not is_partner:
             partner_claim_status = "غير منطبق"
@@ -266,13 +289,11 @@ def normalize_ameen_dataframe(raw_excel):
         else:
             partner_claim_status = "غير محدد"
 
-        if has_collect:
-            repair_stage = "تم التحصيل والتسليم"
-        elif special_case == "الزبون رفض الإصلاح":
+        if special_case == "الزبون رفض الإصلاح":
             repair_stage = "الزبون رفض الإصلاح"
         elif special_case == "غير قابل للإصلاح":
             repair_stage = "غير قابل للإصلاح"
-        elif has_sale:
+        elif has_collect or has_sale:
             repair_stage = "جاهز للتسليم"
         elif has_entry:
             repair_stage = "قيد المعالجة"
@@ -281,7 +302,7 @@ def normalize_ameen_dataframe(raw_excel):
 
         latest = grp.iloc[-1]
         date_logged = next((x for x in grp["date_parsed"].tolist() if x), datetime.now().strftime("%Y-%m-%d"))
-        date_resolved = next((x for x, o in zip(grp["date_parsed"].tolist()[::-1], grp["origin_clean"].tolist()[::-1]) if x and "قبض" in o), "")
+        date_resolved = ""
 
         # The source remarks are preserved verbatim; don't assign meanings to unconfirmed document types.
         doc_history = " | ".join(f"{d} :: {o}" for d, o in zip(grp["date_parsed"], grp["origin_clean"]) if o)
@@ -302,6 +323,7 @@ def normalize_ameen_dataframe(raw_excel):
             "repair_stage": repair_stage, "collection_status": collection_status,
             "special_case": special_case, "partner_claim_status": partner_claim_status,
             "partner_claim_amount": partner_claim_amount,
+            "case_status": CASE_STATUS_OPEN, "closed_at": "", "closed_by": "", "close_note": "",
         })
     return pd.DataFrame(records)
 
@@ -312,7 +334,8 @@ def apply_workflow_columns(df):
         return df
     for c, default in {
         "source_account": "", "source_account_g": "", "source_document_count": 1, "document_history": "",
-        "repair_stage": "", "collection_status": "", "special_case": "", "partner_claim_status": "غير منطبق", "partner_claim_amount": 0.0
+        "repair_stage": "", "collection_status": "", "special_case": "", "partner_claim_status": "غير منطبق", "partner_claim_amount": 0.0,
+        "case_status": CASE_STATUS_OPEN, "closed_at": "", "closed_by": "", "close_note": ""
     }.items():
         if c not in df.columns:
             df[c] = default
@@ -321,18 +344,58 @@ def apply_workflow_columns(df):
     for idx, r in df.iterrows():
         doc = normalize_doc_string(r.get("document_origin", ""))
         sid = str(r.get("service_id", ""))
+        case_status = normalize_doc_string(r.get("case_status", "")) or CASE_STATUS_OPEN
+        df.at[idx, "case_status"] = case_status
         special = special_case_from_remarks(r.get("remarks", ""))
         if not r.get("special_case"):
             df.at[idx, "special_case"] = special
-        if not r.get("collection_status"):
-            df.at[idx, "collection_status"] = "تم التحصيل والتسليم" if "قبض" in doc else "بانتظار تأكيد الاستلام" if "مبيع خ ص" in doc else "لم يجهز للتسليم بعد"
+        if not r.get("collection_status") or r.get("collection_status") == "تم التحصيل والتسليم":
+            df.at[idx, "collection_status"] = COLLECTION_PAID_AWAITING_CLOSE if "قبض" in doc else COLLECTION_AWAITING if "مبيع خ ص" in doc else COLLECTION_NOT_READY
         if not r.get("partner_claim_status") or r.get("partner_claim_status") == "غير منطبق":
             if sid.upper().startswith("V"):
                 df.at[idx, "partner_claim_status"] = "تمت مطالبة الشريك / تم التحصيل" if "خ صيانة" in doc else "بانتظار مطالبة الشريك"
-        if not r.get("repair_stage"):
-            df.at[idx, "repair_stage"] = "تم التحصيل والتسليم" if "قبض" in doc else "جاهز للتسليم" if "مبيع خ ص" in doc else "قيد المعالجة" if "اد خ ص" in doc else "قيد الانتظار"
-        df.at[idx, "status"] = map_document_to_status(doc, float(r.get("cost_debit", 0) or 0), df.at[idx, "collection_status"], df.at[idx, "special_case"], df.at[idx, "partner_claim_status"])
+        if not r.get("repair_stage") or (r.get("repair_stage") == "تم التحصيل والتسليم" and case_status != CASE_STATUS_CLOSED):
+            df.at[idx, "repair_stage"] = "جاهز للتسليم" if "قبض" in doc or "مبيع خ ص" in doc else "قيد المعالجة" if "اد خ ص" in doc else "قيد الانتظار"
+        if case_status == CASE_STATUS_CLOSED:
+            df.at[idx, "collection_status"] = COLLECTION_CLOSED
+            df.at[idx, "repair_stage"] = CASE_STATUS_CLOSED
+        df.at[idx, "status"] = map_document_to_status(doc, float(r.get("cost_debit", 0) or 0), df.at[idx, "collection_status"], df.at[idx, "special_case"], df.at[idx, "partner_claim_status"], case_status)
     return df
+
+
+def preserve_manual_closures(imported_df, existing_df):
+    """Keep app-managed closure fields when a later Ameen statement is imported."""
+    if imported_df is None or imported_df.empty or existing_df is None or existing_df.empty:
+        return imported_df
+
+    result = imported_df.copy()
+    existing = existing_df.copy()
+    for col, default in {
+        "case_status": CASE_STATUS_OPEN, "closed_at": "", "closed_by": "", "close_note": ""
+    }.items():
+        if col not in existing.columns:
+            existing[col] = default
+        if col not in result.columns:
+            result[col] = default
+
+    closed = existing[existing["case_status"].astype(str).eq(CASE_STATUS_CLOSED)].copy()
+    if closed.empty:
+        return result
+    closed = closed.drop_duplicates("service_id", keep="last").set_index("service_id")
+
+    for idx, row in result.iterrows():
+        sid = str(row.get("service_id", ""))
+        if sid not in closed.index:
+            continue
+        previous = closed.loc[sid]
+        for col in ("case_status", "closed_at", "closed_by", "close_note"):
+            result.at[idx, col] = previous.get(col, "")
+        result.at[idx, "collection_status"] = COLLECTION_CLOSED
+        result.at[idx, "repair_stage"] = CASE_STATUS_CLOSED
+        result.at[idx, "status"] = "مغلق - تم الاستلام (Closed)"
+        if previous.get("closed_at", ""):
+            result.at[idx, "date_resolved"] = str(previous.get("closed_at", "")).split(" ")[0]
+    return result
 
 
 def deduplicate_ledger(df):
@@ -363,6 +426,8 @@ def deduplicate_ledger(df):
         work["_workflow_rank"] = work["repair_stage"].map(stage_rank).fillna(0)
     else:
         work["_workflow_rank"] = 0
+    if "case_status" in work.columns:
+        work.loc[work["case_status"].astype(str).eq(CASE_STATUS_CLOSED), "_workflow_rank"] = 5
 
     date_series = pd.Series(pd.NaT, index=work.index, dtype="datetime64[ns]")
     for col in ("date_resolved", "date_logged"):
@@ -423,6 +488,9 @@ def convert_df_to_excel(df):
     return output.getvalue()
 
 def upload_to_cloud(file_buffer):
+    if not IMGBB_API_KEY:
+        st.warning("⚠️ رفع الصور متوقف حتى يتم ضبط IMGBB_API_KEY في إعدادات التطبيق الآمنة.")
+        return ""
     try:
         b64_img = base64.b64encode(file_buffer.getvalue()).decode("utf-8")
         res = requests.post(f"https://api.imgbb.com/1/upload?key={IMGBB_API_KEY}", data={"image": b64_img})
@@ -451,7 +519,17 @@ if is_tv_mode:
     st.session_state['logged_in_user'] = "TV_Guest"
     st.session_state['current_module'] = 'TV_Display'
 
-USERS = {"admin": {"pass": "123", "role": "System Administrator"}, "tech": {"pass": "123", "role": "Support Agent"}}
+USERS = {}
+admin_password = get_runtime_secret("APP_ADMIN_PASSWORD")
+tech_password = get_runtime_secret("APP_TECH_PASSWORD")
+if admin_password:
+    USERS["admin"] = {"pass": admin_password, "role": "System Administrator"}
+if tech_password:
+    USERS["tech"] = {"pass": tech_password, "role": "Support Agent"}
+
+if not is_tv_mode and not USERS:
+    st.error("⚠️ يجب ضبط APP_ADMIN_PASSWORD أو APP_TECH_PASSWORD في إعدادات التطبيق الآمنة قبل تسجيل الدخول.")
+    st.stop()
 
 if st.session_state['logged_in_user'] is None:
     st.markdown("<div class='erp-card' style='max-width: 400px; margin: 100px auto; text-align: center;'>", unsafe_allow_html=True)
@@ -501,7 +579,7 @@ if not is_tv_mode:
 
 if st.session_state['current_module'] == 'Workspace':
     st.title("مساحة العمل الموحدة (Workspace)")
-    active_count = len(ledger_df[~ledger_df['status'].str.contains('تم التسليم', na=False)]) if not ledger_df.empty else 0
+    active_count = len(ledger_df[~ledger_df['case_status'].astype(str).eq(CASE_STATUS_CLOSED)]) if not ledger_df.empty else 0
     ready_count = len(ledger_df[ledger_df['status'].str.contains('جاهز', na=False)]) if not ledger_df.empty else 0
     total_rev = float(ledger_df['cost_debit'].sum()) if not ledger_df.empty else 0.0
 
@@ -562,7 +640,7 @@ elif st.session_state['current_module'] == 'TV_Display':
     st.markdown("<h1 style='text-align: center; font-size: 60px; margin-bottom: 40px;'>شاشة متابعة الورشة (Live Queue)</h1>", unsafe_allow_html=True)
 
     if not ledger_df.empty:
-        open_jobs = ledger_df[~ledger_df['status'].str.contains('تم التحصيل والتسليم', na=False)]
+        open_jobs = ledger_df[~ledger_df['case_status'].astype(str).eq(CASE_STATUS_CLOSED)]
         waiting_collection_df = ledger_df[ledger_df['collection_status'].eq('بانتظار تأكيد الاستلام')] if not ledger_df.empty else pd.DataFrame()
         partner_claim_df = ledger_df[ledger_df['partner_claim_status'].eq('بانتظار مطالبة الشريك')] if not ledger_df.empty else pd.DataFrame()
         special_df = ledger_df[ledger_df['special_case'].astype(str).str.strip() != ''] if not ledger_df.empty else pd.DataFrame()
@@ -707,7 +785,8 @@ elif st.session_state['current_module'] == 'Support':
                         "date_logged": date_now, "date_resolved": "",
                         "accessories": accessories, "loaner_item": loaner, "priority": priority, "tool_photo_link": photo_url,
                         "source_account": "", "source_account_g": "", "source_document_count": 1, "document_history": doc_origin,
-                        "repair_stage": "قيد المعالجة", "collection_status": "لم يجهز للتسليم بعد", "special_case": "", "partner_claim_status": "غير منطبق", "partner_claim_amount": 0.0
+                        "repair_stage": "قيد المعالجة", "collection_status": COLLECTION_NOT_READY, "special_case": "", "partner_claim_status": "غير منطبق", "partner_claim_amount": 0.0,
+                        "case_status": CASE_STATUS_OPEN, "closed_at": "", "closed_by": "", "close_note": ""
                     }
                     save_doctype("Ledger", pd.concat([ledger_df, pd.DataFrame([new_row])], ignore_index=True))
                     st.success(f"✅ تم إنشاء السند بنجاح برقم: {auto_id}")
@@ -721,14 +800,16 @@ elif st.session_state['current_module'] == 'Support':
             sel_id = opts[st.selectbox("ابحث عن السند (Search Document):", list(opts.keys()))]
             row_data = ledger_df[ledger_df['service_id'] == sel_id].iloc[0]
             
-            is_locked = "تم التسليم" in str(row_data['status'])
+            is_locked = str(row_data.get('case_status', CASE_STATUS_OPEN)) == CASE_STATUS_CLOSED
             is_warranty = "ضمن" in str(row_data.get('warranty_status', ''))
             
             if is_locked:
                 st.markdown("<div class='locked-card'>", unsafe_allow_html=True)
                 st.markdown(f"### 🔒 مستند مغلق (Submitted/Locked)")
                 st.write(f"**رقم السند:** {sel_id} | **الزبون:** {row_data['customer_name']}")
-                st.write(f"**حالة التسليم:** {row_data['status']} في تاريخ {row_data.get('date_resolved', '')}")
+                st.write(f"**حالة الملف:** {row_data['status']}")
+                st.write(f"**أغلق بواسطة:** {row_data.get('closed_by', 'غير مسجل')} في {row_data.get('closed_at', row_data.get('date_resolved', ''))}")
+                if row_data.get('close_note'): st.write(f"**ملاحظة الإغلاق:** {row_data.get('close_note')}")
                 st.write(f"**التكلفة النهائية:** ${float(row_data['cost_debit']):.2f}")
                 if row_data.get('tool_photo_link'): st.markdown(f"[📸 عرض صورة الجهاز عند الاستلام]({row_data['tool_photo_link']})")
                 st.write("هذا الملف مغلق نهائياً لحماية القيود المالية. للطباعة يرجى التوجه لقسم المحاسبة.")
@@ -766,11 +847,8 @@ elif st.session_state['current_module'] == 'Support':
                         with col2: pay = st.number_input("الدفعة (Credit)", value=float(row_data['payment_credit'] or 0), step=1.0)
                         with col3: st.metric("الرصيد المتبقي (Balance)", f"${cost - pay:.2f}")
                         
-                    collection_options = ["لم يتم الاستلام", "بانتظار تأكيد الاستلام", "تم التحصيل والتسليم"]
                     current_collection = str(row_data.get("collection_status", ""))
-                    try: collection_i = collection_options.index(current_collection)
-                    except: collection_i = 1 if "جاهز" in str(new_status) else 0
-                    new_collection = st.selectbox("حالة الاستلام الفعلية (Collection Verification):", collection_options, index=collection_i)
+                    st.info(f"📄 حالة كشف الأمين: {current_collection or COLLECTION_NOT_READY}")
                     special_options = ["", "الزبون رفض الإصلاح", "غير قابل للإصلاح", "لا يوجد عطل"]
                     current_special = str(row_data.get("special_case", ""))
                     try: special_i = special_options.index(current_special)
@@ -781,34 +859,57 @@ elif st.session_state['current_module'] == 'Support':
                     try: partner_i = partner_options.index(current_partner)
                     except: partner_i = 0
                     new_partner_claim = st.selectbox("حالة مطالبة الشريك (Partner Claim):", partner_options, index=partner_i)
-                    new_status = map_document_to_status(new_doc, cost, new_collection, new_special, new_partner_claim)
+                    new_collection = COLLECTION_PAID_AWAITING_CLOSE if "قبض" in new_doc else COLLECTION_AWAITING if "مبيع خ ص" in new_doc else current_collection or COLLECTION_NOT_READY
+                    new_status = map_document_to_status(new_doc, cost, new_collection, new_special, new_partner_claim, CASE_STATUS_OPEN)
                     c_n1, c_n2 = st.columns(2)
                     with c_n1: notes = st.text_area("ملاحظات الإصلاح (Resolution)", value=str(row_data.get('resolution_notes', '')))
                     with c_n2: remarks_update = st.text_area("تحديثات إضافية (Remarks)", value=str(row_data.get('remarks', '')))
                     
-                    confirm = True
-                    if "تم التسليم" in new_status: confirm = st.checkbox("✅ تأكيد إغلاق الملف نهائياً (Confirm Lock)")
-
                     if st.form_submit_button("تحديث السجل (Update Document)", use_container_width=True):
-                        if "تم التسليم" in new_status and not confirm: st.error("❌ يرجى تأكيد الإغلاق النهائي للملف.")
-                        else:
+                        idx = ledger_df.index[ledger_df['service_id'] == sel_id][0]
+                        ledger_df.at[idx, 'cost_debit'] = cost
+                        ledger_df.at[idx, 'payment_credit'] = pay
+                        ledger_df.at[idx, 'balance'] = cost - pay
+                        ledger_df.at[idx, 'resolution_notes'] = notes
+                        ledger_df.at[idx, 'remarks'] = remarks_update
+                        ledger_df.at[idx, 'document_origin'] = new_doc
+                        ledger_df.at[idx, 'status'] = new_status
+                        ledger_df.at[idx, 'spare_parts'] = new_spare
+                        ledger_df.at[idx, 'collection_status'] = new_collection
+                        ledger_df.at[idx, 'special_case'] = new_special
+                        ledger_df.at[idx, 'partner_claim_status'] = new_partner_claim
+                        ledger_df.at[idx, 'repair_stage'] = 'جاهز للتسليم' if 'مبيع خ ص' in new_doc or 'قبض' in new_doc else 'قيد المعالجة'
+                        save_doctype("Ledger", ledger_df)
+                        st.success("✅ تم التحديث بنجاح!")
+                        st.rerun()
+
+                close_eligible = (
+                    "مبيع خ ص" in str(row_data.get('document_history', ''))
+                    or "مبيع خ ص" in str(row_data.get('document_origin', ''))
+                    or "قبض" in str(row_data.get('document_history', ''))
+                    or "قبض" in str(row_data.get('document_origin', ''))
+                    or "جاهز" in str(row_data.get('repair_stage', ''))
+                )
+                if close_eligible:
+                    st.markdown("### ✅ إغلاق الحالة بعد تسليم الجهاز")
+                    with st.form("close_case_form"):
+                        close_note = st.text_input("ملاحظة الإغلاق (اختياري)")
+                        if st.form_submit_button("تم الاستلام — إغلاق الحالة", use_container_width=True):
                             idx = ledger_df.index[ledger_df['service_id'] == sel_id][0]
-                            ledger_df.at[idx, 'cost_debit'] = cost
-                            ledger_df.at[idx, 'payment_credit'] = pay
-                            ledger_df.at[idx, 'balance'] = cost - pay
-                            ledger_df.at[idx, 'resolution_notes'] = notes
-                            ledger_df.at[idx, 'remarks'] = remarks_update
-                            ledger_df.at[idx, 'document_origin'] = new_doc
-                            ledger_df.at[idx, 'status'] = new_status
-                            ledger_df.at[idx, 'spare_parts'] = new_spare
-                            ledger_df.at[idx, 'collection_status'] = new_collection
-                            ledger_df.at[idx, 'special_case'] = new_special
-                            ledger_df.at[idx, 'partner_claim_status'] = new_partner_claim
-                            ledger_df.at[idx, 'repair_stage'] = 'تم التحصيل والتسليم' if 'تم التحصيل' in new_status else 'جاهز للتسليم' if 'جاهز' in new_status else 'قيد المعالجة'
-                            ledger_df.at[idx, 'date_resolved'] = datetime.now().strftime("%Y-%m-%d") if "تم التحصيل" in new_status else ""
+                            closed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            ledger_df.at[idx, 'case_status'] = CASE_STATUS_CLOSED
+                            ledger_df.at[idx, 'closed_at'] = closed_at
+                            ledger_df.at[idx, 'closed_by'] = current_user
+                            ledger_df.at[idx, 'close_note'] = close_note
+                            ledger_df.at[idx, 'collection_status'] = COLLECTION_CLOSED
+                            ledger_df.at[idx, 'repair_stage'] = CASE_STATUS_CLOSED
+                            ledger_df.at[idx, 'status'] = "مغلق - تم الاستلام (Closed)"
+                            ledger_df.at[idx, 'date_resolved'] = closed_at.split(" ")[0]
                             save_doctype("Ledger", ledger_df)
-                            st.success("✅ تم التحديث بنجاح!")
+                            st.success("✅ تم إغلاق الحالة نهائياً.")
                             st.rerun()
+                else:
+                    st.warning("لا يمكن إغلاق الحالة قبل وجود مبيع خ ص أو حالة جاهز للتسليم.")
 
                 if row_data['phone_number']:
                     phone_clean = re.sub(r'\D', '', str(row_data['phone_number']))
@@ -821,7 +922,7 @@ elif st.session_state['current_module'] == 'Support':
     with tab3:
         st.markdown("<div class='erp-card'>", unsafe_allow_html=True)
         if not ledger_df.empty:
-            open_jobs = ledger_df[~ledger_df['status'].str.contains('تم التسليم', na=False)]
+            open_jobs = ledger_df[~ledger_df['case_status'].astype(str).eq(CASE_STATUS_CLOSED)]
             alerts = []
             for _, r in open_jobs.iterrows():
                 try: 
@@ -956,7 +1057,7 @@ elif st.session_state['current_module'] == 'Logistics':
             c1, c2, c3 = st.columns(3)
             with c1:
                 disp_id = st.text_input("رقم الإرسالية (Dispatch ID)")
-                ready_list = ledger_df[ledger_df['status'].str.contains('جاهز', na=False)] if not ledger_df.empty else pd.DataFrame()
+                ready_list = ledger_df[ledger_df['status'].str.contains('جاهز', na=False) & ~ledger_df['case_status'].astype(str).eq(CASE_STATUS_CLOSED)] if not ledger_df.empty else pd.DataFrame()
                 sel_service = st.selectbox("الجهاز (Ready Tool)", options=ready_list['service_id'].tolist() if not ready_list.empty else [])
             with c2:
                 disp_courier = st.selectbox("شركة النقل (Courier)", ["شركة أرامكس", "نقل قدموس", "ساعي داخلي"])
@@ -1073,17 +1174,19 @@ elif st.session_state['current_module'] == 'Accounting':
                         existing = ledger_df.copy()
                         if not existing.empty:
                             existing = apply_workflow_columns(existing)
+                            imported_df = preserve_manual_closures(imported_df, existing)
                             existing = existing[~existing["service_id"].astype(str).isin(imported_df["service_id"].astype(str))]
                         merged = pd.concat([existing, imported_df], ignore_index=True)
                         merged = apply_workflow_columns(merged)
                         save_doctype("Ledger", merged)
 
                         st.success(f"✅ تم استيراد {len(imported_df)} حالات صيانة من كشف الأمين.")
-                        c1, c2, c3, c4 = st.columns(4)
+                        c1, c2, c3, c4, c5 = st.columns(5)
                         c1.metric("قيد المعالجة", int((imported_df["repair_stage"] == "قيد المعالجة").sum()))
                         c2.metric("جاهزة للتسليم", int((imported_df["repair_stage"] == "جاهز للتسليم").sum()))
                         c3.metric("بانتظار الاستلام", int((imported_df["collection_status"] == "بانتظار تأكيد الاستلام").sum()))
                         c4.metric("مطالبات الشركاء", int((imported_df["partner_claim_status"] == "بانتظار مطالبة الشريك").sum()))
-                        st.dataframe(imported_df[["service_id", "customer_name", "tool_name", "document_origin", "repair_stage", "collection_status", "special_case", "partner_claim_status", "remarks"]], use_container_width=True)
+                        c5.metric("حالات مغلقة محفوظة", int((imported_df["case_status"] == CASE_STATUS_CLOSED).sum()))
+                        st.dataframe(imported_df[["service_id", "customer_name", "tool_name", "document_origin", "repair_stage", "collection_status", "case_status", "closed_at", "special_case", "partner_claim_status", "remarks"]], use_container_width=True)
                         st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
