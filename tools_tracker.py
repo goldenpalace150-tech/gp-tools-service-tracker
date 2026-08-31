@@ -106,7 +106,7 @@ def map_document_to_status(doc_string, cost=0.0, collection_status="", special_c
     partner = normalize_doc_string(partner_claim_status)
     case = normalize_doc_string(case_status)
 
-    if case == CASE_STATUS_CLOSED or COLLECTION_CLOSED in collection:
+    if case == CASE_STATUS_CLOSED or COLLECTION_CLOSED in collection or collection == "تم التحصيل والتسليم":
         return "مغلق - تم الاستلام (Closed)"
     if "الزبون رفض" in special:
         return "الزبون رفض الإصلاح (Customer Refused)"
@@ -345,6 +345,16 @@ def apply_workflow_columns(df):
         doc = normalize_doc_string(r.get("document_origin", ""))
         sid = str(r.get("service_id", ""))
         case_status = normalize_doc_string(r.get("case_status", "")) or CASE_STATUS_OPEN
+        legacy_closed = (
+            normalize_doc_string(r.get("collection_status", "")) == "تم التحصيل والتسليم"
+            or "تم التحصيل والتسليم" in normalize_doc_string(r.get("status", ""))
+        )
+        if legacy_closed:
+            case_status = CASE_STATUS_CLOSED
+            if not r.get("closed_at"):
+                df.at[idx, "closed_at"] = str(r.get("date_resolved", "") or r.get("date_logged", ""))
+            if not r.get("closed_by"):
+                df.at[idx, "closed_by"] = "ترحيل النظام"
         df.at[idx, "case_status"] = case_status
         special = special_case_from_remarks(r.get("remarks", ""))
         if not r.get("special_case"):
