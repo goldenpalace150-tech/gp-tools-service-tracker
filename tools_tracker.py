@@ -192,6 +192,25 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# GP_APP_UI_REFRESH_2026_09_08
+if not is_tv_mode:
+    st.markdown("""
+    <style>
+      :root{--gp-navy:#071a2d;--gp-navy2:#0d2c49;--gp-gold:#d5a62e}
+      .stApp{background:radial-gradient(circle at 8% 0%,#edf4ff 0,#f6f8fb 34%,#eef2f7 100%)!important}
+      .block-container{max-width:1500px;padding-top:1.35rem;padding-bottom:3rem}
+      [data-testid="stSidebar"]{background:linear-gradient(180deg,var(--gp-navy),var(--gp-navy2))!important;border-inline-end:1px solid rgba(213,166,46,.35)}
+      [data-testid="stSidebar"] *{color:#f8fafc}[data-testid="stSidebar"] button{min-height:44px;border-radius:12px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07);color:#fff;font-weight:750}
+      .erp-card{border:1px solid rgba(148,163,184,.28)!important;border-radius:18px!important;box-shadow:0 10px 30px rgba(15,23,42,.07)!important;padding:22px!important;background:rgba(255,255,255,.96)!important}
+      div[data-testid="stMetric"]{background:#fff;border:1px solid rgba(148,163,184,.28);border-radius:16px;padding:16px;box-shadow:0 7px 22px rgba(15,23,42,.05)}
+      .stButton>button,.stDownloadButton>button,.stFormSubmitButton>button{min-height:44px;border-radius:12px;font-weight:750}
+      input,textarea,[data-baseweb="select"]>div{border-radius:12px!important}
+      .gp-app-hero{background:linear-gradient(120deg,var(--gp-navy),var(--gp-navy2));color:#fff;border:1px solid rgba(213,166,46,.55);border-radius:20px;padding:22px 24px;margin:.2rem 0 1.1rem;box-shadow:0 14px 38px rgba(7,26,45,.18)}
+      .gp-app-hero h1{color:#fff!important;margin:0 0 6px!important;font-size:clamp(28px,3vw,42px)}.gp-app-hero p{color:#dbe7f3!important;margin:0}.gp-app-chip{display:inline-flex;margin-top:12px;padding:6px 10px;border-radius:999px;background:rgba(213,166,46,.18);border:1px solid rgba(213,166,46,.55);color:#fff;font-size:12px;font-weight:800}
+      button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #f0be3f!important;outline-offset:2px!important}
+    </style>
+    """,unsafe_allow_html=True)
+
 # ==========================================
 # DATABASE ORM (DocType Engine)
 # ==========================================
@@ -1356,7 +1375,8 @@ if needed_sources:
 stock_list = stock_df['item_name'].dropna().unique().tolist() if not stock_df.empty else []
 
 if st.session_state['current_module'] == 'Workspace':
-    st.title(tr("workspace_title"))
+    hero_text = "لوحة تشغيل سريعة وواضحة لكل مهام القصر الذهبي" if st.session_state.get("ui_language") == "ar" else "A faster, clearer operating view for Golden Palace"
+    st.markdown(f"""<section class="gp-app-hero"><h1>🏢 {tr('workspace_title')}</h1><p>{hero_text}</p><span class="gp-app-chip">{tr('user')}: {current_user}</span></section>""", unsafe_allow_html=True)
     active_count = len(ledger_df[~ledger_df['case_status'].astype(str).eq(CASE_STATUS_CLOSED)]) if not ledger_df.empty else 0
     ready_count = len(ledger_df[ledger_df['status'].str.contains('جاهز', na=False)]) if not ledger_df.empty else 0
     total_rev = float(ledger_df['cost_debit'].sum()) if not ledger_df.empty else 0.0

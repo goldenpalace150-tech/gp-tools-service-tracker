@@ -13,6 +13,18 @@ from flask import Flask, jsonify, render_template, request
 
 app = Flask(__name__)
 
+# GP_RENDER_STATIC_CORS_2026_09_08
+@app.after_request
+def add_gp_tv_cors_headers(response):
+    origin=request.headers.get('Origin','').strip()
+    allowed=(origin=='https://golden-palace-service-tracker.onrender.com' or bool(re.fullmatch(r'https://gp-tv(?:-[a-z0-9-]+)?\.onrender\.com',origin)))
+    if allowed:
+        response.headers['Access-Control-Allow-Origin']=origin
+        response.headers['Vary']='Origin'
+        response.headers['Access-Control-Allow-Headers']='Content-Type'
+        response.headers['Access-Control-Allow-Methods']='GET, POST, OPTIONS'
+    return response
+
 
 # Reuse HTTPS connections to Google instead of opening a new TLS session
 # on every dashboard refresh.
@@ -60,7 +72,7 @@ os.makedirs(AUDIO_DIR, exist_ok=True)
 
 
 # Dashboard cache is memory-only.  The previous implementation repeatedly
-# replaced a ~2.6 MB tv_data_cache.json file; on PythonAnywhere/NFS that can
+# replaced a ~2.6 MB tv_data_cache.json file; on Render/NFS that can
 # create many .nfs* temporary files when another worker still has the old file
 # open.  Browser localStorage provides the fast warm-start snapshot instead.
 TV_CACHE_TTL_SECONDS = max(5, int(os.environ.get("TV_CACHE_TTL_SECONDS", "15")))
@@ -203,7 +215,7 @@ def initialize_google_sheets():
 
         else:
             LAST_WRITE_ERROR = (
-                "Google credentials are missing on PythonAnywhere. "
+                "Google credentials are missing on Render. "
                 "Upload credentials.json beside flask_app.py or configure "
                 "GOOGLE_SERVICE_ACCOUNT_JSON."
             )
@@ -284,7 +296,7 @@ def maybe_reconnect_google_sheets(force=False):
 
 
 # IMPORTANT: do not connect to Google Sheets during module import.
-# PythonAnywhere waits for the WSGI app to load; a network call here can
+# Render waits for the WSGI app to load; a network call here can
 # exceed its reload/startup timeout. The editable Sheet connection is opened
 # lazily only when a write action explicitly needs it.
 
@@ -497,7 +509,7 @@ def read_live_or_published_main():
     """Read the exact Tools Tracker Ledger, with published CSV only as fallback.
 
     This function is called from the background cache worker, never from the
-    initial /tv page render, so a live Google read cannot block PythonAnywhere
+    initial /tv page render, so a live Google read cannot block Render
     startup or make the TV page itself slow.
     """
     global LAST_READ_SOURCE
@@ -987,9 +999,9 @@ def generate_human_audio(text):
 
 
 @app.route("/")
+@app.route("/t")
 def root_health():
-    # Intentionally no external I/O. Gives PythonAnywhere a fast startup probe.
-    return "Golden Palace Service Tracker OK", 200
+    return tv_display()
 
 
 @app.route("/tv")
@@ -1003,7 +1015,7 @@ def tv_display():
     tv_path = os.path.join(BASE_DIR, "templates", "tv.html")
 
     if not os.path.isfile(tv_path):
-        # Return a useful message instead of PythonAnywhere's generic 500 page.
+        # Return a useful message instead of Render's generic 500 page.
         templates_dir = os.path.join(BASE_DIR, "templates")
         try:
             found = sorted(os.listdir(templates_dir)) if os.path.isdir(templates_dir) else []
