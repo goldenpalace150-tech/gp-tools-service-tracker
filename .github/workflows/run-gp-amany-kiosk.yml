@@ -1,0 +1,45 @@
+name: Run GP Amany Kiosk Upgrade
+on:
+  push:
+    paths:
+      - 'scripts/apply_gp_amany_kiosk.py'
+      - '.github/workflows/run-gp-amany-kiosk.yml'
+permissions:
+  contents: write
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply Amany and kiosk upgrade
+        run: python scripts/apply_gp_amany_kiosk.py
+      - name: Validate Python
+        run: python -m py_compile tools_tracker.py flask_app.py
+      - name: Validate TV JavaScript and assets
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('templates/tv.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script>(.*?)</script>',html,re.S)
+          Path('/tmp/tv.js').write_text(scripts[-1],encoding='utf-8')
+          req=['GP_AMANY_KIOSK_2026_09_08','findAmanySyrianVoice','ar-sy-amanyneural','GP_MANAGER','أبو آدم','حريري','أبو غسان','حازم']
+          missing=[x for x in req if x not in html]
+          if missing: raise SystemExit('Missing '+str(missing))
+          for f in ['templates/manifest.webmanifest','templates/sw.js','templates/gp-icon.svg','GP-TV-Fullscreen.cmd']:
+              if not Path(f).exists(): raise SystemExit('Missing asset '+f)
+          PY
+          node --check /tmp/tv.js
+      - name: Publish launcher in static directory
+        run: cp GP-TV-Fullscreen.cmd templates/GP-TV-Fullscreen.cmd
+      - name: Commit verified files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add templates/tv.html templates/manifest.webmanifest templates/sw.js templates/gp-icon.svg templates/GP-TV-Fullscreen.cmd GP-TV-Fullscreen.cmd
+          git diff --cached --quiet && exit 0
+          git commit -m "Use exact Syrian Amany voice and fullscreen TV kiosk"
+          git push
