@@ -1,8 +1,9 @@
-name: Run GP Exact Ceecee Test
+name: Run GP Exact Ceecee Voice
 on:
   push:
     paths:
       - scripts/apply_gp_ceecee_exact_test.py
+      - scripts/apply_gp_ceecee_activation_v2.py
 permissions:
   contents: write
 jobs:
@@ -15,24 +16,26 @@ jobs:
           python-version: '3.12'
       - name: Apply exact Ceecee test voice
         run: python scripts/apply_gp_ceecee_exact_test.py
-      - name: Validate TV JavaScript and exact voice id
+      - name: Apply exact Ceecee activation rotation
+        run: python scripts/apply_gp_ceecee_activation_v2.py
+      - name: Validate TV JavaScript and Ceecee paths
         run: |
           python - <<'PY'
           from pathlib import Path
           import re
           html=Path('templates/tv.html').read_text(encoding='utf-8')
-          assert 'GP_CEECEE_EXACT_TEST_V1' in html
-          assert '1cd326303dc3411eaa9fcda84ee7b921' in html
-          assert '16fd171b-f07e-4e8f-a40e-1985ddd28c0a.wav' in html
+          required=['GP_CEECEE_EXACT_TEST_V1','GP_CEECEE_ACTIVATION_V2','1cd326303dc3411eaa9fcda84ee7b921','Enable / Disable','تفعيل / إيقاف','chooseCeeceeActivationTrack']
+          missing=[x for x in required if x not in html]
+          if missing: raise SystemExit('Missing markers: '+str(missing))
           script=re.findall(r'<script>(.*?)</script>',html,re.S)[-1]
           Path('/tmp/tv.js').write_text(script,encoding='utf-8')
           PY
           node --check /tmp/tv.js
-      - name: Commit verified TV test
+      - name: Commit verified TV voice update
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add templates/tv.html
           git diff --cached --quiet && exit 0
-          git commit -m "Use exact original Ceecee voice for TV test button"
+          git commit -m "Use exact original Ceecee voice for activation rotation"
           git push
