@@ -114,7 +114,8 @@ ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "").strip()
 # Browser-independent server generated workshop voice
 # ==========================================================
 
-GP_AR_VOICE = os.environ.get("GP_AR_VOICE", "ar-SY-AmanyNeural").strip() or "ar-SY-AmanyNeural"
+# GP_LEVANTINE_VOICE_V4
+GP_AR_VOICE = os.environ.get("GP_AR_VOICE", "ar-LB-LaylaNeural").strip() or "ar-LB-LaylaNeural"
 GP_EN_VOICE = os.environ.get("GP_EN_VOICE", "en-US-JennyNeural").strip() or "en-US-JennyNeural"
 GP_VOICE_CACHE_DIR = os.path.join(tempfile.gettempdir(), "golden_palace_voice_v2")
 os.makedirs(GP_VOICE_CACHE_DIR, exist_ok=True)
@@ -221,8 +222,8 @@ def gp_build_voice_message(lang="ar", force_named=""):
 
 def gp_voice_settings(lang, tone):
     voice = GP_AR_VOICE if lang == "ar" else GP_EN_VOICE
-    if tone == "funny": return voice, "+2%", "+1Hz"
-    return voice, "-2%", "+0Hz"
+    if tone == "funny": return voice, "+6%", "+3Hz"
+    return voice, "+1%", "+1Hz"
 
 
 def gp_voice_cache_path(text, voice, rate, pitch):
@@ -261,8 +262,8 @@ def api_voice_track():
     requested_person = str(request.args.get("person", "")).strip()
     track = gp_build_voice_message(lang, requested_person)
     voice, body_rate, body_pitch = gp_voice_settings(lang, track["tone"])
-    final_rate = "-12%" if lang == "ar" else "-9%"
-    final_pitch = "-8Hz" if lang == "ar" else "-5Hz"
+    final_rate = "-5%" if lang == "ar" else "-7%"
+    final_pitch = "-3Hz" if lang == "ar" else "-4Hz"
     try:
         body_token, _ = gp_ensure_voice_file(track["body"], voice, body_rate, body_pitch)
         final_token, _ = gp_ensure_voice_file(track["final"], voice, final_rate, final_pitch)
