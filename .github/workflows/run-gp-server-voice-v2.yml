@@ -1,0 +1,44 @@
+name: Run GP Server Voice V2
+on:
+  push:
+    paths:
+      - scripts/apply_gp_server_voice_v2.py
+permissions:
+  contents: write
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply browser-independent voice upgrade
+        run: python scripts/apply_gp_server_voice_v2.py
+      - name: Validate Python
+        run: python -m py_compile flask_app.py tools_tracker.py
+      - name: Validate TV JavaScript
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('templates/tv.html').read_text(encoding='utf-8')
+          script=re.findall(r'<script>(.*?)</script>',html,re.S)[-1]
+          Path('/tmp/tv.js').write_text(script,encoding='utf-8')
+          required=['GP_SERVER_VOICE_CLIENT_V2','/api/voice-track','Golden Palace Syrian female voice','أبو آدم']
+          missing=[x for x in required if x not in html]
+          if missing: raise SystemExit('Missing TV markers: '+str(missing))
+          flask=Path('flask_app.py').read_text(encoding='utf-8')
+          required_flask=['GP_SERVER_SYRIAN_VOICE_V2','ar-SY-AmanyNeural','/api/voice-track','edge_tts']
+          missing=[x for x in required_flask if x not in flask]
+          if missing: raise SystemExit('Missing Flask markers: '+str(missing))
+          PY
+          node --check /tmp/tv.js
+      - name: Commit verified files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add requirements.txt flask_app.py templates/tv.html GP-TV-Fullscreen.cmd templates/GP-TV-Fullscreen.cmd
+          git diff --cached --quiet && exit 0
+          git commit -m "Generate Syrian workshop voice on server for every browser"
+          git push
