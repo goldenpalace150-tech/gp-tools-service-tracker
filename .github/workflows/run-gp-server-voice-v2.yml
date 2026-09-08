@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - scripts/apply_gp_server_voice_v2.py
+      - scripts/voice_validation_trigger.txt
 permissions:
   contents: write
 jobs:
