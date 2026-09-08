@@ -13,32 +13,52 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Apply browser-independent voice upgrade
+      - name: Apply balanced Syrian voice upgrade
         run: python scripts/apply_gp_server_voice_v2.py
-      - name: Validate Python
-        run: python -m py_compile flask_app.py tools_tracker.py
-      - name: Validate TV JavaScript
+      - name: Validation pass 1
         run: |
+          python -m py_compile flask_app.py tools_tracker.py
           python - <<'PY'
           from pathlib import Path
           import re
           html=Path('templates/tv.html').read_text(encoding='utf-8')
           script=re.findall(r'<script>(.*?)</script>',html,re.S)[-1]
           Path('/tmp/tv.js').write_text(script,encoding='utf-8')
-          required=['GP_SERVER_VOICE_CLIENT_V2','/api/voice-track','Golden Palace Syrian female voice','أبو آدم']
+          required=['GP_SERVER_VOICE_CLIENT_V2','GP_VOICE_BALANCE_PROSODY_V3','gpNextStaffPerson','audio_urls','أبو آدم','أبو غسان','حريري','حازم']
           missing=[x for x in required if x not in html]
           if missing: raise SystemExit('Missing TV markers: '+str(missing))
           flask=Path('flask_app.py').read_text(encoding='utf-8')
-          required_flask=['GP_SERVER_SYRIAN_VOICE_V2','ar-SY-AmanyNeural','/api/voice-track','edge_tts']
+          required_flask=['GP_SERVER_SYRIAN_VOICE_V2','GP_VOICE_BALANCE_PROSODY_V3','ar-SY-AmanyNeural','GP_AR_FINALS','force_named','audio_urls','-8Hz']
           missing=[x for x in required_flask if x not in flask]
           if missing: raise SystemExit('Missing Flask markers: '+str(missing))
+          all_names=['أبو عدنان','خبيطي','أبو نقطة','عمر','أبو آدم','حريري','أبو غسان','حازم']
+          for name in all_names:
+              if name not in flask or name not in html:
+                  raise SystemExit('Missing staff name: '+name)
           PY
           node --check /tmp/tv.js
+      - name: Validation pass 2
+        run: |
+          python -m py_compile flask_app.py tools_tracker.py
+          node --check /tmp/tv.js
+          python - <<'PY'
+          from pathlib import Path
+          src=Path('flask_app.py').read_text(encoding='utf-8')
+          assert 'r < 0.42' in src
+          assert 'requested_person' in src
+          assert 'GP_AR_FINALS' in src
+          assert 'final_rate' in src and 'final_pitch' in src
+          tv=Path('templates/tv.html').read_text(encoding='utf-8')
+          assert "manual ? '1' : '0'" in tv
+          assert 'gpCommitStaffPerson' in tv
+          assert 'playVoiceSequence' in tv
+          print('Second validation pass OK')
+          PY
       - name: Commit verified files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add requirements.txt flask_app.py templates/tv.html GP-TV-Fullscreen.cmd templates/GP-TV-Fullscreen.cmd
           git diff --cached --quiet && exit 0
-          git commit -m "Generate Syrian workshop voice on server for every browser"
+          git commit -m "Balance staff voice rotation and improve sentence-ending prosody"
           git push
