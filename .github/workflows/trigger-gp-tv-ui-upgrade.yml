@@ -1,0 +1,17 @@
+name: Trigger GP TV UI Upgrade
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/trigger-gp-tv-ui-upgrade.yml'
+permissions:
+  actions: write
+  contents: read
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch upgrade workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run gp-tv-ui-upgrade.yml --repo ${{ github.repository }}
