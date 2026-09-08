@@ -18,26 +18,45 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Rebuild tested source files
+      - name: Rebuild and verify tested source files
         shell: bash
         run: |
           python - <<'PY'
           import base64
           import gzip
+          import hashlib
           from pathlib import Path
 
           staging = Path('.deploy_parts')
+          expected = {
+              'tools_tracker.py': '8504a932ebfe3e6f7018da7bd7261f5d0fb65f91676bf2c2578c4f8219969735',
+              'flask_app.py': 'c153c27ef7a40c11d7086e843dd22024d6e33700f5bcedbd3ad9128fb4468e85',
+              'templates/tv.html': '91e84e849bad2230234d0dd33d70a91485cd4f5718780909d9c130b5c4de327e',
+          }
 
           def restore(prefix, output_path):
               parts = sorted(staging.glob(f'{prefix}.*.b64'))
               if not parts:
                   raise RuntimeError(f'No deployment parts found for {prefix}')
-              encoded = ''.join(part.read_text(encoding='ascii').strip() for part in parts)
+              chunks = []
+              for part in parts:
+                  text = part.read_text(encoding='ascii').strip()
+                  # One character was lost by the connector while staging tv.01.
+                  # Restore it deterministically; the final SHA-256 below proves the repair.
+                  if part.name == 'tv.01.b64' and len(text) == 17999:
+                      text = text[:12567] + 'r' + text[12567:]
+                  chunks.append(text)
+              encoded = ''.join(chunks)
               payload = gzip.decompress(base64.b64decode(encoded))
+              digest = hashlib.sha256(payload).hexdigest()
+              if digest != expected[output_path]:
+                  raise RuntimeError(
+                      f'Hash mismatch for {output_path}: {digest} != {expected[output_path]}'
+                  )
               destination = Path(output_path)
               destination.parent.mkdir(parents=True, exist_ok=True)
               destination.write_bytes(payload)
-              print(f'Restored {destination} ({len(payload)} bytes) from {len(parts)} part(s)')
+              print(f'Verified {destination} ({len(payload)} bytes, sha256={digest})')
 
           restore('tools_tracker', 'tools_tracker.py')
           restore('flask_app', 'flask_app.py')
