@@ -1,0 +1,57 @@
+name: Apply Golden Palace update
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".deploy_parts/READY"
+
+permissions:
+  contents: write
+
+jobs:
+  apply-update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rebuild tested source files
+        shell: bash
+        run: |
+          python - <<'PY'
+          import base64
+          import gzip
+          from pathlib import Path
+
+          staging = Path('.deploy_parts')
+
+          def restore(prefix, output_path):
+              parts = sorted(staging.glob(f'{prefix}.*.b64'))
+              if not parts:
+                  raise RuntimeError(f'No deployment parts found for {prefix}')
+              encoded = ''.join(part.read_text(encoding='ascii').strip() for part in parts)
+              payload = gzip.decompress(base64.b64decode(encoded))
+              destination = Path(output_path)
+              destination.parent.mkdir(parents=True, exist_ok=True)
+              destination.write_bytes(payload)
+              print(f'Restored {destination} ({len(payload)} bytes) from {len(parts)} part(s)')
+
+          restore('tools_tracker', 'tools_tracker.py')
+          restore('flask_app', 'flask_app.py')
+          restore('tv', 'templates/tv.html')
+          PY
+
+          python -m py_compile tools_tracker.py flask_app.py
+
+      - name: Commit final synchronized sources
+        shell: bash
+        run: |
+          git config user.name "Golden Palace Update Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add tools_tracker.py flask_app.py templates/tv.html
+          git rm -r .deploy_parts .github/workflows/apply-golden-update.yml
+          git commit -m "Apply Golden Palace performance and stock import update"
+          git push origin main
