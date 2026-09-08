@@ -1,0 +1,44 @@
+name: Run GP UI Upgrade
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - scripts/upgrade_gp_ui.py
+      - .github/workflows/run-gp-ui-upgrade.yml
+permissions:
+  contents: write
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply upgrade
+        run: python scripts/upgrade_gp_ui.py
+      - name: Validate Python
+        run: python -m py_compile tools_tracker.py flask_app.py scripts/upgrade_gp_ui.py
+      - name: Validate TV JavaScript
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          h=Path('templates/tv.html').read_text(encoding='utf-8')
+          s=re.findall(r'<script>(.*?)</script>',h,re.S)[-1]
+          Path('/tmp/tv.js').write_text(s,encoding='utf-8')
+          for x in ['GP_UI_REFRESH_2026_09_08','ar-SY','حريري','أبو غسان','حازم','GP_BACKEND_ORIGIN','buildDynamicVoiceTrack']:
+              assert x in h,x
+          assert 'GP_APP_UI_REFRESH_2026_09_08' in Path('tools_tracker.py').read_text(encoding='utf-8')
+          assert 'GP_RENDER_STATIC_CORS_2026_09_08' in Path('flask_app.py').read_text(encoding='utf-8')
+          PY
+          node --check /tmp/tv.js
+      - name: Commit verified files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add templates/tv.html flask_app.py tools_tracker.py
+          git diff --cached --quiet && exit 0
+          git commit -m "Improve TV startup voice variety and app accessibility"
+          git push
