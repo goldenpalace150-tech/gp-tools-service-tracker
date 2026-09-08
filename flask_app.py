@@ -3,13 +3,16 @@ import re
 import json
 import time
 import hashlib
+import asyncio
+import random
+import tempfile
 import threading
 from io import StringIO
 from datetime import datetime
 
 import pandas as pd
 import requests
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_file
 
 app = Flask(__name__)
 
@@ -103,6 +106,133 @@ GOOGLE_APPS_SCRIPT_SECRET = os.environ.get("GOOGLE_APPS_SCRIPT_SECRET", "").stri
 
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "").strip()
 ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "").strip()
+
+
+
+# ==========================================================
+# GP_SERVER_SYRIAN_VOICE_V2
+# Browser-independent server generated workshop voice
+# ==========================================================
+
+GP_AR_VOICE = os.environ.get("GP_AR_VOICE", "ar-SY-AmanyNeural").strip() or "ar-SY-AmanyNeural"
+GP_EN_VOICE = os.environ.get("GP_EN_VOICE", "en-US-JennyNeural").strip() or "en-US-JennyNeural"
+GP_VOICE_CACHE_DIR = os.path.join(tempfile.gettempdir(), "golden_palace_voice_v2")
+os.makedirs(GP_VOICE_CACHE_DIR, exist_ok=True)
+GP_VOICE_FILE_LOCKS = {}
+GP_VOICE_FILE_LOCKS_GUARD = threading.Lock()
+
+GP_STAFF_AR = ["أبو عدنان", "خبيطي", "أبو نقطة", "عمر", "حريري", "أبو غسان", "حازم"]
+GP_STAFF_EN = ["Abu Adnan", "Khbeiti", "Abu Nuqta", "Omar", "Hariri", "Abu Ghassan", "Hazem"]
+
+GP_AR_STARTS = ["يا أبطال القصر الذهبي", "يعطيكم العافية يا شباب", "يا جماعة الورشة", "يا فريقنا الذهبي", "أهل الهمة بالورشة", "شباب القصر الذهبي"]
+GP_AR_MOTIVATION = ["كل حالة منسكرها صح بتزيد ثقة الزبون فينا", "الشغل المرتب اليوم بيريحنا بكرا", "كل جهاز عم يطلع مضبوط هو نقطة إلنا", "السرعة حلوة بس الدقة أحلى", "المتابعة الواضحة بتختصر نص الشغل", "ما منترك حالة معلقة بلا سبب واضح", "كل خطوة صغيرة اليوم بتعمل فرق كبير بنهاية الدوام", "خبرتنا بتبين بالتفاصيل مو بالحكي", "الزبون ما بيشوف كل التعب اللي ورا الكواليس، بس بيحس بالنتيجة المرتبة", "لما كل واحد يحدث حالته بوقتها، الفريق كله بيصير أسرع"]
+GP_AR_ACTION = ["خلونا نركز على الحالات الأقدم أول", "يلا منقفل المفتوح حالة ورا حالة", "اللي جاهز ما نخليه يستنى", "كل واحد يحدث حالته أول بأول", "خلونا نخلي القائمة أخف قبل نهاية الدوام", "إذا في عائق نرفعه بسرعة وما نخليه ينام", "الأولوية اليوم للحالة اللي مستنية قرار واضح", "نرتب الشغل ونخلي كل جهاز بمكانه الصحيح", "الحالة اللي ما إلها خطوة جاية واضحة بدها قرار اليوم", "نخلي المعلومة تمشي أسرع من الجهاز بين الأقسام"]
+GP_AR_FUNNY = ["اليوم الأجهزة داخلة الورشة متوترة، طمنوها إنو وصلت لعند أهل الخبرة", "إذا جهاز عند معنا، ما في مشكلة، منعنّد عليه بالخبرة أكتر", "قائمة الانتظار عم تعمل حالها كبيرة، بس نحنا منعرف كيف نصغرها", "الجهاز اللي مفكر يقضي عطلة عنا، خبرّوه إنو الحجز فل اليوم", "إذا مفك البراغي اختفى مرة تانية، رح نعمله سند صيانة لحالو", "الورشة اليوم بدها شغل مرتب وابتسامة، لأن الأجهزة كمان إلها نفسية", "أي جهاز عم يمثل إنو ما فيه عطل، عنا فنيين بيعرفوا يخلّوه يعترف", "خلونا نشتغل بهدوء، بس بسرعة تخلي القائمة نفسها تستغرب", "إذا الشاشة صارت كلها أخضر، لا حدا يعمل ريفريش من الخوف، هاد اسمه إنجاز", "الداشبورد ما بيصلح الأجهزة، بس بيحرج الحالة اللي قاعدة بلا تحديث"]
+GP_AR_PERSON = ["{name}، اليوم عليك حركة حلوة بالقائمة، بدنا نشوف كم حالة رح تختفي", "{name}، الأجهزة عاملة موعد معك اليوم، لا تخليها تنتظر كتير", "{name}، ورجينا لمسة الخبرة وخلي آخر كلمة بالحالة تم", "{name}، شد الهمة، كل حالة بتخلصها عم تفتح مجال للي بعدها", "{name}، إذا الجهاز ما حكى من أول فحص، اسأله بالطريقة الفنية تبعك", "{name}، تحديث صغير منك هلق بيوفر ثلاث أسئلة بعد شوي"]
+GP_AR_MANAGER = ["توجيه من أبو آدم: الأولوية للحالات المتأخرة والعالقة، وأي عائق واضح ارفعوه بسرعة مشان ما يوقف حركة الشغل", "أبو آدم متابع حركة العمليات اليوم، خلوا كل حالة محدثة والخطوة الجاية واضحة حتى كل فريق يعرف شو عليه", "رسالة أبو آدم للفريق: السرعة مهمة، بس التنظيم والدقة أهم، وإذا في تأخير سببه واضح منحلّه سوا", "أبو آدم يذكّر الفريق: ما بدنا بطولة فردية، بدنا شغل فريق يسلّم الحالة صح من أول مرة", "أبو آدم عم يتابع الأرقام، بس الأهم إنو كل حالة يكون إلها مسؤول وخطوة جاية واضحة", "من أبو آدم للفريق: إذا في عائق خبرونا بكير، التأخير المعلوم منقدر نحلّه، التأخير المخفي هو المشكلة", "أبو آدم بيقول: اليوم الناجح مو بس بعدد الحالات اللي تسكرت، كمان بقديش خففنا العوائق ووقت انتظار الزبون", "أبو آدم عم ينسق حركة الشغل بين الأقسام، خلوا الأولويات واضحة والمعلومة توصل بسرعة وما نخلي أي حالة تضيع بين فريق وفريق"]
+GP_AR_MANAGER_JOKES = ["أبو آدم طلب تطوير بسيط، ومن خبرتنا بالتطوير البسيط، إذا خلصناه اليوم بكرا بيطلعله إصدار رقم اثنين", "أبو آدم بيقول إذا الداشبورد صار أخضر كله لا تخافوا، مو عطل بالنظام، هاد اسمه إنجاز حقيقي", "أبو آدم طلب نشيل البوتل نِك، بس رجاء لا حدا ينقله من قسم لقسم ويسميها إعادة توزيع", "رسالة تطوير من أبو آدم: أي اختصار بخطوات الشغل مرحب فيه، إلا إذا الاختصار رجعنا ثلاث خطوات لورا", "أبو آدم عم يطور العمليات لدرجة إذا العملية زبطت زيادة، غالباً رح نفتح مشروع تطوير جديد لنعرف ليش زبطت", "إذا لقينا عملية بدها خمس موافقات مشان تصير أسرع، خبروا أبو آدم قبل ما نضيف الموافقة السادسة"]
+GP_AR_ENDS = ["والله يعطيكم العافية", "وبالتوفيق يا شباب", "يلا نكملها صح", "والقهوة بعد الإنجاز أطيب", "وخلي الزبون يحس بالفرق", "ومنكمّل بنفس النفس الحلو"]
+
+GP_EN_STARTS = ["Golden Palace team", "Workshop heroes", "Great team", "Golden Palace crew", "Service team"]
+GP_EN_MOTIVATION = ["every properly closed case builds more customer trust", "clean follow-up today saves time tomorrow", "speed matters, but accuracy matters more", "clear updates make the whole workshop faster", "our experience shows in the details"]
+GP_EN_ACTION = ["let us clear the oldest cases first", "keep every case updated as you work", "raise blockers early instead of letting them sleep", "keep the queue moving", "make the next action clear on every case"]
+GP_EN_FUNNY = ["the waiting list is trying to look big again, let us disappoint it", "if the screwdriver disappears again, we may open a service ticket for it", "if the dashboard turns completely green, do not panic, that is called progress"]
+GP_EN_MANAGER = ["A note from Abu Adam: prioritize delayed and blocked cases, and raise obstacles early so operations keep moving", "Abu Adam is following today’s operations; keep every case updated and make the next action clear", "Abu Adam reminds the team that good operations means clear ownership, fewer blockers, and less customer waiting time"]
+GP_EN_MANAGER_JOKES = ["Abu Adam asked for one small improvement; operations experience says version two is already waiting around the corner", "Abu Adam says if the dashboard turns completely green, do not restart it; that is called an achievement", "Abu Adam asked us to remove the bottleneck, not move it to another department and call it redistribution"]
+GP_EN_ENDS = ["great work team", "keep the good energy going", "let us finish strong", "thank you team"]
+
+
+def gp_build_voice_message(lang="ar"):
+    lang = "en" if str(lang).lower().startswith("en") else "ar"
+    r = random.random()
+    tone = "warm"
+    category = "motivation"
+    person = ""
+    if lang == "ar":
+        if r < 0.12:
+            category = "management_joke"; person = "أبو آدم"; text = f"{random.choice(GP_AR_MANAGER_JOKES)}. {random.choice(GP_AR_ENDS)}."; tone = "funny"
+        elif r < 0.27:
+            category = "management"; person = "أبو آدم"; text = f"{random.choice(GP_AR_MANAGER)}. {random.choice(GP_AR_ENDS)}."
+        elif r < 0.48:
+            category = "funny"; text = f"{random.choice(GP_AR_STARTS)}، {random.choice(GP_AR_FUNNY)}. {random.choice(GP_AR_ENDS)}."; tone = "funny"
+        elif r < 0.66:
+            category = "person"; person = random.choice(GP_STAFF_AR); text = f"{random.choice(GP_AR_PERSON).format(name=person)}. {random.choice(GP_AR_ENDS)}."
+        elif r < 0.86:
+            text = f"{random.choice(GP_AR_STARTS)}، {random.choice(GP_AR_MOTIVATION)}، {random.choice(GP_AR_ACTION)}. {random.choice(GP_AR_ENDS)}."
+        else:
+            category = "workshop"; text = f"{random.choice(GP_AR_STARTS)}، {random.choice(GP_AR_ACTION)}. {random.choice(GP_AR_MOTIVATION)}. {random.choice(GP_AR_ENDS)}."
+    else:
+        if r < 0.12:
+            category = "management_joke"; person = "Abu Adam"; text = f"{random.choice(GP_EN_MANAGER_JOKES)}. {random.choice(GP_EN_ENDS)}."; tone = "funny"
+        elif r < 0.27:
+            category = "management"; person = "Abu Adam"; text = f"{random.choice(GP_EN_MANAGER)}. {random.choice(GP_EN_ENDS)}."
+        elif r < 0.48:
+            category = "funny"; text = f"{random.choice(GP_EN_STARTS)}, {random.choice(GP_EN_FUNNY)}. {random.choice(GP_EN_ENDS)}."; tone = "funny"
+        elif r < 0.66:
+            category = "person"; person = random.choice(GP_STAFF_EN); text = f"{person}, keep the case moving and make the next update clear. {random.choice(GP_EN_ENDS)}."
+        else:
+            text = f"{random.choice(GP_EN_STARTS)}, {random.choice(GP_EN_MOTIVATION)}, {random.choice(GP_EN_ACTION)}. {random.choice(GP_EN_ENDS)}."
+    return {"lang": lang, "text": re.sub(r"\\s+", " ", text).strip(), "tone": tone, "category": category, "person": person}
+
+
+def gp_voice_settings(lang, tone):
+    voice = GP_AR_VOICE if lang == "ar" else GP_EN_VOICE
+    if tone == "funny": return voice, "+5%", "+2Hz"
+    return voice, "-3%", "+0Hz"
+
+
+def gp_voice_cache_path(text, voice, rate, pitch):
+    token = hashlib.sha256(f"{voice}|{rate}|{pitch}|{text}".encode("utf-8")).hexdigest()
+    return token, os.path.join(GP_VOICE_CACHE_DIR, f"{token}.mp3")
+
+
+async def gp_generate_edge_tts(text, voice, rate, pitch, path):
+    import edge_tts
+    communicator = edge_tts.Communicate(text=text, voice=voice, rate=rate, pitch=pitch, volume="+0%")
+    await communicator.save(path)
+
+
+def gp_ensure_voice_file(text, voice, rate, pitch):
+    token, path = gp_voice_cache_path(text, voice, rate, pitch)
+    if os.path.exists(path) and os.path.getsize(path) > 1000: return token, path
+    with GP_VOICE_FILE_LOCKS_GUARD: lock = GP_VOICE_FILE_LOCKS.setdefault(token, threading.Lock())
+    with lock:
+        if os.path.exists(path) and os.path.getsize(path) > 1000: return token, path
+        tmp_path = path + ".tmp"
+        try:
+            if os.path.exists(tmp_path): os.remove(tmp_path)
+            asyncio.run(gp_generate_edge_tts(text, voice, rate, pitch, tmp_path))
+            if not os.path.exists(tmp_path) or os.path.getsize(tmp_path) <= 1000: raise RuntimeError("voice generation returned an empty audio file")
+            os.replace(tmp_path, path)
+        finally:
+            try:
+                if os.path.exists(tmp_path): os.remove(tmp_path)
+            except Exception: pass
+    return token, path
+
+
+@app.route("/api/voice-track")
+def api_voice_track():
+    lang = "en" if str(request.args.get("lang", "ar")).lower().startswith("en") else "ar"
+    track = gp_build_voice_message(lang)
+    voice, rate, pitch = gp_voice_settings(lang, track["tone"])
+    try:
+        token, _path = gp_ensure_voice_file(track["text"], voice, rate, pitch)
+    except Exception as exc:
+        print("VOICE GENERATION ERROR:", repr(exc))
+        return jsonify({"ok": False, "error": "voice_generation_failed"}), 503
+    return jsonify({"ok": True, "text": track["text"], "lang": lang, "tone": track["tone"], "category": track["category"], "person": track["person"], "voice": voice, "audio_url": f"/api/voice-audio/{token}.mp3"})
+
+
+@app.route("/api/voice-audio/<token>.mp3")
+def api_voice_audio(token):
+    token = str(token or "").lower().strip()
+    if not re.fullmatch(r"[0-9a-f]{64}", token): return "Not found", 404
+    path = os.path.join(GP_VOICE_CACHE_DIR, f"{token}.mp3")
+    if not os.path.exists(path): return "Not found", 404
+    response = send_file(path, mimetype="audio/mpeg", conditional=True, max_age=86400)
+    response.headers["Cache-Control"] = "public, max-age=86400"
+    return response
 
 
 # ==========================================================
