@@ -41,10 +41,12 @@ jobs:
               chunks = []
               for part in parts:
                   text = part.read_text(encoding='ascii').strip()
-                  # One character was lost by the connector while staging tv.01.
-                  # Restore it deterministically; the final SHA-256 below proves the repair.
+                  # Repair the two connector-transfer defects detected by Git blob SHA.
+                  # Final SHA-256 verification below remains authoritative.
                   if part.name == 'tv.01.b64' and len(text) == 17999:
                       text = text[:12567] + 'r' + text[12567:]
+                  if part.name == 'tv.02.b64' and len(text) == 18000:
+                      text = text[:9223] + 'H' + text[9224:]
                   chunks.append(text)
               encoded = ''.join(chunks)
               payload = gzip.decompress(base64.b64decode(encoded))
