@@ -44,14 +44,15 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           src=Path('flask_app.py').read_text(encoding='utf-8')
-          assert 'r < 0.42' in src
           assert 'requested_person' in src
           assert 'GP_AR_FINALS' in src
           assert 'final_rate' in src and 'final_pitch' in src
+          assert 'GP_STAFF_AR = ["أبو عدنان", "خبيطي", "أبو نقطة", "عمر", "أبو آدم", "حريري", "أبو غسان", "حازم"]' in src
           tv=Path('templates/tv.html').read_text(encoding='utf-8')
           assert "manual ? '1' : '0'" in tv
           assert 'gpCommitStaffPerson' in tv
           assert 'playVoiceSequence' in tv
+          assert 'gpBalancedStaffRotationV3' in tv
           print('Second validation pass OK')
           PY
       - name: Commit verified files
