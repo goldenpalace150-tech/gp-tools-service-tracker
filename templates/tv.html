@@ -1,0 +1,1315 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <title>Service Workshop Tracker - Golden Palace</title>
+    <style>
+        :root {
+            --bg: #f3f5f8;
+            --card: #ffffff;
+            --text: #172033;
+            --muted: #64748b;
+            --border: #d9e0e8;
+            --shadow: 0 8px 26px rgba(15, 23, 42, .08);
+            --progress: #2563eb;
+            --collection: #7c3aed;
+            --partner: #0f766e;
+            --zero: #16a34a;
+            --collected: #15803d;
+            --partnerclosed: #475569;
+            --danger: #dc2626;
+            --warning: #d97706;
+        }
+
+        * { box-sizing: border-box; }
+        html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: "Segoe UI", Tahoma, Arial, sans-serif; }
+        body { overflow-y: auto; }
+        button, input { font: inherit; }
+        button { cursor: pointer; }
+
+        .page { width: min(1500px, calc(100% - 28px)); margin: 0 auto; padding: 16px 0 34px; }
+        .topbar {
+            display: flex; align-items: center; justify-content: space-between; gap: 14px;
+            background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+            padding: 12px 16px; box-shadow: var(--shadow); position: sticky; top: 8px; z-index: 40;
+        }
+        .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+        .brand img { width: 58px; height: 58px; object-fit: contain; border-radius: 12px; }
+        .brand h1 { margin: 0; font-size: clamp(21px, 2.4vw, 34px); }
+        .brand small { display: block; color: var(--muted); margin-top: 2px; font-size: 13px; }
+        .top-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; justify-content: flex-start; }
+        .pill, .action-btn {
+            border: 1px solid var(--border); background: #fff; color: var(--text); border-radius: 999px;
+            min-height: 42px; padding: 8px 14px; font-weight: 700;
+        }
+        .pill.danger { color: #991b1b; background: #fef2f2; border-color: #fecaca; }
+        .pill.ok { color: #166534; background: #f0fdf4; border-color: #bbf7d0; }
+        .pill.warn { color: #92400e; background: #fff7ed; border-color: #fed7aa; }
+        .action-btn:hover { border-color: #94a3b8; background: #f8fafc; }
+
+        .summary-strip {
+            margin: 14px 0; display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px;
+        }
+        .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 11px 14px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .summary-item b { font-size: 22px; }
+        .summary-item span { color: var(--muted); font-weight: 700; }
+
+        .dashboard-grid {
+            display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 16px;
+        }
+        .workflow-card {
+            position: relative; min-height: 220px; text-align: right; border: 1px solid var(--border); background: var(--card);
+            border-radius: 22px; padding: 24px; box-shadow: var(--shadow); overflow: hidden; transition: transform .16s ease, box-shadow .16s ease;
+        }
+        .workflow-card:hover { transform: translateY(-3px); box-shadow: 0 12px 34px rgba(15,23,42,.13); }
+        .workflow-card::after { content: ""; position: absolute; inset: auto 0 0 0; height: 9px; background: var(--accent); }
+        .workflow-card .icon { font-size: 38px; }
+        .workflow-card .count { font-size: clamp(54px, 6vw, 82px); line-height: .95; font-weight: 900; margin: 14px 0 8px; color: var(--accent); }
+        .workflow-card h2 { margin: 0; font-size: clamp(21px, 2.2vw, 30px); }
+        .workflow-card p { margin: 8px 0 0; color: var(--muted); line-height: 1.5; font-size: 15px; }
+        .workflow-card .open-hint { position: absolute; left: 20px; top: 18px; color: var(--muted); font-weight: 800; font-size: 13px; }
+        .progress { --accent: var(--progress); }
+        .collection { --accent: var(--collection); }
+        .partner { --accent: var(--partner); }
+        .zero { --accent: var(--zero); }
+        .collected { --accent: var(--collected); }
+        .partner_closed { --accent: var(--partnerclosed); }
+
+        .detail-shell { margin-top: 16px; }
+        .detail-toolbar {
+            background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 14px;
+            display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+        }
+        .detail-title h2 { margin: 0; font-size: clamp(24px, 3vw, 38px); }
+        .detail-title p { margin: 5px 0 0; color: var(--muted); }
+        .detail-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+        .search-box { min-width: min(340px, 70vw); border: 1px solid var(--border); border-radius: 12px; padding: 11px 13px; background: #fff; color: var(--text); }
+
+        .detail-stats { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin: 12px 0; }
+        .stat { background: #fff; border: 1px solid var(--border); border-radius: 13px; padding: 12px; }
+        .stat span { display:block; color: var(--muted); font-size: 12px; font-weight: 700; }
+        .stat b { display:block; margin-top:4px; font-size: 24px; }
+
+        .ticket-list { display: grid; gap: 10px; }
+        .ticket-row {
+            width: 100%; border: 1px solid var(--border); background: var(--card); border-radius: 15px; padding: 14px 16px;
+            display: grid; grid-template-columns: 150px minmax(180px,1.2fr) minmax(160px,1fr) 120px 150px 170px; gap: 12px;
+            align-items: center; text-align: right; box-shadow: 0 2px 8px rgba(15,23,42,.04);
+        }
+        .ticket-row:hover { border-color: #94a3b8; background: #f8fafc; }
+        .ticket-id { font-size: 20px; font-weight: 900; }
+        .ticket-row small { display: block; color: var(--muted); font-size: 11px; margin-bottom: 3px; }
+        .ticket-row .value { font-weight: 700; overflow-wrap: anywhere; }
+        .badge { display: inline-flex; align-items:center; border-radius:999px; padding:5px 9px; font-size:12px; font-weight:800; border:1px solid var(--border); background:#f8fafc; }
+        .badge.danger { background:#fef2f2; color:#991b1b; border-color:#fecaca; }
+        .badge.warn { background:#fff7ed; color:#92400e; border-color:#fed7aa; }
+        .badge.ok { background:#f0fdf4; color:#166534; border-color:#bbf7d0; }
+        .empty { background:#fff; border:1px dashed #cbd5e1; border-radius:16px; color:var(--muted); padding:35px; text-align:center; font-size:20px; }
+
+        .ticket-panel {
+            margin-top: 14px; background: var(--card); border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow); overflow: hidden;
+        }
+        .ticket-panel-head { padding: 16px 18px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:10px; }
+        .ticket-panel-head h3 { margin:0; font-size:26px; }
+        .panel-body { padding: 16px; }
+        .fields { display:grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap:10px; }
+        .field { border:1px solid var(--border); border-radius:12px; padding:11px; min-width:0; background:#fbfcfe; }
+        .field label { display:block; color:var(--muted); font-size:11px; font-weight:800; margin-bottom:5px; }
+        .field div { font-weight:700; overflow-wrap:anywhere; white-space:pre-wrap; }
+        .history { margin-top:12px; border:1px solid var(--border); border-radius:12px; padding:12px; background:#0f172a; color:#e2e8f0; line-height:1.7; direction:rtl; white-space:normal; }
+        .panel-actions { margin-top:14px; display:flex; flex-wrap:wrap; gap:8px; }
+        .close-ticket-btn { border:0; border-radius:12px; padding:12px 18px; background:#166534; color:white; font-weight:900; }
+        .close-ticket-btn:disabled { opacity:.5; cursor:not-allowed; }
+
+        .remarks-list { display:grid; gap:10px; }
+        .remark-row { display:flex; align-items:center; justify-content:space-between; gap:12px; background:#fff; border:1px solid var(--border); border-radius:14px; padding:14px; }
+        .remark-row span { font-weight:700; line-height:1.5; }
+        .remark-close { border:1px solid #fecaca; color:#991b1b; background:#fef2f2; border-radius:10px; padding:8px 12px; font-weight:900; white-space:nowrap; }
+
+        .toast { position: fixed; bottom: 18px; left: 18px; z-index: 99; max-width: min(460px, calc(100% - 36px)); border-radius: 14px; padding: 12px 16px; background: #0f172a; color: #fff; box-shadow: var(--shadow); display:none; direction:ltr; text-align:left; }
+        .toast.show { display:block; }
+
+        /* ======================================================
+           32-INCH TV MAIN VIEW
+           Optimised for 1920x1080 and still comfortable at 1366x768.
+           Details stay scrollable because they open in a separate window/tab.
+           ====================================================== */
+        body.main-view-body { height: 100vh; overflow: hidden; }
+        body.main-view-body .page {
+            width: min(1880px, calc(100% - 20px));
+            height: 100vh;
+            margin: 0 auto;
+            padding: 9px 0 10px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        body.main-view-body .topbar {
+            position: static;
+            flex: 0 0 auto;
+            border-radius: 15px;
+            padding: 8px 12px;
+        }
+        body.main-view-body .brand img { width: 48px; height: 48px; }
+        body.main-view-body .brand h1 { font-size: clamp(21px, 1.8vw, 30px); }
+        body.main-view-body .brand small { font-size: 11px; }
+        body.main-view-body #mainView {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        body.main-view-body .summary-strip {
+            flex: 0 0 auto;
+            margin: 8px 0;
+            gap: 8px;
+        }
+        body.main-view-body .summary-item {
+            padding: 7px 12px;
+            min-height: 50px;
+        }
+        body.main-view-body .summary-item b { font-size: clamp(22px, 2vw, 34px); }
+        body.main-view-body .summary-item span { font-size: clamp(14px, 1.15vw, 19px); }
+        body.main-view-body .dashboard-grid {
+            flex: 1 1 auto;
+            min-height: 0;
+            margin-top: 0;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-rows: repeat(2, minmax(0, 1fr));
+            gap: 11px;
+        }
+        body.main-view-body .workflow-card {
+            min-height: 0;
+            height: 100%;
+            padding: clamp(15px, 1.25vw, 24px);
+            border-radius: 18px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        body.main-view-body .workflow-card .icon { font-size: clamp(30px, 2.7vw, 48px); }
+        body.main-view-body .workflow-card .count {
+            font-size: clamp(62px, 5.7vw, 104px);
+            margin: clamp(6px, .7vw, 12px) 0 5px;
+        }
+        body.main-view-body .workflow-card h2 { font-size: clamp(23px, 2vw, 36px); }
+        body.main-view-body .workflow-card p {
+            font-size: clamp(12px, .95vw, 17px);
+            margin-top: 5px;
+            line-height: 1.35;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        body.main-view-body .workflow-card .open-hint {
+            left: 15px; top: 13px; font-size: clamp(10px, .8vw, 13px);
+        }
+
+        .voice-btn.on { color:#166534; background:#f0fdf4; border-color:#86efac; }
+        .voice-btn.off { color:#475569; background:#f8fafc; }
+        .voice-btn.blocked { color:#92400e; background:#fff7ed; border-color:#fed7aa; }
+        #voiceTestButton { min-width: 44px; padding-inline: 11px; }
+        body.detail-view-body #voiceButton,
+        body.detail-view-body #voiceTestButton { display:none !important; }
+
+        .voice-caption {
+            position: fixed;
+            z-index: 110;
+            left: 50%;
+            bottom: 18px;
+            transform: translateX(-50%);
+            width: min(900px, calc(100% - 36px));
+            padding: 12px 18px;
+            border-radius: 15px;
+            background: rgba(15,23,42,.94);
+            color: #fff;
+            text-align: center;
+            direction: rtl;
+            font-size: clamp(17px, 1.35vw, 24px);
+            font-weight: 800;
+            box-shadow: 0 12px 36px rgba(15,23,42,.25);
+            display: none;
+        }
+        .voice-caption.show { display:block; }
+
+        @media (max-height: 820px) and (min-width: 901px) {
+            body.main-view-body .page { padding-top: 6px; padding-bottom: 6px; }
+            body.main-view-body .topbar { padding: 6px 10px; }
+            body.main-view-body .brand img { width: 42px; height: 42px; }
+            body.main-view-body .summary-strip { margin: 6px 0; }
+            body.main-view-body .summary-item { min-height: 44px; padding: 5px 10px; }
+            body.main-view-body .workflow-card { padding: 12px 16px; }
+            body.main-view-body .workflow-card .count { font-size: clamp(54px, 5.2vw, 78px); margin: 4px 0; }
+            body.main-view-body .workflow-card h2 { font-size: clamp(20px, 1.75vw, 27px); }
+            body.main-view-body .workflow-card p { font-size: 12px; line-height: 1.25; }
+        }
+
+        @media (max-width: 1100px) {
+            .dashboard-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+            .ticket-row { grid-template-columns: 130px minmax(180px,1fr) minmax(150px,1fr) 110px; }
+            .ticket-row .optional-col { display:none; }
+            .fields { grid-template-columns: repeat(2,minmax(0,1fr)); }
+        }
+        @media (max-width: 700px) {
+            .page { width: min(100% - 14px, 1500px); padding-top: 7px; }
+            .topbar { position: static; align-items:flex-start; }
+            .brand img { width:46px;height:46px; }
+            .dashboard-grid, .summary-strip { grid-template-columns: 1fr; }
+            .workflow-card { min-height: 180px; }
+            .detail-stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
+            .ticket-row { grid-template-columns: 110px minmax(0,1fr); }
+            .ticket-row .mobile-hide { display:none; }
+            .fields { grid-template-columns: 1fr; }
+            .search-box { min-width: 100%; }
+        }
+
+
+        /* ======================================================
+           GOLDEN PALACE DARK 32-INCH TV THEME
+           Exact supplied logo artwork; transparent whitespace only
+           is trimmed in the static header asset for screen fit.
+           ====================================================== */
+        :root {
+            --bg:#06182a; --card:#0b2238; --text:#f8fafc; --muted:#b8c5d3; --border:#244564;
+            --shadow:0 14px 38px rgba(0,0,0,.24);
+            --progress:#0877df; --collection:#f56a0b; --partner:#5a20c8; --zero:#10a541;
+            --collected:#0b9aa5; --partnerclosed:#dfa900; --danger:#ef4444; --warning:#f59e0b;
+        }
+        html,body { background:radial-gradient(circle at 50% -10%,#113455 0,#06182a 48%,#04111f 100%); color:var(--text); }
+        body.lang-ar { font-family:Tahoma,Arial,"Segoe UI",sans-serif; }
+        button,input,select { font:inherit; }
+        .page { width:min(1880px,calc(100% - 28px)); }
+        .topbar { background:rgba(5,24,42,.78); border-color:#294b69; box-shadow:none; backdrop-filter:blur(8px); }
+        .brand { gap:18px; }
+        .brand img { width:clamp(250px,19vw,350px); height:auto; max-height:96px; object-fit:contain; border-radius:0; flex:0 0 auto; }
+        .brand h1 { color:#fff; font-weight:900; letter-spacing:-.025em; }
+        .brand small { color:#b9c8d7; }
+        .top-actions { justify-content:flex-end; }
+        .pill,.action-btn,.language-select { border:1px solid #315472; background:#0a2138; color:#f8fafc; box-shadow:none; }
+        .pill.ok { color:#baf7cf; background:#0a2d29; border-color:#1f755a; }
+        .pill.danger { color:#fecaca; background:#381720; border-color:#7f1d2d; }
+        .pill.warn { color:#fde68a; background:#3b2a0b; border-color:#8a6416; }
+        .action-btn:hover,.language-select:hover { border-color:#5b7d9b; background:#102d48; }
+        .language-select { min-height:42px; border-radius:999px; padding:8px 34px 8px 14px; font-weight:800; cursor:pointer; }
+        .status-chip { min-height:42px; border:1px solid #315472; background:#0a2138; border-radius:999px; padding:7px 12px; display:flex; align-items:center; gap:8px; font-weight:800; color:#dbe7f2; }
+        .status-chip b { color:#fff; font-size:18px; }
+        .clock-box { min-width:145px; text-align:right; padding-left:8px; }
+        .clock-box .date { color:#dce7f1; font-size:13px; font-weight:800; }
+        .clock-box .time { color:#fff; font-size:clamp(23px,2vw,34px); font-weight:950; line-height:1.05; }
+        body.lang-ar .clock-box { text-align:left; }
+        .summary-strip { display:none !important; }
+        .dashboard-grid { direction:ltr; }
+        .workflow-card { border:1px solid rgba(255,255,255,.16); color:#fff; text-align:left; box-shadow:0 13px 30px rgba(0,0,0,.20); }
+        body.lang-ar .workflow-card { direction:rtl; text-align:right; }
+        .workflow-card.progress { background:linear-gradient(135deg,#087be7 0,#0751ad 100%); }
+        .workflow-card.collection { background:linear-gradient(135deg,#ff7a10 0,#dc4b00 100%); }
+        .workflow-card.partner { background:linear-gradient(135deg,#6b2be5 0,#3c1199 100%); }
+        .workflow-card.zero { background:linear-gradient(135deg,#1db74c 0,#087e2c 100%); }
+        .workflow-card.collected { background:linear-gradient(135deg,#10a9b4 0,#087985 100%); }
+        .workflow-card.partner_closed { background:linear-gradient(135deg,#f0bd08 0,#c78b00 100%); }
+        .workflow-card::after { display:none; }
+        .workflow-card .icon,.workflow-card .count,.workflow-card h2 { color:#fff; }
+        .workflow-card p,.workflow-card .open-hint { color:rgba(255,255,255,.88); }
+        .workflow-card .open-hint { left:auto; right:20px; top:auto; bottom:17px; }
+        body.lang-ar .workflow-card .open-hint { right:auto; left:20px; }
+        .workflow-card:hover { box-shadow:0 18px 42px rgba(0,0,0,.30); }
+        .team-footer { margin-top:10px; min-height:66px; border:1px solid #2b4e6e; border-radius:18px; background:rgba(5,23,40,.86); display:flex; align-items:center; justify-content:space-between; gap:18px; padding:10px 18px; }
+        .team-footer-main { display:flex; align-items:center; gap:14px; min-width:0; }
+        .team-footer-icon { font-size:31px; }
+        .team-footer strong { display:block; color:#f4bd2d; font-size:clamp(18px,1.3vw,24px); }
+        .team-footer span { display:block; color:#e7eef6; font-size:clamp(13px,1vw,17px); }
+        .team-footer-slogan { color:#f4bd2d; font-weight:900; font-style:italic; text-align:right; white-space:nowrap; }
+        body.lang-ar .team-footer-slogan { text-align:left; }
+        .detail-toolbar,.stat,.ticket-row,.ticket-panel,.remark-row,.empty { background:#0b2238; border-color:#294b69; color:#f8fafc; }
+        .detail-title p,.stat span,.ticket-row small,.field label { color:#aebfd0; }
+        .search-box,.field { background:#091d31; color:#f8fafc; border-color:#294b69; }
+        .ticket-row:hover { background:#102b45; border-color:#557896; }
+        .badge { background:#102b45; color:#e8f1f8; border-color:#385b79; }
+        .ticket-panel-head { border-color:#294b69; }
+        .history { direction:ltr; }
+        body.lang-ar .history { direction:rtl; }
+        .toast,.voice-caption { background:rgba(3,14,25,.96); border:1px solid #2d506e; }
+        .voice-caption { direction:ltr; }
+        body.lang-ar .voice-caption { direction:rtl; }
+        .voice-btn.on { color:#bbf7d0; background:#0a382b; border-color:#2a805f; }
+        .voice-btn.off { color:#cbd5e1; background:#0a2138; border-color:#315472; }
+        .voice-btn.blocked { color:#fde68a; background:#3b2a0b; border-color:#8a6416; }
+        body.main-view-body .topbar { min-height:98px; }
+        body.main-view-body .brand img { width:clamp(245px,18vw,340px); height:auto; max-height:82px; }
+        body.main-view-body .brand h1 { font-size:clamp(24px,2.1vw,38px); }
+        body.main-view-body .brand small { font-size:clamp(11px,.8vw,14px); }
+        body.main-view-body .dashboard-grid { gap:12px; }
+        body.main-view-body .workflow-card { padding:clamp(18px,1.4vw,28px); justify-content:center; }
+        body.main-view-body .workflow-card .icon { font-size:clamp(38px,3.3vw,60px); }
+        body.main-view-body .workflow-card .count { font-size:clamp(72px,6.3vw,118px); }
+        body.main-view-body .workflow-card h2 { font-size:clamp(24px,2.1vw,39px); }
+        body.main-view-body .workflow-card p { font-size:clamp(13px,1vw,18px); padding-bottom:24px; }
+        body.main-view-body #mainView { padding-bottom:0; }
+        @media (max-width:1350px) {
+            .brand img { width:220px; } .top-actions { gap:5px; } .pill,.action-btn,.language-select,.status-chip { padding:6px 10px; min-height:38px; font-size:12px; } .clock-box{min-width:120px;}
+        }
+        @media (max-height:820px) and (min-width:901px) {
+            body.main-view-body .topbar { min-height:78px; }
+            body.main-view-body .brand img { width:205px; max-height:60px; }
+            body.main-view-body .workflow-card .count { font-size:clamp(56px,5vw,80px); }
+            .team-footer { min-height:48px; padding:6px 14px; }
+        }
+        @media (max-width:900px) {
+            .brand img { width:190px; } .clock-box { display:none; } .status-chip { display:none; }
+            body.main-view-body { height:auto; overflow:auto; } body.main-view-body .page { height:auto; overflow:visible; }
+            body.main-view-body .dashboard-grid { grid-template-columns:1fr 1fr; grid-template-rows:auto; }
+            .team-footer-slogan { display:none; }
+        }
+        @media (max-width:620px) { body.main-view-body .dashboard-grid { grid-template-columns:1fr; } .brand img{width:160px;} }
+
+
+
+        /* ======================================================
+           FAST MAIN-TV HEADER / EMBEDDED EXACT LOGO
+           The exact supplied IMG_8993 artwork is embedded in this
+           HTML, so there is no extra image request and no risk of
+           uploading the wrong/cropped static file.
+           ====================================================== */
+        .brand img {
+            width: clamp(270px, 18vw, 330px);
+            height: auto;
+            max-height: 84px;
+            object-fit: contain;
+            flex: 0 0 auto;
+        }
+        body.main-view-body .brand h1 {
+            white-space: nowrap;
+            font-size: clamp(24px, 1.7vw, 32px);
+        }
+        body.main-view-body .brand small {
+            white-space: nowrap;
+        }
+        /* Keep the approved TV header clean. Operational chips remain
+           available in detail windows but do not crowd the main 32-inch view. */
+        body.main-view-body .status-chip,
+        body.main-view-body #syncPill {
+            display: none !important;
+        }
+        body.main-view-body #remarksButton {
+            padding-inline: 11px;
+        }
+        @media (max-width: 1500px) {
+            body.main-view-body #remarksButton { display:none !important; }
+            body.main-view-body .brand img { width: 250px; }
+            body.main-view-body .brand h1 { font-size: 27px; }
+        }
+
+
+        @media (min-width: 1200px) and (max-width: 1750px) {
+            body.main-view-body .brand { gap: 10px; }
+            body.main-view-body .brand img { width: 235px; }
+            body.main-view-body .brand h1 { font-size: 25px; white-space: nowrap; }
+            body.main-view-body .brand small { font-size: 11px; }
+            body.main-view-body .top-actions { gap: 5px; }
+            body.main-view-body .pill, body.main-view-body .action-btn, body.main-view-body .language-select, body.main-view-body .status-chip { padding: 6px 9px; min-height: 38px; font-size: 12px; }
+        }
+    
+
+        /* Golden Palace wait overlay: shown only for foreground actions/first load. */
+        .loading-overlay {
+            position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center;
+            background:rgba(2,12,23,.72); backdrop-filter:blur(5px); padding:20px;
+        }
+        .loading-overlay.hidden { display:none; }
+        .loading-card {
+            width:min(520px,calc(100vw - 32px)); border:1px solid #805f13; border-radius:24px;
+            background:linear-gradient(180deg,#0b2238 0,#06182a 100%); color:#fff; text-align:center;
+            padding:28px 28px 24px; box-shadow:0 28px 90px rgba(0,0,0,.48);
+        }
+        .loading-card img { display:block; width:min(300px,74%); max-height:96px; object-fit:contain; margin:0 auto 18px; }
+        .loading-ring {
+            width:42px; height:42px; margin:0 auto 15px; border-radius:50%;
+            border:4px solid rgba(244,189,45,.22); border-top-color:#f4bd2d; animation:gp-spin .8s linear infinite;
+        }
+        .loading-card strong { display:block; font-size:clamp(16px,1.25vw,21px); line-height:1.5; }
+        .loading-card small { display:block; margin-top:5px; color:#b8c5d3; }
+        @keyframes gp-spin { to { transform:rotate(360deg); } }
+
+    </style>
+</head>
+<body>
+<div class="page">
+    <header class="topbar">
+        <div class="brand">
+            <img loading="eager" decoding="sync" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAdwAAACeCAYAAACYRLsmAAA+eUlEQVR4nO2dd5wV1fXAv+ftUhSNvSaKLbHEyu7aEmOJUSC2aESR3UXQ2FFRowKioDQbYkejILsLKkaNGkGNsSVRI29R1NhSLPGXWGI0MSosu3N+f8ys7L5373szr+xSzvfz2Y94Z+beO++9mXPPuaeAYRiGYRiGYRiGYRiGYRiGYRiGYRiGYRiGYRiGYRiGYRiGYRiGYRiGYRiGYRiGYRiGYRiGYRiGsXIi3T0BwzBKz4UD6Z+CIQQsbGtlxuWP85/unpNhrOqYwDWMlYQLDmHzijZORKgF0qrMFdgW4TBRXgemT5zP8909T8NYVTGBaxgrOBcdzIFBijOBHVBu0aXM+OlQdlHhewpza+p488IfU5VSziDgOyLcNHE+s7t73oaxqmEC1zBWUEYNpE6U84HPRLhq0LE8tzTF2SgDgF2/PlF4ICVM7TeEZ0YNYAOBEcBPFGb1glvHzee/3XQLhrFKYQLXMFYgxhzEZpriVIThoryIMP6IY1kiFZyEUg+s7r1YeUGFK2rquHfcfqzRsjojgJ+JcmePgKvHPcq/u+xGDGMVxASuYawAjP4x+xMwEjgU5TYquPYnx7JVCk5QOCxhd28jXFVdy03jDmX1llZOAE4Hfr1UuOrKeXxQ+jswDMMErmEsx4weyCCUC4BtgJu32oqbd92LwSjnAut7LnsZ5WkVnhbhuwTsh7C/47yPEW5oa+PGPYbyyeiBHIcyBmFhSpg04WFeL9uNGcYqiAlcw1jOGDeAb7QoJyCcDfRR5artd2TGd3fhRIXzgHWcFwr3qHJTTR1PZR5a0Mi2KWGMKnWOKxcL3CYpruo3hHdHDWSYwFiUtxCunjSP35Ty/gxjVcUErmEsJ4w7mHWXphilcCrwGcKV+w7g0fXWoR7lRGADx2WLBaakWrl2t2F8lm+MhU3soMpYhWOdJwj3pAKu6FdPetRAhokyXuG/KNdMfoTbi7pBw1jFMYFrGN3MuCNYu2Ux5yOcCXyAMuHoY/hVWwUjES72XPY/hBmtKSbteRwfJh3z+Sa+VRFwroRadBYKzxAwtWYoD4weQD1wMfANYPpS4Sbb5zWM5JjANYxuYsxA+gbKeQLDgFdVmDDkeJ76ajGniTAWWCPrIuUNFaYt7UXD3oP4ytd3upFNUE4gxQvVtTyW8zy4CDjNc8pbAlOq6pg5uj/HEs5rB4QmhMsnPcyriW7aMFZhTOAaRhdz4QB2SwmjUI5GeFiVK486hvcJw31OAtZ0XPaSwoSaOu7N1feCJgagHB0J8XaeB26nF/dUD3KneHx+DhtVtnE+cAru0KIPBa5eKtzy4Bz6o4wDtlfhcYWrp8zjkVg3bxirMCZwDaOLGDWQQyTgHIT9Ee5pa2PioDo2UzgD5WDPZe+rMrqmnkZfvy/OZIu2Sk4BTsDvuRyizAkquHL3IbzkOpyey1q0cBYBZyGs6zjlC5TpqR5MvaeRfqKcCfwIWIhw+aR5zM05vmGswpjANYwyM7o/BwMTEaqAORtsxJXf/yF7CJwDfMdz2dexsr5+mxs4UuEMT8hPTgTuFWVKv3rSvnMWNHKywM+BrT193KXCpF/dxeIg4FyUk4G3EMaa4DWMbEzgGkaZiGJozwF2AG7afS8e/tZW/BRlOK792ZCXFK6oqeNOX7/pJoaijAK2zTwm8DTKHK3kmerjeKN5FjtrioOAocCOWZ0JfxK4rTLgF7vU84VrvOZGBqlyfrRgcPGwwrUPzOFvAUwg9IB+XWD8xPnc7bsPw1jVMIFrGCVk3MGs21LBhZFQbQWu/OEAfrfW2oxFOMR7ofBoSpjUbwjPuA6nb2F1Vuc0Qq14k+zLeToIGFkzlBd9Qyxo5CiBcbgEL/wHuK6lF9P2HuRO8bhwNj8IAi4ABnqGWCTCjb9/kuc+/Ae1AkMV/itwqRVLMAwTuIZRMsb050wVxgEfqzL16Fp+FyiXAINyXHYnwuTqWl5xHfzjLL5TWcEJqpxCGJaTjXJqdT3T484z0pDv8BxejHBrK1y5Zy3vu05Y2MQOQcAYhOM8ffwXuLa1ghsfbOKnKOOB/6kyuddiZo17isVx52oYKxMmcA2jCM47iD49KzhbQsenl4IUNx55LO9Iigkoh/uuU2iqTHHpbkP4s+t4cxPHaMDPc5hxAf6q8OOaOt5MOu/0LL6P8IDHMQoAUWYEFdxSM4QXnHNsZJsALhGo9Q4kPPDpp0x7ch5VwEkKa6Nc30u4zqoUGasaJnANowhGDeBUEY5PtXLshMd4O93AZIQLPacvBma2BUzbYyhvZR5c1ECfFqFWiGrb5ubdVuH7Pi00Dgtn0zdQnkLZIs+pr4gypqqeh1wHmxvZRkNT9zCgt6ePeZpixP2z+QbKJQh/njSP8wudu2GsiJjANYwiGD2AEQI7TZzPSekGHvLs0y4CGlp6cYdrf/TZuazbcwnnE6Z0dJuNMwhS7OYL7UnCC7PZNRX49307ovBMShlfVc8TruPRfZwNnI0rllh5o7qe7Uf3ZyTClpPmc2YRUzeMFY5Ud0/AMFZolEqFtoWz+UGWsBXu0RR7VNexa3UdU13CNt3AmT2X8BfgAmIKW4EbSiFsAaJ+vKFHGeP+QIXfpht5bUEDJ2Qe33sQ/66u4+KeKfoCpwnMz+hgu+bZVImgKKuVYv6GsSJR2d0TMIwVnEqUtrZWekqH5asE7FI1lJdzXZhu4GiEa5MOGKT8STAKQZWbRbypHV1sL8Jt6SZaq2uZlXlw5yF8CtwM3LyogQ2XSodczwFbowSkvKZnw1hpMQ3XMIohRSVCa0UF2rG5Aj7Jd2l1PfdIwC4oVwNPCTwt8DTwbq7rfE5MhVJTnzcf8u0K4xHuAF4FfpMK2NslbDPZpZ6POjUoq6tpuMYqimm4hlEMSqUqbW1tSEcNtzVFEOfySAs+r2Pbogb6LBX+iTuncuLKQDF5F+jraP9ndR0nlnQkIRATuMYqiGm4hlEEApWSoi2zPWjtrPEmIcr49FvP4Y887UWh8LHnQHNJBxKWSoAGfm9mw1hpMYFrGMVRKWQL3F4V8TRcL8obniPO9IvFkvL0q8I/SjlOICwJBBVMwzVWPUzgGkZxVAKtpDqH2C2tLE7gCu74Wi2TwAW+9MyjpCbsVMASlEBMwzVWQUzgGkYRBFFYUGZ729LCTcoRPsG6tMh+nahm30OeeSRhWSpHYamAqpiGa6x6mNOUYTgYdzDrtgo75zsvSLEFyksiSEcR27ZakQJXvBqnTzAWR4o214xLpFF/3XMAbaQIRFn7ov7sl+/CtqW8Mvm3+T2+DWNFwASuYThoSbEHcC/wLNACLFFYklJaFJYAS0jRIvBWEPAUGXuSq31R5B6u4NSRyyVwFdpcaedEaS1B90GHf61OG//UFG+rcLVCL4GeRP9V6EX4tzpAqieHgTulpGGsaJjANQwHqogI702az4Fxzj+qjoM6/v+SHkUK3ABxJV5VLc82kECF50ApBO7XS4dUBWtOepQm4OF8F40ewC8DtfSzxsqDCVzDyEO6kXeBzXOelKGNrtGzSIGbQp1GaSmTwFXEPVxJNOqvPwtVGtON+TNltQqbPTgbUlL0XrhhLDeY05RhlIG2xcUJCg08i2HxaKJFop7Fd1AmjdowVkXsYTIMH+3aVQFmzS96F6fhqrgFoNf0Wzw9nOM5DduJKU7bN4yVBDMpG0Y+Ops1L0sFzA9SLFGlpbKCJQotrS0s6d2TJdpGS5QpqlicAlCDrhW4WgoBH3CopvK+a7YVmJ51qZmUjZUIE7iGkZ9lliDhjX5Dea7cA0aeu64DZXlmIw/hLFJa/HjVQ/l9vnMWNvC/wNyjjJUcE7iG4cPtttRFQ9PbKX+UXvmujYrKHw8cjfAKAbdX13NPnvGc20s+07ZhGMmxh8kw8tPlupcIvZyJKDxeyosa6NMKx6twIgG7LruATREOTjfyCXBbqpLr+g3Ozo+s0OK8yW4WuOJMx2EYKybmNGUYCdAu0nrFpckq/xZheMemF5qoSTdw3VLhAxVugA7CtjPrARcErfxfcyN3LpjFbp3GEyY6rwo8pm3DMBJjAtcw/LQL1+7YXezkxCQwH2W36lpeWdRAn3Qj56Ub+UtKeQFhBLBG3I4VjpUUC5sbeSrdyI8Bqmt5TOEg4P86jSsmcA2jVJhJ2TCWQzQMpXlNldtS8EhVPa+n57JWuomLlypnA+uUYIx9gX3TjfxZhJuWwgxghwplsAgDUA5Uyb9nXE7UvJSNlQgTuIaRn67XcCu4ufo4LgNobmSfdBMzWcLRQJ8yjPZtVa6phAkCtypcWV3LLQAvzeKbZRjPMFZJTOAahgfNSthI13kuf86X6SZGoIxQ+HYXjdpHYSQwsrmBGYFwxa51vNklI3sQ03CNlQgTuIaRny7TcNONbBIJvZNRvlFgN68Av0oJT7cpBwgMhWSaqgrDBYYvaOShlDKtqp4nCpyLYRgRJnANYzlg4Qw2aKtkNHB2odJd4C5VplXX88cOzb8FxqRn8X1SjIXOVY1i9HmoCoemG3lR4cqaOu4scHqGscpjAtcwPIjLpFxiFs5gg6AH5wZwpmTU1I3Jx8D0oJWbdh/GB76TomxPB784m2+3KmeJMoyo5mxMdhOYk27kamBqq3DrnrX8t4D5JsJSOxorEyZwDSM/XyudqVRpBMDCJnbQgHODjLjaBDwvcENVHbOTXLTbEP4MnPH72xnVuyfDCc3XfRN0sQlwZaUyLt3A9Erlml2Hdg4lMgzDjQlcw+hCmhsZAvwsUPYtYGf4XwKNAdxSU6Qz0/dP4HPgWuDaBY0MFjgff9IMF30Qzm0Vzl3QxH2pgFur6nm0mDkZxsqOCVzD8KAlSnzx4kzWDio4T4UzFNYqoIvnVbm2pp67ipmHj2hf9s7mRvoDZyoMSHK9KEeqcGS6kXdFubKqnhtLNbdUYCZlY+XBBK5hlInf386avXtwVptwHoUJ2juBq6rrWFjiqTmpquMR4JEXZ7JFWyWnAMOBDRJ00VeFG9KN/FyFS2tqmVGemRrGiokJXMPIzzINN0YcbnoO69PGecCpUFBoz+8RTquu5ZX2hsjse6TABlV17FdAnzlJN3EZsJMqjbvVcS9wIXDhgkbqBcYBWyborq8ot6cbuUbhrgrh2n61vFbqORvGioYJXMPwkNRLeeFs+mrAedrGiUDvAob8WJUzO5qOFzTyI4Gbga0BFF4qoN/8KNsBhwscnm7kTYVTaup4qqaOBqBhQSMnC1wMbJqg128InBQoJzU3MKMSRu1Sz0dJpmVeysbKhBUvMIz85NzDTTewx4Im7g0C3lE4g8KE7cNUsENHYZtuZKzAY0TCNprI0gL6jkNHTXxbgSfTTVzb3lBTxy3VdXxThYsK6VyF4UuFdxc0ckt6DtsVPVvDWAExgWsYRfB8E98ixV2iHFloHypcVF3HIdXH8a/2tuYGDgYuzToXlhQ6Th6yqwIpZzY3MrVjU00tEzWgH/DXAsboLXASbTz9x1l8J84FKdNwjZUIE7iG4aFDHt+vNdzMerh71vJ+S092QDgP5YWoeSHCBODt/IMwuabWUYtWON59Om3xZp8M8WjxSrZgrBnKiynhsBjdfgZcLnAL8HLUdltLL7bfYyhvFTxZw1hBsT1cwyiSvQfxFXB19Pc16QY+RpaZZbMQHq2uZbTrkHqcrQJoLWKqXgJodUlcFbdG3a+W19JNnIdyla9PhQtr6sKqQ4ZhmIZrGPnRwuJwVb7W6pwEmm0y7sA/XI3l0nDx7A2nlI99F3y+lBuB//iOp5Rnip1Uqs1MysbKgwlcw/CQaT5OSoXk9Mj9w+51PJvjeJfE3rYjsNjVrsq7vmv2H8ZilLm+41X1vF6KuRnGyoIJXMPIh3TYw02QSznV5tf+oFNFH8eQvOpsl7I9sy3O1pRf4AKo0Ow59C9Pu2GssnTJHq6qbgzsB+wEbAisD6xBWOnkQ+BvwIvAiyLyRVfMyTDKzZer8VVPj0+xKu/nunap8HalS7QrPUowNVe/rS7DuQT+CkQRf/P091Xxk7I4XGPlomwCV1W3JYxJPJQE1UhU9UngAaBRRP5dpumVBVXtA1TR2XLwhYgs6KLxewB9OjYBX4mIW3sxciJF5lLu+SmLfQXwUpK7wk4vYbU2h6gJxBG+UwrE46VckVvgaRv/kApnfyURuMWgqt8Avg2s6TsF+BT4SETyLSwMo2hKLnBV9YeEGWl+UGAX+0d/41X1AhFZIbwcVXUGMMxz7BNgOjC5HBq8qu4JXA9Ue45/DFwnIhNKPfYqR4J93eqT+TLd6O0np7dxWxs/dGqcyhpxx0+CCr3EcWeqbAk86bsu1ZM2jxtXSTTTuHG4qrojcBPQA9iFhLWFVRXgTeB1YBHwCvCyiPw5ST9dhapeD+wAbAVsAfydMAztbaAZuE1Eun3RY3SmZPtBqrqxqt4FPE62sP0QuATYA+grGRCamn9OmKy9fe9nLWC6qs5T1bK8ZEqJiAwHtgfOJHv/aj1gDPCcqq5dhrGfBw4kfACfd5yyAXCZqv6s1GOvIhRVLchJvr1g4efOdmXtks8l7NdZXEGUY3JdJm3lCVNKioi8CrS/f3Ka63OwLXAE4bvql8BbqvoPVZ2iqluVZKKl4zHC+W4R/f9mhO/docB1wHuqWnAyFqM8lETDjbTa+8iOHfw7MF5Ebs91ffSwvBr1tQ5wBXBidHgA8HtV/b6I/K8U8y0XIvIG8Iaq3g88B3wr45SdgLMJk8GXeuz/EIZo7BUtfFwvykuBX5R67JUVLZGWlouXZ7NOS0C9wjoCn4rwgSp1hJpLNsJm5ZiHLHtxZ3JQupH7NeAOSSECuygsbgu4bY+hfILSw7Mc6fIYfxG5KfrnWFW9GxjkOfWvwFPA/xF+x+sR3v9W0V/H1JybABcAF0RWrItE5J8ln3xCROQh4CFV3ZtwMT8w45T1gXtVdWsRce+zG11O0Q+FqvYH7ic7f+xEEUmcd1VEPgV+pqqPwdchB7sAlwOnFzPXrkJE3lfVMcAsx+Edu2AKpxIuVDIXQBur6qYi4ozxNLyUXsMFFs5ir5aAB4H12wfQGCI+PYvNq4fyXqnmEQn9rXOccoSkOAKWrUAqUoxIz+HANqVXKnBeUxLnriCBV3gGF+IXuLNF5BLfhao6mHBxuk3GoeHAYFX9mYjMLnBeJUVEngV+rKp/w13RaU98jm1Gl1OUSVlVDwbmky1sTy9E2HZERO4hNJO2c1q0V7mi8JSnvSwaSkeiRctjnsMblnv8lZlUkbG5najkH8A9SS+TVG4zb1JaNFaaxkz+ULmUzyvUW6ihPN7UMRGRt8EbB5zzOxSROwmtUa56vqsBTao6qrgZlpzrPe2ZiwajGylY4KrqNsC9jkNXdDDtFIWI/BaY1KHplFL02xWIiE8DWbeLprDI015IfdZVEy3OSzkf/YbwbnUdp7VWsDHK1cCX8abFJS/N4pulmMPvb2dNlCTOdI+JsFd1HcfsOpT/C8DlowzdLHAjXvS05100ichiETkBuNtzyqTInLu88AdP+8ZdOgsjJwUJXFVdHfgVnUNQAJ4TkQuKnVRHRGQMy0wiQ6OxVxRcez1rd9HYn3vafSESRlcSLBPiex7Hh9X1nNfSi80I0z1+mufqPq3C48/PYaNip9G7JzPI9jXIRrgnpdRU13FwVe0yxzzxhymVJHypyNSO73ja3UZwByJyLKEviguXBtxdvOlp36BLZ2HkpFAN92rgu472cu2xdkyQ7hp3ecXllr9+F43tCz9KFC5hAF3kpbz3IP5dXc8lPZTNRPAFFLXPaLvKNl5qnk1VIcO/Opc1mht5APhp7mG4q03ZqrqWQf3qSWceD9q8wqssVoGE/LdE/fhyXm+rqgd6jnUpkdOki3W6dCJGThILXFXdFLdp904R8ZlwiqWJZQIkVh3N5YTujIPzfbcrkoWge3HFgBbuxBObXer5QpXnYpy6sQak001cmKT/F2az6+IlLFRy7N0Kd0jALlV1DN6j3l9msEK92vjykDbW9/zF1nAjfp3j2BEJ+yonnzjanOFeRvdQyENxpqe9JPu2LkTkc5ZpuZuUa5wy4Ezs10Vxxb49tPJkKjK6D2VyupHnmhvYPt+p6SYuTgW8SJiBqTPCOyKMrGhlnepahlUNzV3tKByazwqac0zaikvt6KuslKjPKAvVXz2H9000o/LiCpu0BfZyRKKwoEhQnOw49GcR+X1ppuTlcuAQyFmBJRFRdpqBhJmtViMUkB9Ff89HntLF4Cx5RujVXe6Y4rLsranqdwgTfHyTcH9oKWFmm+dzmLVKjqpuR+iBuXk0j4CwyPlzIlKy30hE6c2jQZ4+1VsUsF1ry9wa2FOF1xY0cDfKbTVDebz9wMLZ9NWAIQoj0Cwnmi9FuDeAO2tqmZ/wLvg84KM1UozPbE/5iiF0Lb7nrxAh/h44Q6eWJwXAtcDP9LNJjKquSegc1wa0iIgnQ3hpiVLV9mKZnAqi8Z2VrUo0ZgXhsyXAYhHx/YYKImkc7oG4nX4eKX4quYnSlFUXm6lJVdciDGQfjD/Yv/3cTwg190kFfsm+FXavpB2p6maEC46DCIPzNyB82D8nzGz1IfAXIE1Yicb3oCX2Ho1yRF8InECOF0wUCzgbuEpEvPtnkePbxdG9fIdQiPyZ0MnlDcI4yb9mXLMOofnuSMKMOl5va1X9HTBSRHyVbOJSPvNxPtN0ynvGe717Uf1VC4OAE0XZq+NBEY5BOCbdyFfAyyibBoEzFO0LgSt79eLqHQcVvvjbfxiLKUMil3bipnb04POgLqRPX67l9XJdFL1vjgP2Ivytb01nP44PCJ0r3ybMEvdbESm0NKPrHZU0xeUPCd8z2xPONSusKEqD+TLhQvs+Ecllck+Eqh4EHA0cjsfhKxr/feA1YJqIJF4oduhrbcL46qMJrT7rZRz/N/A0cE8ULlYUSQXu7p723xU7kbiIyGeFXquqQwkdvjIfkv8R/ng2p3Pw+HrAWOBoVR0sIi8lHNIncGN/7qq6PjAVqPOcsmb0tyVhkHttni59LyHf+D8gDI3I1Iz+Syjg+3Vo24rw8zojSg7gChtDRL5U1asJXzbtD/j68LXwGK+qvwGmEXqon48nT7WHfYC0qp6YL8tZTJaV50sQh/vkTG+Mal5USXlU4CASkDOAGQtn0zdQBqMcTefvYjVgD4eW/BHK9S29uWnvQaxQxUEKoJQCN7GzYSS87iG349LG0d9uhItJVPVpYIyI+EJ9fLi0sViLe1VdlzCd5f4xx9o5+humqq8CJ0dJOAoiSkN5KfGdYr8V/R2kqg8Ax4lIrLC6DmP+BLiD3KGS6wI/AX6iqmOBU0TkmSTjdCTpHq5P4Oas7bk8oKq/IPxwOwrbvwDHisiaIrKfiGxFaCqdmXH5dsCLUVatJPicM2IJXFX9HuHekUvYziZ0XjuI8CE5F3iG/J6ZsQWuqo4gXN11FLYfAINFZC0RqSIss3hGxqXrAL+MfqBORORjEZkmIocSJhnI5EfAw4TJC9qF7fuE1on+wKaE1pb9CRPNu7hNVX0LlbLTq09ZPHU7CYt+Q3i3upYp1XVU0cY2CJdA9t6rCI+LcnJ1HRtV1zNhFRC24P+tJ3WaAn88q7PqU5R7+QE6C9sPCBeP+xMK14mEz1cm+xKmsz0p4RxdAjfuFtIcsoXt/cCPo/YDCBfAruiHHYE/qOqQmGN1QlWvI8zpkClsP4zG/F6HvPtbEi7QH+1w3uGE74okY04lOx3xJ8A1wHhgAqHVrSPbA0+r6rgkY3UkqYZb42j7MkeSh+UCVX2QsExgR/4I9M/UmKO0h8NV9T3CJOYdma+qB4nIb2IO7Xvh5hV6qtqPMItXZtzs+8C+jvyoTxFqwqjqboQ/mMz8qrHGjvoYE/XRkXeAahH52hsyqn50Y7TPMznj/EtV9R0RyRniIiKvqur/gTeZw2LgSmCKYxX7FLCzqr6A+/d5k6o+WND+shSX+KLnp0hXuqxUH89fCbWESxc1sGFLikNQ/rNaLx4txmzcnQTFxeGWMp/zdp72dz3t59J5W+d+EcksJnA/gKoeRmhFyrSI3KKqi0WkIeYcXYUk8mrmqroXcHCHpg+AAQ6L3pOqegnQQCjkMmlS1T8lsQSq6mxCk3smt4lIVrEVEXmH8D30cJSCc050aD9VnSwieTOARWmDf5TRPJrQPN3Rs32sqg4jzOLV8bu8JPpepuQbK5PYGm60h+hSvcsVClQSVHUK2cL2n8DhuczTIjIOeMhxaHa0LxOHggSuqq5GuDrOFLZfAAflS0YehWf5zB55v3NV/T7Zwhbgpx2FbcaYU3Cns7wp5uflM0e9CmwhIhfnMRnVe9rXAJJqCis8u9TzUU0tM2rquHdFFbYlwCdwEwlxVT0Af8IaXwrVjsL1XfxbQojIg2QLgHZ8McAuCq3clCk8XcIWABH5r4gcATzh6cubozoTVb0Qt7Cd6RK2jrncSeewrBExxrya7M96pIhMdpUzFJGZuM3sk6Mtg0QkMSlv6mn/U9JBu4oo97Ir89UFIvJhjC5c8cYb0DndZC4K1XDH4s7+c4eI+PLDZuJ7+OJoa9MdbXNiOCG5Ppe4Au8tT/vbcb6rqFLTHM/hY2OMn7P79n9oEP9l3WO1wk3K4ikI74wNNnyUag/XFZnRTlbqR1XdkM4m6DMkTx3sKMrDVeykr6oeFWuWhZnKAXbt8O8ZMTXUo3GnIj0i8jvJSRQhkmkRA1gUlTqNhYg8ALT7afRRVVcBh/Yx9wfOyWi+V0Sm5RljAe53my9/tZckAteXIqzUIRil5DpH21/zmTjbiczLdzkOnaaqcXKUFpJY5BvASM/hGxN05RO4+bTrgbgdF6bmGzAytWfWAoZ4Dk/veNqTvERu9bT3i6wGXUpF7+Ui29IKTZm8lGP/plR1X/xVh56JFnqZdLTo/CuBF+81nvaDYl7v/KxUNZ/z3tod/h2rCpKI/JvQJ8ZFnPle4Wk/N874GYxiWbhcrtS1VzraRsccwyVct1fVfE6qnUgiEHyb710Ze7mNqp6hqo+p6lPR37zIkzbz3O/h3tOLux+S7/w4q7BCEosMInsvB6A5gXYL/jjIfPtaLq3+rwlCbOY52rbPtfKMKNoPQERcDijt7JC4w2UeyQV5G3/2eREC1xenW8pqRSs/xVZD25Xc1ZzO8rT/h9DxZjydTcs5EZFFuEvp+czNmfgWEvk+h+sJ93B3FRGfqdiFbyGxX66LVHUHwvKhmbweFaxJhIh8TJiNEEJHK9eYB0FWGtQ3RcRnWcsc4wPczpk/iTtPSOZU4HvQfUnyS0aUcGMu7i+pEXjB0e7zmLs/4fBPetqPJ79pOVEITsTRnnbfXpEPn8DNN6fM/W5gWRKFGLyEez/1++BPEYg7LR0kN//9EdjD0b4FYehXl1HZqywG4FVK4AbFfYI+QZO3T1UdCVyGP559co59zo8oPDb5RcLwuo5sqarr+fwniqWI2r7Pe9p3y3OdTyuMZXn0cCvwnRzbT4MdbQsSjvEa2REVcRdDQDKB63O8KGkmDg+/JjuF2r3AqdHqxsURjrYPRcQXQuJERBar6m8J40U78m3NX8y9kBW2r+ZvUmGR2KSsqvt5DmUlrc/Ba572XAXOwb9wS7ov9SZugVuaOsBdkEsZAN8ebgKaGzgA4eJSTKcA/llV53zJdSW+z7DTbypK7NKXUNDtR5hjOjv1ZchXhO8d135rKfAtSrfDX4IvH2XJay0in6rql2Snj9wxz6W+HN4FJ1ASkbSq5rI6usb0yQ4fLmG+pqquG5nY85JE4PriO8ta/klV68kWtv8DfiZhoXXXNZvjzoiUSNhmXOfySPsB7j3edhLtIUUZmHxB2EnMyVCYx6JvZeoqM+jDt6efuWrPxPf7Sip4fGEaOTMCeShKuFb2RNzZtIsi9pwC2FC6N9dvdwtcn6AZETkibUzoDBo3t/lc4BwRccbelgifArMthQvcQp2p4vAJ2QK3t6r2cTmKqWolbh+RL4otfuOL3lDV9XDXIU+qLPp+T9+AeHHtSVY+vuTdpdEc/GR6lQE84RO2Ef087b57yIfLMQLImyw+qZdkrgXQO3nGysRnUs71wnYloIBk2wY+s1e+hVmpKru872nPlU2mLFR80c1OUyXQkouhmExb7aSKsyj47n8bwsXyd8gvbF8kTFCxpYgcU2ZhC35fmXwLVijChF4Evs/Pl13L1/6XEszFhy++P2meaZ+jbOx+Ymu4IvKvKK9k5kqhEM0hFpGmuovjUL5co2t72gutj+nyvIX8QsT3+fqEiE9AL06atozCErdn5U2NuEZV4wpdXyq5fKECpUp2/5mnvegk7kmp6Im0FahbiCDq/qZivzxTQoWnD4C3xe2o1kND83/Rxe3XbFkuSvS5eItwr//vZD8nnxCadd8hdBYsaYnN6J22FaFg3YHwXVUZ/Xtd/M9gnPesb4FRsMCNwnd2IVycdHQi3JDwN+IToGvhXvz6FmG+hXIpcGm3ECbM2S9BPwXVnu5I0kwszxGm+upInJVXofhMnPk8o30v10L3m33adD7t3idAk5YNK6Rwgu9Vn0sE+B4en8UgCTl/ayLyleaQDgnw/TYSF4zA8X2kEngJt7WgvrtOkpM535xishhhfI+A63epd6bnc7KogQ1blG+mhG+RYmvgx6rEKrree51uF7i+52+6iPhCcEqOqv6I8L25F/70uPnIG9uKR8NNUnglSlJzJKEPzI8oIId0hC/Hmu89UM7a4b657IPfKTYJsTeOkgrcp8kWuPuoau8Cq+nkY3NPez5ty+fgVWiiPZ+AzFd5J6mG6xunENOgr69cAtdnHlpE8XVPC02QklTA+CwBpUzzV3aCgDBzbKn6aGPHKPVjInap/7pcZfv+2rSFs/lBEDCXPFpwKTJcFZna0fcJ+p6NkhLl8R5P54IombzMsgV9irAggCszWzEabl5UdSPgIsKKYLmE7BeE2uiHhM/mjp65JbUoldPsXUi0SBJiW06TvoQewh2w/D0gcfxUDHwaZL7VkG8fsdDC777r8m2U+z5f3wPvM6vGTSXZEZ/TVC6B+wnukoXnJIzPS0zkMOYiqVHWt/Arqg5wIbT1otL3TXszSeUnvkkZKqKT3y1E2ProN4Rn0rPYnRSL8G/fLA/4XrSFpkCMjarOwJ/w5RngBnHU21bVAwFXrvZcCR3aKciiECW7mYVfi76WMM717czQJFWdizuU0fe8+d5x5cw67tNAZwO3Fdu5JKi/nUjgisgbquqKc9yf8ghcn6DJ9xL21a4stFi077p8DhS+B8Bp2haRJSUyq4L/xZxrde+LYSt0oZIEn7UgqWDyCdzkDjzdmGSiCIHcoZOv+0ia7CUv1UN5r7mJEare2MlymgjjknRLpySo6vW4he0HhNXJciVo8S0G4myJJLbiRMk9fJV2ngSOz1OcxifMfM+z73eRq4RhsfgsLV+JyFNlHDeLQlZELg03UXqrBPhWSTlNBCKSxv3i/U6B8/BVCskXG1vICnuRq1FVfc4UPnzfba6XjS+mOE4ay2IpZSk1F6XRcEsUh9sVe7gqpEXpD9xc4Fg5qaqlCf/2TlInPydFpnYs5BkoClXdhexyle0clEfYgn/BWBaBiz+d5D0ickCMSnA+geucb4541aTvtyT4NNCueK91IrHAFZH7yM7s1FdVjy/JjDrj+wHFWf27qs98O8palZS9PO3P5bnO9/nmEri+PvOlRszEJ2ByvWx8FYZ8SQBKSan2WEtZdLwo2pb6x8yrwfqOJxDU1bW8UlXPo9V1ieKokyGeqjFaGoFbJN1hUvYpH7fGTLqTSIBl4Lpf7/cQbePs5zl8WozxoLAUsq7MgBuqqq9ATrH4FInk6V6LpFAvQlfppDHFTMSD74GJI3Dv9bS7Si15iYoJ7O049EKUXzMXhTzwPqHnyp6UC9+eSC6B+6Cn/fsJxy6EfA5oxfaTXFMuMjFjxWo5vmdfruQVDFWPM5wU5FmfRZlSO5bTpOwKY4TcOZk7UozjpOt9k+td49uye0ZEfKGQcfvP9Tzf52nPyolfCqKQSlfSkK3iVDYqJQUJXBF5Gbg8o3kbVfVVgCgUn8CK43XWgHu/IFGyadwpIsFRlsuB7yHJ9RD4EoInWijgjz3zvmyiIu3zHYf2jFkdqRhKZVL2afYl0WqSmIJ753qx5zNNq/u3o8tZeb6U8mfnASlZXHUxlHubwoXvBe7+nLIpxnnQdb+5vgefI1bOetsZ+BLK5JrvnZ72IxKMmxTfmIeUccwsCo6TE5ELCRPVd+TnefJZJsVnlsg7bxH5H8vqJHZkWJTqKy6u6jmfAL+Ica3zpZkriYWIfI57BXiAqiZJo+kzz+Rb3bvqB0O8EntOVDVfRi4onYbrM711uQD4bxeFn3QngXg89bX8nsAxKGRLp1h8ceBxnfZ8z22cHAKu92Wu371PKCbZdvPtveZa2L9HmCYzk8PLqHE24Davn15Mp0m3KIsNTD+C7GTbt6tqsQW/2yl2P24s7ixR4+JcrKoDcO/fTowEYz4KNRte5WmvS9DHwZ72nA9utM/kqv14QdKHQVUPVNXXibfdUKq9V5+GW0hW46K0yb0H+T11A8397Innt5NazqoFScrrNFWSeaaKi8Ptjj3clzzt+SrotLOfpz2OwHXdby7T/mee9uoYY6Gqa+JPipNvvpc62nqTbTmNhar2VtWxUZH5LKL3tau6W7WqHlHAeP01DClJpCgUJXBF5F3CvcU/Zhy6U1V9mlISkiaI6ISIfIZ7BXNGFO/mJdImXTFajyfIUlOoyf453OX4xkWp4XKiqvvgf2jivGzOJ7tC0Fr498Vdc5hKGE+4BfEWOD5rRqkEbjkSsxRMSrwm/5wU4d1cHgLvPmCXp9J00B0mZV/mouNiXu9bVMfJDuZ6+XsXfdE+rStpwxaqekCM8U7HnyQjp0VJRP4EXOI4NDwqLBEbVd2bsErZpeRIESkiE3Hnxb8hiTKhqqcQbr09lSenfxZFp14TkY9FZE9gZsahKap6V5TBJDFRMLbLWQkSaCsiMheY7Dj0oKo6K6mo6ibAE2Sbd94Ajok7Nm7hFjf7jstLcE3gflX1xqyp6s7krvmbd7ESZQ0bQHaxhx+oarOqelM9quqmqvokMDJqOlNE4iQmL5WXctL4v0SUSuBpECtV33KPqDc5TUELihLTHSbl3+A2Kx+qqmfmulBVp1NcHvhEXsoRPl+U6bm2sKL3s+u92k7eBa6IXAr8ynGoUVUzMxr65nEeoUPUloQ1ivPtlbsWPt8E5kUae66xNlLVuwnD7BYDOb9PFyXLdSoiw4ETM5qPAd5S1bNUde18fajq6qpar6rPEQZjZ2pznwE/F5E4Dksd5zaa7D3X1YCnVPVuVf2Zqh6gqoeq6k2EDg6ZNR1fAL4Xt+5hhGuVF2uxICJ/xV0pqV8076wfpKqeT1gUej38K71Ye5nR6reabCeufkCzqr6sqreq6ojos9tfVacQpnDcLzp3sojE2euG0qVf8wnu5GEqRToopefkEKqp3DHhgcdpqiwl7YtAxeuVu97C2fQttv+24u63y03KUbGDaZ7D16rqPFXtZH2KzJO/BE7O0XUcgetabOb73U/ztH8beF1VT+4oiFT1aFW9h2XJMnxZ/WIpFiLyE7IVhNWAX6vq7arqKuWHqtao6jPAlVHTqOg9n2+8F3HXxq0BXlDVrGgQVd1NVccROpMNiprrktZWhxLnlxWR21X1YULt7CTCXKvfIPxSp6lqGnicUBh8RJhDtL16xj743cK/BG4FLk2qwneY20mqOhu4kc71GAex7EP0MUFExhYwrGsfI3YBBRG5JsoEU59xaGfCHySEiTJ6EH6GvQk1uTEiMklVDyd7BZlk/M8IV+Z1hHlWOwqJnfCX83sDOD1hOkjfizXpy9G3b971JuW2HOFUyuFdOJNy0t93IFCufXYuw/ceFK9WaBnollzKIjIuEqouLW0AMEBV/0W4ON2cZTH2fyN0TjyLsIBAR3yCrSOu93lOXxMReU1Vj8YdtrQeMJ1Q28089p9onvcRWgMzt7Bi59EWkSNV9RzCMogdncuGE5qY/05nz+lNWPYuehQYKyILEoz3UGSGvhvYrMOh7YDnI7+TjwgF/4509hz/GzBERJ6PO15HSp7QPYpNvRi4WFUHEybDbi/eXk3MDfmIJ4FG4K5SlMmKsrzsqKr9CWOJM3/UEAr3twn3BJ4DHoppEnUxjfCB6tPhL5EjlYgMVdU5wE24KzN11DDeJFx5LYiufUBVLyLUlNtNfIlX9yLSSGjm+SGhSeZwshOWvwMsAOaIyK+SjkEYnD7e0f5Swn6eIHzR9cn4cyVCKRnpJkYIHIbyZQCvSugUlWnx6cg6CxoZXFPnDlfIkRhjudFwmxvZR3NVC1MO77mETxY08VxKQ8uKKm9RydTq47w1pkuJz5rUFd7jPyXMQXyS5/j6QPuW1r+AqcC06D33jKreCXR0Po2Tr9f1bOfVjEXkl5EmORvYNc/pHxM6Vd7Qrvyo6g8IfU46LjDzVXTLnMNUVW0CRgFD6ZzqcTM6C8Z3gRuiObyZZJwO4z0XRU+cB4yg8/tse7JrnS8k/H58qUxjUdYKKiJyJ6ED1ZaE8U77EWb36MuyzfavCIsAfEL40l1AaBZ9rlBtNsa8HgEega/3azeM5vNOjGQWScYpSQkwEXkU2DpymOpLaO7ZitBC8AlhDuQ/udKwichEVb2RZUUJMr3Kk8zjt4Q5s08otI8cfX9ETO/xGP3MK3pC4M7q5IifTTcyB2Vw+wGBw+IsqwRufGkWz+w6NG9O7uWO9C2srjAjzrmi7PX1hybsSxsHPTuX7XN5cbdTUVwqzXsJF4KZlKyQg4/ID+JkVR1DKED2JrRMdQyjmUcYHnN3ZrU1ERkcmUzbfWBcTpSZTCQ7DjiW2VNEXgN2i0yquxNq3R23HP9BmBAjS7OLFgn7RP4j7dckfo9Gz+5IYKSq7kRYf3YjQmH49+heXsksoFAoIvIF4SJ/fDT3LQn3c/sSWgb+AfyTsGhDSRaIXVKyTETeJlwVucJNuhUR+SeUMfVdCYkE6nvA7xJe9xnJNUUjJtV1HNfcwG0qnAsMTHDpOq0pnlo4mwP7DeHdTkfEvVu7PCS+eHUuayxewjyS57/9SGC2LGXy3nXlL24gIg8RVjjrNiJfiKujv6TXJsqBLSI3JB3D0ccfyY46iXvty8WO36GvV4i5WCjReC8TlkosK91dINowVgqq6nmiuo4fp4TvaljKLC7bBAELmhvZJ87JqW4OC2puYs/FS1gE8eYb8YrA8Oo6Nqqq45x+w/k47oVFOk0ZxnKFCVzD8JP4Zd+vltdq6qgLKtlclWnEC0faQOGZdBM3L2yKEqp/wXWqnCjhFku383wT30o3MkeV58i1b9uZhxUOqq5j56q6rLBBw1jlMIFrGAmIq2HuPpi/19QzsmeKbxI6EebX6pRTAuVPzY3MY3W2q6nn9qo6dkfYGWE68Ll2sdNUcyP9FzRxb6Xyd2BwjEsWK9zaFrBtdR2H1NQ5i6kbxipJl+zhGsaqys5D+BS4DLgs3cRpKOeSR0PUKHSkuZEFCnelWmjsN5xT07dwLn3KX7nppVl8s004VYVhCptKHBEvvENAQ0tvri1lGFCq1UzKxsqDCVzD8FBqbbK6lpuAmxY0cpSE+aVz5tfVMBi/JujB1elGbm+tYMyex8XyVi2IBbM4UCo4ozVZjPA/Vbmgpo6iwiUMY1XABK5hdDE1ddwL3NvcwAGa4nzUW2iiIydUtjE43cDNQRtX7T4sediFj4WN7BIo1yDsH3uJITyqcFtNLb8s1TwMY2XHBK5hJKGEXsJV9TwBPJFuYidRRmvnRAcuVkc4N1XJuc1NNLYJU3cfUni4V7qRIxTOCOCHCdKxzKKCKV2UuIKguDhcw1iuMIFrGB6ki0Jwqmt5BRicnsUFmuIMgZ/nu0aVupRS19zIswHc4MtYlcnCO9k0aOUUwixYm8SWs8ocAi6uPr78SSMMY2XFBK5hLCdUD+U94PwXZjI11YPTUYbjL0gOgMLeAnunG7lSlDtalYY9hvJW5nkLGtkWuChopTbBlD4Fbhe4paqeQtObFkXK4nCNlQgTuIaRgydndkqmThAml3+0nGNG+7NjgbHpJoaiXEz+2NdvqjCmQhiTbuR3CtcGAU9VVlCnAbWEafLi8geFW2vqaCj0HpISCMO7aizD6C5M4BqGB1caRRGOSTfSN6hk0O6D+Xs5x1/UwIa71DILmNXcyDCFCyF3Wb+IfQT2qUiBKvHLZQiPpgIu6ldPuuBJJ6S5iZ+oMoV492UYKzSW+MIwcrD/MBaTXeJsz1Qr76UbGfvqXNYox7gvzmTtpcJf0w08kZ7F96vqmFldx7aiHKbwTEkHE+4J4HvVtfTvKmG7cDZ9m5v4jSr3kUPYtrWZSdlYeTCBaxgORPlAYLPRh7FRzxR9Ea5znHbp4iW8s6CRcTmLzRdAayVnA2sg7E+K3zU38sALd/Ddqnoeqqlj35RSA0WF5HyuyrRWYbPqWgbtXlfe8oXtLLyTTdMNXBUEvKbKgY5T/gn8bM9a3ldhrYqKZOUsDWN5xn7MhuFhzADOUJgCNLRVMOXYo0gFFYxV937jVwhTPl/KFZFWnIgFTXyvppY/QLhvvGYlzRDlVe6AwoiaOr6uCrOogT5LhcEoFyOdaob6WIhwe++eNOw4KH6R8GL54yzWq0gxlrBoeTbCoxJwY1U9D43uzw8RpgJbpCqonvBr/txV8zSMcmIC1zBycNEADgjCuq99gekEXHr4EHpXwCiEOujsVEVYn3hmUMl1+fZ4o4xTwwgLkScxTVdV17Ews7G5gUMRTlQ4LPOYQpMIV0QhSF3GglnsJilOB4aQ/VmB8usUjO9XT3rMQKoJuExTfJ5q49YJj/J4V87VMMqNCVzDiMHoAVwAjALWAm5uhUlHDuG/lTAU5UxctWGF61pTTNrzOD509fnCbHZNBTxMntAfR79DqmuZ4zu8sIkdAuV8oKfCvav14tGu1Gbh6+xVExAOcZ4gPBAI43YfwksX9We/QDhd4J3WCq6//Ne815VzNYyuwgSuYcRk3BGsvWQJJwmcQOjoMyPVxoQJj/H2gkbqJawKtLXj0rmpFDf2G5Lt7JS+hdV1dc4XOAdYM848VJlWU8/Iom6mTCxoYrgoJwF7eE65U5TLqup5fcxADldlKMJvv+rDjGvuKX9ResPoTkzgGkYBjBrA9wROA44D5qgwfvI83lrQQJ0Il+AWvC+pMrWmPjvR/8uzWadFGYEyElg73/ii7FBVz+vF3kcpeGEmG6cqOAvhZGAd1zkiNAbKxJo63hw1gJ+Kchrw0KRHuKZrZ2sY3YcJXMMogosOYkut4LQABojyJxWumzyfP0T7s2cB+zgu+xCYLXBzVV3nDE7PzmW1HkuoFzgd2Mk7sPBOWxsHu7JKdRXPN/GtyoDzEUb4zlG4lRSX1wzhb6P7UyvCYFWe6tmbX4z7FZ914XQNo9sxgWsYJWLMAI5RGIHSmxRXTJrH3HQDeyBcDAx0XSNCI3BTVS3PZx77YwNbVsDpkebocqr6XGFYVH2oy0jfwdaaYqIIx3hO+Uzhpp7KtXMaWFJRyUkIWwEPTprP/K6cq2EsT5jANYwSM2oAO0Ta7b4iTJs4j+kvNFGTUsbhEbzAa8CY6jp+lXng5dms0xJwAXAG0Mdx7XsC46rqmFmiW3CyYBa7pVKMc3lBR3yKMnXxUq596H7WqWjjQmCdAK6YMp8Xyzk3w1gRMIFrGGVi3KGs39LKecBRCrcsbePmY+vYVmGk4C4iIMLjEjDKlfHp2bms27OF8yKvaKfgRbiqupbrS3kf6Qb2EDjJE38M8C8Vpi1ZwnUP/5LNBMYA6wTKJVMeYUEp52IYKzImcA2jzFxwIGtVVHI2wskCM4MWph5+ApU92jhF4WRgk6yLwkQQV0Q1czsRJZE4CziTMEwp41Kebg04ao+hfFLMvJubqFW4EOW7nlMWKUytqaNhzECqFUahVIpw2cR5XZeP2TBWFEzgGkYXMWoAG4gwDuV44K4gxcQpD/O3dAOnkOIClC0cl72qysSaeu7KPLCogT4tcJLAyMwsUwoP1dR5Tb85aW7gYA0zPWVluor4lcDUqjp+d+FA+qeUUcB/ghTjpzxMcyFjGsaqgAlcw+hizv8Rm/ao5PRIu/1NhTDpsnm8ElUEGoMrpEhpRpjg2uMFaG6kPzBU4dj2tlSKLfoN4d04c0rPZS1dzHARTsFfTODOlDChXy2vjerPUIERpHgmEG6Y8jB/izOOYazKmMA1jG5kVH9OFmEMyl80xdTJ8/h1VLJuJO6QoncRprf05Na9B/HvzIPpuaxFC0eochRwW00dD+Yaf+EMNgh6MB44Ncdps0S5vOkh3lntc05BOEph9tI2Gq56jC8S3bBhrMKYwDWM5YBI8I4G/q3KZZMf4b4Fs9iNFOd4HKy+AiZ/3sqVhRRLSN/B1lLB2QrDgdWzTlD+DdyKcN19TSAVnKbKQIXpk+fzi6TjGYZhAtcwlivGDOQUVUYTCtSJk+bTkJ7F5qS4ELcW+gFwdUsvZrg03kzSs9mfgHOBH3tOeRfhipaezHz4DmpUORXYDbhi0nxmFHhbhmFgAtcwlktGDaRO4AyUjRWu7/UV0w+rZzWt5CwVTseR/lHhIang/OrjeCPzWLqJ4wjTKX7PM+RbCJOqa5k1qj9DEc4VWFOFSyfPK298r2GsKpjANYzlmNED2ZWAUQj9gV+0VXDd4fV83LOFYSjn4M7Z/KrCfJSnEE4R+BGu0njwJcLclDDz7pksqujBKcBI4GOF68x0bBilxQSuYawAjB3IToEyRcNMVfeT4vpJD/PkglkcLinOBvZL0N1bqlyxtDdz5s1g8yDFSJSfijKPCqZPfJhny3IThrGKYwLXMFYgRg1gBxGORzle4YMUTJw4n7vTTewkAWfnyAaFCvelAm6squeJUQM5RALOQdgfuL5nGxPGPcZHXXgrhrHKYQLXMFZQRg3gZwLjgM8Qxk+ax9zn57BRZRvnEZYOXB1YjPILrWBazRD+Nqo/A0UYB9QI/GIpXHrFfN7vxtswjFUGE7iGsYIzegAjgAuANoFrWpcy8+ijWZpag+rFPXj1nnv4qvf/qAVGSOhsdYvCrZPn83G3TtwwVjFM4BrGSsKogQxDOVegL3ALwkLgKJT+KjybCrhp4iPc393zNIxVFRO4hrGScdEADlCoDaCnwGMK802bNQzDMAzDMAzDMAzDMAzDMAzDMAzDMAzDMAzDMAzDMAzDMAzDMAzDMAzDMAzDMAzDMAzDMAzDMAzDKBf/DxqsBpRWWGWyAAAAAElFTkSuQmCC" alt="Golden Palace">
+            <div>
+                <h1 id="pageHeading">Service Workshop Tracker</h1>
+                <small id="lastSync">Track Today · Fix Tomorrow · Build Trust</small>
+            </div>
+        </div>
+        <div class="top-actions">
+            <div class="status-chip"><span id="urgentLabel">🔥 Urgent</span><b id="urgentCount">0</b></div>
+            <div class="status-chip"><span id="delayedLabel">⚠️ Delayed</span><b id="delayedCount">0</b></div>
+            <button id="syncPill" class="pill" type="button" title="Retry Google Sheets connection">Google Sheets</button>
+            <button id="remarksButton" class="action-btn" type="button">📝 Remarks <span id="remarksCount">0</span></button>
+            <select id="languageSelect" class="language-select" aria-label="Dashboard language">
+                <option value="en">English</option>
+                <option value="ar">العربية</option>
+            </select>
+            <button id="voiceButton" class="action-btn voice-btn off" type="button">🔊 Golden Palace female voice ON</button>
+            <button id="voiceTestButton" class="action-btn" type="button">▶ Test voice</button>
+            <button id="mainButton" class="action-btn" type="button" style="display:none">↩ Dashboard</button>
+            <div class="clock-box"><div id="clockDate" class="date"></div><div id="clockTime" class="time"></div></div>
+        </div>
+    </header>
+
+    <main id="mainView">
+        <section class="dashboard-grid">
+            <button class="workflow-card progress" data-category="progress" type="button">
+                <span class="open-hint" data-openhint>Click to view details ↗</span><div class="icon">🔧</div>
+                <div class="count" id="count-progress">0</div>
+                <h2 id="title-progress">In Repair</h2><p id="desc-progress">Tools currently in an active repair cycle.</p>
+            </button>
+            <button class="workflow-card collection" data-category="collection" type="button">
+                <span class="open-hint" data-openhint>Click to view details ↗</span><div class="icon">📦</div>
+                <div class="count" id="count-collection">0</div>
+                <h2 id="title-collection">Waiting Collection</h2><p id="desc-collection">Sales invoice &gt; 0 and physical collection is not confirmed yet.</p>
+            </button>
+            <button class="workflow-card partner" data-category="partner" type="button">
+                <span class="open-hint" data-openhint>Click to view details ↗</span><div class="icon">🤝</div>
+                <div class="count" id="count-partner">0</div>
+                <h2 id="title-partner">Partner Claim</h2><p id="desc-partner">Partner cycles waiting for settlement.</p>
+            </button>
+            <button class="workflow-card zero" data-category="zero" type="button">
+                <span class="open-hint" data-openhint>Click to view details ↗</span><div class="icon">📄</div>
+                <div class="count" id="count-zero">0</div>
+                <h2 id="title-zero">Zero Invoice Closed</h2><p id="desc-zero">Sales invoice = 0, so the current cycle is auto-closed.</p>
+            </button>
+            <button class="workflow-card collected" data-category="collected" type="button">
+                <span class="open-hint" data-openhint>Click to view details ↗</span><div class="icon">✅</div>
+                <div class="count" id="count-collected">0</div>
+                <h2 id="title-collected">Collected</h2><p id="desc-collected">Customer collection was confirmed by Ameen or the TV workflow.</p>
+            </button>
+            <button class="workflow-card partner_closed" data-category="partner_closed" type="button">
+                <span class="open-hint" data-openhint>Click to view details ↗</span><div class="icon">🧾</div>
+                <div class="count" id="count-partner_closed">0</div>
+                <h2 id="title-partner_closed">Settled / Maintenance</h2><p id="desc-partner_closed">Partner settlement / maintenance financial closure recorded.</p>
+            </button>
+        </section>
+        <section class="team-footer">
+            <div class="team-footer-main"><div class="team-footer-icon">📣</div><div><strong id="footerTitle">Great work team!</strong><span id="footerText">Every completed job builds more customer trust in Golden Palace.</span></div></div>
+            <div id="footerSlogan" class="team-footer-slogan">Together<br>We Keep the World Working</div>
+        </section>
+    </main>
+
+    <main id="detailView" class="detail-shell" style="display:none">
+        <section class="detail-toolbar">
+            <div class="detail-title"><h2 id="detailTitle">Details</h2><p id="detailDescription"></p></div>
+            <div class="detail-controls">
+                <input id="searchBox" class="search-box" type="search" placeholder="Search service ID, customer, tool…">
+                <button id="refreshButton" class="action-btn" type="button">🔄 Refresh now</button>
+                <button id="closeWindowButton" class="action-btn" type="button">✕ Close window</button>
+            </div>
+        </section>
+        <section id="detailStats" class="detail-stats"></section>
+        <section id="ticketList" class="ticket-list"></section>
+        <section id="ticketPanel" class="ticket-panel" style="display:none"></section>
+    </main>
+</div>
+
+<div id="loadingOverlay" class="loading-overlay" role="status" aria-live="polite" aria-busy="true">
+    <div class="loading-card">
+        <img id="loadingLogo" alt="Golden Palace">
+        <div class="loading-ring" aria-hidden="true"></div>
+        <strong id="loadingText">Loading Golden Palace data…</strong>
+        <small>Golden Palace</small>
+    </div>
+</div>
+<div id="toast" class="toast"></div>
+<div id="voiceCaption" class="voice-caption" aria-live="polite"></div>
+
+<script>
+(() => {
+    const params = new URLSearchParams(window.location.search);
+    const detailMode = params.get('view') === 'details';
+    let activeCategory = params.get('category') || 'progress';
+    let latestData = null;
+    let selectedTicketKey = null;
+    let currentLanguage = (params.get('lang') || (() => { try { return localStorage.getItem('gpDashboardLanguage'); } catch (_) { return null; } })() || 'en').toLowerCase();
+    if (!['en','ar'].includes(currentLanguage)) currentLanguage = 'en';
+
+    const UI = {
+        en: {
+            heading:'Service Workshop Tracker', tagline:'Track Today · Fix Tomorrow · Build Trust', urgent:'🔥 Urgent', delayed:'⚠️ Delayed', remarks:'📝 Remarks',
+            voiceOn:'🔊 Golden Palace female voice ON', voiceOff:'🔇 Golden Palace female voice OFF', voiceBlocked:'⚠️ Click to enable voice', voiceTest:'▶ Test voice', dashboard:'↩ Dashboard',
+            openHint:'Click to view details ↗', search:'Search service ID, customer, tool…', refresh:'🔄 Refresh now', closeWindow:'✕ Close window',
+            footerTitle:'Great work team!', footerText:'Every completed job builds more customer trust in Golden Palace.', footerSlogan:'Together\nWe Keep the World Working',
+            progressTitle:'In Repair', progressDesc:'Tools currently in an active repair cycle.', collectionTitle:'Waiting Collection', collectionDesc:'Sales invoice > 0 and physical collection is not confirmed yet.',
+            partnerTitle:'Partner Claim', partnerDesc:'Partner cycles waiting for settlement.', zeroTitle:'Zero Invoice Closed', zeroDesc:'Sales invoice = 0, so the current cycle is auto-closed.',
+            collectedTitle:'Collected', collectedDesc:'Customer collection was confirmed by Ameen or the TV workflow.', closedTitle:'Settled / Maintenance', closedDesc:'Partner settlement / maintenance financial closure recorded.',
+            total:'Total', open:'Open', urgentStat:'Urgent', delayedStat:'Delayed +3d', openRemarks:'Open remarks', writeAccess:'Write access', noRemarks:'No open remarks.', closeRemark:'Close remark',
+            noCases:'No cases match this view.', serviceCycle:'Service / Cycle', cycle:'Cycle', toolCustomer:'Tool / Customer', lastEvent:'Last Ameen event', age:'Age', dayShort:'d', salesTotal:'Sales total', workflow:'Workflow', delayedBadge:'Delayed', urgentBadge:'Urgent',
+            hideDetails:'Hide details', currentHistory:'Current cycle history', confirmClose:'✅ Confirm physical collection & close current cycle',
+            labels:['Service ID','Repair cycle','Cycle key','Workflow state','Cycle started','Last event date','Last Ameen event','Cycle documents','Sales total','Zero invoice verified','Collection/payment','Partner settlement','Financial status','Collection status','Partner claim','Case status','Closed by','Closed at','Close note','Customer','Phone','Tool','Warranty','Reported issue','Remarks'],
+            yes:'YES', no:'NO', syncLive:'🟢 Google Sheets live', trackerLive:'🟢 Tools Tracker Live', trackerBackup:'🟡 Backup Feed', writeReady:'🟢 Write ready', readOnly:'🔴 Google Sheets read-only', lastSync:'Last sync', refreshFailed:'Refresh failed',
+            voiceDisabled:'Golden Palace announcements disabled.', voiceEnabled:'Golden Palace announcements enabled. A new message will play every 10 minutes.', voicePlaying:'Voice test playing.', audioBlocked:'The browser blocked audio. Click Golden Palace voice once and allow sound for this site.',
+            confirmPrefix:'Confirm that', confirmSuffix:'was physically collected?', closesCycle:'This closes only Cycle', saving:'Saving…', closed:'Closed', currentCycle:'current cycle.', remarkClosed:'Remark closed.',
+            syncReady:'Google Sheets live read/write is ready.', syncNotReady:'Google Sheets write connection is not ready.', checking:'Checking…', closeFailed:'Close failed', remarkFail:'Unable to close remark', loading:'Loading live Golden Palace data…', refreshing:'Refreshing directly from the source…', connecting:'Connecting to Google Sheets…'
+        },
+        ar: {
+            heading:'متابعة خدمة الورشة', tagline:'تابع اليوم · أصلح للغد · ابنِ الثقة', urgent:'🔥 عاجل', delayed:'⚠️ متأخر', remarks:'📝 الملاحظات',
+            voiceOn:'🔊 صوت القصر الذهبي النسائي مفعّل', voiceOff:'🔇 صوت القصر الذهبي النسائي متوقف', voiceBlocked:'⚠️ اضغط لتفعيل الصوت', voiceTest:'▶ اختبار الصوت', dashboard:'↩ العودة للوحة',
+            openHint:'اضغط لعرض التفاصيل ↗', search:'ابحث برقم الخدمة أو الزبون أو الجهاز…', refresh:'🔄 تحديث الآن', closeWindow:'✕ إغلاق النافذة',
+            footerTitle:'يعطيكم العافية يا فريق!', footerText:'كل حالة تنتهي بشكل صحيح تزيد ثقة الزبون بخدمة القصر الذهبي.', footerSlogan:'معاً\nنحافظ على العمل مستمراً',
+            progressTitle:'قيد المعالجة', progressDesc:'الأجهزة الموجودة ضمن دورة صيانة فعالة.', collectionTitle:'بانتظار الاستلام', collectionDesc:'فاتورة المبيع أكبر من صفر ولم يتم تأكيد الاستلام بعد.',
+            partnerTitle:'مطالبة شريك', partnerDesc:'دورات الشركاء التي ما زالت بانتظار التسوية.', zeroTitle:'فاتورة صفر — مغلق', zeroDesc:'فاتورة المبيع تساوي صفراً، لذلك تغلق الدورة الحالية تلقائياً.',
+            collectedTitle:'تم الاستلام', collectedDesc:'تم تأكيد استلام الزبون من الأمين أو من شاشة المتابعة.', closedTitle:'تسوية / صيانة', closedDesc:'تم تسجيل تسوية الشريك أو الإغلاق المالي للصيانة.',
+            total:'الإجمالي', open:'مفتوح', urgentStat:'عاجل', delayedStat:'متأخر +3 أيام', openRemarks:'ملاحظات مفتوحة', writeAccess:'صلاحية الكتابة', noRemarks:'لا توجد ملاحظات مفتوحة.', closeRemark:'إغلاق الملاحظة',
+            noCases:'لا توجد حالات مطابقة لهذا العرض.', serviceCycle:'الخدمة / الدورة', cycle:'الدورة', toolCustomer:'الجهاز / الزبون', lastEvent:'آخر حركة في الأمين', age:'العمر', dayShort:'يوم', salesTotal:'إجمالي المبيع', workflow:'مسار العمل', delayedBadge:'متأخر', urgentBadge:'عاجل',
+            hideDetails:'إخفاء التفاصيل', currentHistory:'سجل الدورة الحالية', confirmClose:'✅ تأكيد الاستلام وإغلاق الدورة الحالية',
+            labels:['رقم الخدمة','دورة الصيانة','مفتاح الدورة','حالة مسار العمل','بداية الدورة','تاريخ آخر حركة','آخر حركة في الأمين','عدد مستندات الدورة','إجمالي المبيع','تأكيد الفاتورة الصفرية','القبض / الاستلام المالي','تسوية الشريك','الحالة المالية','حالة الاستلام','مطالبة الشريك','حالة الملف','أغلق بواسطة','تاريخ الإغلاق','ملاحظة الإغلاق','الزبون','الهاتف','الجهاز','الكفالة','العطل المبلغ عنه','الملاحظات'],
+            yes:'نعم', no:'لا', syncLive:'🟢 Google Sheets مباشر', trackerLive:'🟢 مرتبط بـ Tools Tracker', trackerBackup:'🟡 مصدر احتياطي', writeReady:'🟢 الكتابة جاهزة', readOnly:'🔴 Google Sheets قراءة فقط', lastSync:'آخر مزامنة', refreshFailed:'فشل التحديث',
+            voiceDisabled:'تم إيقاف إعلانات القصر الذهبي الصوتية.', voiceEnabled:'تم تفعيل صوت القصر الذهبي. سيتم تشغيل رسالة جديدة كل 10 دقائق.', voicePlaying:'يتم تشغيل اختبار الصوت.', audioBlocked:'المتصفح منع تشغيل الصوت. اضغط على زر صوت القصر الذهبي مرة واسمح بالصوت لهذا الموقع.',
+            confirmPrefix:'تأكيد أن', confirmSuffix:'تم استلامه فعلياً؟', closesCycle:'سيتم إغلاق الدورة فقط رقم', saving:'جارٍ الحفظ…', closed:'تم إغلاق', currentCycle:'الدورة الحالية.', remarkClosed:'تم إغلاق الملاحظة.',
+            syncReady:'اتصال Google Sheets للقراءة والكتابة جاهز.', syncNotReady:'اتصال الكتابة إلى Google Sheets غير جاهز.', checking:'جارٍ الفحص…', closeFailed:'فشل الإغلاق', remarkFail:'تعذر إغلاق الملاحظة', loading:'جارٍ تحميل بيانات القصر الذهبي مباشرة…', refreshing:'جارٍ التحديث مباشرة من المصدر…', connecting:'جارٍ الاتصال بـ Google Sheets…'
+        }
+    };
+    const tr = key => (UI[currentLanguage] && UI[currentLanguage][key]) || UI.en[key] || key;
+    const DASHBOARD_SNAPSHOT_KEY = 'gpDashboardSummaryV1';
+    let foregroundRefreshPending = false;
+
+    function setLoading(show, message='') {
+        const overlay = document.getElementById('loadingOverlay');
+        if (!overlay) return;
+        const logo = document.getElementById('loadingLogo');
+        if (logo && !logo.getAttribute('src')) {
+            const brandLogo = document.querySelector('.brand img');
+            if (brandLogo) logo.setAttribute('src', brandLogo.getAttribute('src') || '');
+        }
+        const text = document.getElementById('loadingText');
+        if (text) text.textContent = message || tr('loading');
+        overlay.classList.toggle('hidden', !show);
+        overlay.setAttribute('aria-busy', show ? 'true' : 'false');
+    }
+
+    function dashboardSummary(data) {
+        if (!data || typeof data !== 'object') return null;
+        return {
+            progress_count:num(data.progress_count), collection_count:num(data.collection_count),
+            partner_count:num(data.partner_count), zero_count:num(data.zero_count),
+            collected_count:num(data.collected_count), partner_closed_count:num(data.partner_closed_count),
+            urgent_count:num(data.urgent_count), delayed_count:num(data.delayed_count), special_count:num(data.special_count),
+            remarks_list:Array.isArray(data.remarks_list) ? data.remarks_list.slice(0,100) : [],
+            write_ready:Boolean(data.write_ready), read_source:safe(data.read_source,''),
+            server_time:safe(data.server_time,''), loading:false, refreshing:true
+        };
+    }
+
+    function saveDashboardSnapshot(data) {
+        if (detailMode) return;
+        try {
+            const summary = dashboardSummary(data);
+            if (summary) localStorage.setItem(DASHBOARD_SNAPSHOT_KEY, JSON.stringify({savedAt:Date.now(), data:summary}));
+        } catch (_) {}
+    }
+
+    function loadDashboardSnapshot() {
+        if (detailMode) return null;
+        try {
+            const parsed = JSON.parse(localStorage.getItem(DASHBOARD_SNAPSHOT_KEY) || 'null');
+            if (!parsed || !parsed.data || !parsed.savedAt) return null;
+            if ((Date.now() - Number(parsed.savedAt)) > 12 * 60 * 60 * 1000) return null;
+            return parsed.data;
+        } catch (_) { return null; }
+    }
+
+    const categoryMetaByLang = {
+        en: {
+            progress:{title:'🔧 In Repair',description:'Current repair cycles still in workshop processing.',listKey:'progress_list'},
+            collection:{title:'📦 Waiting Collection',description:'Non-zero customer sales cycles waiting for physical collection.',listKey:'collection_list'},
+            partner:{title:'🤝 Partner Claim',description:'Partner cycles waiting for maintenance / partner settlement.',listKey:'partner_list'},
+            zero:{title:'📄 Zero Invoice Closed',description:'Sales cycles whose current-cycle total is exactly zero.',listKey:'zero_list'},
+            collected:{title:'✅ Collected',description:'Closed by Ameen collection entry or confirmed from TV.',listKey:'collected_list'},
+            partner_closed:{title:'🧾 Settled / Maintenance',description:'Partner cycles closed by partner settlement.',listKey:'partner_closed_list'},
+            remarks:{title:'📝 Workshop Remarks',description:'Live remarks from the remarks worksheet.',listKey:'remarks_list'}
+        },
+        ar: {
+            progress:{title:'🔧 قيد المعالجة',description:'دورات الصيانة الحالية التي ما زالت ضمن المعالجة.',listKey:'progress_list'},
+            collection:{title:'📦 بانتظار الاستلام',description:'دورات المبيع غير الصفرية التي تنتظر تأكيد الاستلام الفعلي.',listKey:'collection_list'},
+            partner:{title:'🤝 مطالبة شريك',description:'دورات الشركاء التي تنتظر التسوية.',listKey:'partner_list'},
+            zero:{title:'📄 فاتورة صفر — مغلق',description:'دورات المبيع التي مجموعها الحالي يساوي صفراً.',listKey:'zero_list'},
+            collected:{title:'✅ تم الاستلام',description:'أغلقت بحركة قبض في الأمين أو بتأكيد الاستلام من شاشة المتابعة.',listKey:'collected_list'},
+            partner_closed:{title:'🧾 تسوية / صيانة',description:'دورات الشركاء المغلقة بالتسوية.',listKey:'partner_closed_list'},
+            remarks:{title:'📝 ملاحظات الورشة',description:'الملاحظات المفتوحة مباشرة من ورقة الملاحظات.',listKey:'remarks_list'}
+        }
+    };
+    const categoryMeta = () => categoryMetaByLang[currentLanguage] || categoryMetaByLang.en;
+
+    function updateClock() {
+        const now = new Date();
+        const locale = currentLanguage === 'ar' ? 'ar-SY' : 'en-GB';
+        const d = document.getElementById('clockDate');
+        const tm = document.getElementById('clockTime');
+        if (d) d.textContent = now.toLocaleDateString(locale, {weekday:'short', day:'numeric', month:'short', year:'numeric'});
+        if (tm) tm.textContent = now.toLocaleTimeString(locale, {hour:'2-digit', minute:'2-digit'});
+    }
+
+    function applyLanguage() {
+        const ar = currentLanguage === 'ar';
+        document.documentElement.lang = currentLanguage;
+        document.documentElement.dir = ar ? 'rtl' : 'ltr';
+        document.body.classList.toggle('lang-ar', ar);
+        document.title = `${tr('heading')} - Golden Palace`;
+        const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+
+        set('pageHeading', detailMode ? (categoryMeta()[activeCategory] || categoryMeta().progress).title : tr('heading'));
+        if (!detailMode) set('lastSync', tr('tagline'));
+        set('urgentLabel', tr('urgent'));
+        set('delayedLabel', tr('delayed'));
+
+        const remarks = document.getElementById('remarksButton');
+        if (remarks) remarks.childNodes[0].nodeValue = tr('remarks') + ' ';
+
+        set('voiceTestButton', tr('voiceTest'));
+        set('mainButton', tr('dashboard'));
+        set('title-progress', tr('progressTitle')); set('desc-progress', tr('progressDesc'));
+        set('title-collection', tr('collectionTitle')); set('desc-collection', tr('collectionDesc'));
+        set('title-partner', tr('partnerTitle')); set('desc-partner', tr('partnerDesc'));
+        set('title-zero', tr('zeroTitle')); set('desc-zero', tr('zeroDesc'));
+        set('title-collected', tr('collectedTitle')); set('desc-collected', tr('collectedDesc'));
+        set('title-partner_closed', tr('closedTitle')); set('desc-partner_closed', tr('closedDesc'));
+        document.querySelectorAll('[data-openhint]').forEach(el => el.textContent = tr('openHint'));
+
+        const search = document.getElementById('searchBox');
+        if (search) search.placeholder = tr('search');
+        set('refreshButton', tr('refresh'));
+        set('closeWindowButton', tr('closeWindow'));
+        set('footerTitle', tr('footerTitle'));
+        set('footerText', tr('footerText'));
+        set('footerSlogan', tr('footerSlogan'));
+
+        const sel = document.getElementById('languageSelect');
+        if (sel) sel.value = currentLanguage;
+
+        updateVoiceButton();
+        updateClock();
+
+        if (detailMode) {
+            const meta = categoryMeta()[activeCategory] || categoryMeta().progress;
+            set('pageHeading', meta.title);
+            set('detailTitle', meta.title);
+            set('detailDescription', meta.description);
+            if (latestData) renderTicketList();
+        }
+    }
+
+    function showToast(message, timeout = 4200) {
+        const toast = document.getElementById('toast');
+        if (!toast) return;
+        toast.textContent = message;
+        toast.classList.add('show');
+        clearTimeout(showToast.timer);
+        showToast.timer = setTimeout(() => toast.classList.remove('show'), timeout);
+    }
+
+    function safe(v, fallback='—') {
+        if (v === null || v === undefined) return fallback;
+        const s = String(v).trim();
+        return (!s || s.toLowerCase() === 'nan' || s.toLowerCase() === 'none') ? fallback : s;
+    }
+
+    function esc(v) {
+        return safe(v, '').replace(/[&<>'\"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[ch]));
+    }
+
+    function num(v) {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    function fmtAmount(v) {
+        return num(v).toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:3});
+    }
+
+    function ticketKey(item) {
+        return `${safe(item.service_id,'')}|${safe(item.cycle_key,'')}`;
+    }
+
+    function openCategory(category) {
+        const url = `${window.location.pathname}?view=details&category=${encodeURIComponent(category)}&lang=${encodeURIComponent(currentLanguage)}`;
+        const opened = window.open(url, '_blank');
+        if (!opened) window.location.href = url;
+    }
+
+    function configureView() {
+        document.body.classList.toggle('main-view-body', !detailMode);
+        document.body.classList.toggle('detail-view-body', detailMode);
+        document.getElementById('mainView').style.display = detailMode ? 'none' : 'flex';
+        document.getElementById('detailView').style.display = detailMode ? 'block' : 'none';
+        document.getElementById('mainButton').style.display = detailMode ? 'inline-flex' : 'none';
+        if (detailMode) {
+            const meta = categoryMeta()[activeCategory] || categoryMeta().progress;
+            document.getElementById('pageHeading').textContent = meta.title;
+            document.getElementById('detailTitle').textContent = meta.title;
+            document.getElementById('detailDescription').textContent = meta.description;
+        }
+    }
+
+    function updateConnection(data) {
+        const pill = document.getElementById('syncPill');
+        if (pill) {
+            if (data.loading) {
+                pill.className = 'pill warn';
+                pill.textContent = currentLanguage === 'ar' ? 'جارٍ تحميل البيانات…' : 'Loading data…';
+            } else if (data.read_source === 'tools_tracker_ledger_live') {
+                pill.className = 'pill ok';
+                pill.textContent = tr('trackerLive');
+            } else if (data.read_source === 'published_csv_fallback' || data.read_source === 'published_csv') {
+                pill.className = 'pill warn';
+                pill.textContent = tr('trackerBackup');
+            } else if (data.write_ready) {
+                pill.className = 'pill ok';
+                pill.textContent = tr('writeReady');
+            } else {
+                pill.className = 'pill danger';
+                pill.textContent = tr('readOnly');
+            }
+        }
+        const last = document.getElementById('lastSync');
+        if (last) {
+            last.textContent = detailMode
+                ? `${tr('lastSync')}: ${safe(data.server_time)} · ${safe(data.read_source)}`
+                : tr('tagline');
+        }
+    }
+
+    function updateMain(data) {
+        const values = {
+            progress: data.progress_count,
+            collection: data.collection_count,
+            partner: data.partner_count,
+            zero: data.zero_count,
+            collected: data.collected_count,
+            partner_closed: data.partner_closed_count,
+        };
+        Object.entries(values).forEach(([key, value]) => {
+            const el = document.getElementById(`count-${key}`);
+            if (el) el.textContent = num(value);
+        });
+        const urgent = document.getElementById('urgentCount');
+        const delayed = document.getElementById('delayedCount');
+        const remarks = document.getElementById('remarksCount');
+        if (urgent) urgent.textContent = num(data.urgent_count);
+        if (delayed) delayed.textContent = num(data.delayed_count);
+        if (remarks) remarks.textContent = (data.remarks_list || []).length;
+    }
+
+    function currentList() {
+        if (!latestData) return [];
+        const meta = categoryMeta()[activeCategory] || categoryMeta().progress;
+        return Array.isArray(latestData[meta.listKey]) ? latestData[meta.listKey] : [];
+    }
+
+    function renderDetailStats(list) {
+        const openCount = list.filter(x => x.case_status !== 'مغلق').length;
+        const urgentCount = list.filter(x => x.is_urgent).length;
+        const delayedCount = list.filter(x => x.is_delayed).length;
+        document.getElementById('detailStats').innerHTML = `
+            <div class="stat"><span>${esc(tr('total'))}</span><b>${list.length}</b></div>
+            <div class="stat"><span>${esc(tr('open'))}</span><b>${openCount}</b></div>
+            <div class="stat"><span>${esc(tr('urgentStat'))}</span><b>${urgentCount}</b></div>
+            <div class="stat"><span>${esc(tr('delayedStat'))}</span><b>${delayedCount}</b></div>`;
+    }
+
+    function renderRemarks() {
+        const list = (latestData && latestData.remarks_list) || [];
+        document.getElementById('detailStats').innerHTML = `
+            <div class="stat"><span>${esc(tr('openRemarks'))}</span><b>${list.length}</b></div>
+            <div class="stat"><span>${esc(tr('writeAccess'))}</span><b>${latestData && latestData.write_ready ? 'ON' : 'OFF'}</b></div>`;
+        const container = document.getElementById('ticketList');
+        if (!list.length) {
+            container.innerHTML = `<div class="empty">${esc(tr('noRemarks'))}</div>`;
+            return;
+        }
+        container.innerHTML = `<div class="remarks-list">${list.map(r => `
+            <div class="remark-row" id="remark-${r.row}"><span>📌 ${esc(r.text)}</span>
+            <button class="remark-close" data-row="${Number(r.row)}" type="button">${esc(tr('closeRemark'))}</button></div>`).join('')}</div>`;
+        container.querySelectorAll('.remark-close').forEach(btn => btn.addEventListener('click', () => closeRemark(Number(btn.dataset.row), btn)));
+    }
+
+    function renderTicketList() {
+        if (!detailMode || !latestData) return;
+        if (activeCategory === 'remarks') { renderRemarks(); return; }
+        const list = currentList();
+        renderDetailStats(list);
+        const q = document.getElementById('searchBox').value.trim().toLowerCase();
+        const filtered = list.filter(item => {
+            const hay = [item.service_id,item.customer_name,item.tool_name,item.phone_number,item.reported_issue,item.cycle_last_event,item.workflow_state,item.financial_status].join(' ').toLowerCase();
+            return !q || hay.includes(q);
+        });
+        const container = document.getElementById('ticketList');
+        if (!filtered.length) {
+            container.innerHTML = `<div class="empty">${esc(tr('noCases'))}</div>`;
+            document.getElementById('ticketPanel').style.display = 'none';
+            return;
+        }
+        container.innerHTML = filtered.map(item => `
+            <button class="ticket-row" type="button" data-key="${esc(ticketKey(item))}">
+                <div><small>${esc(tr('serviceCycle'))}</small><div class="ticket-id">${esc(item.service_id)}</div><span class="badge">${esc(tr('cycle'))} ${num(item.cycle_no)}</span></div>
+                <div><small>${esc(tr('toolCustomer'))}</small><div class="value">${esc(item.tool_name)}</div><div>${esc(item.customer_name)}</div></div>
+                <div class="mobile-hide"><small>${esc(tr('lastEvent'))}</small><div class="value">${esc(item.cycle_last_event)}</div><div>${esc(item.cycle_last_event_date)}</div></div>
+                <div><small>${esc(tr('age'))}</small><div class="value">${num(item.service_age_days)} ${esc(tr('dayShort'))}</div>${item.is_delayed ? `<span class="badge warn">${esc(tr('delayedBadge'))}</span>` : ''}</div>
+                <div class="optional-col"><small>${esc(tr('salesTotal'))}</small><div class="value">${fmtAmount(item.cycle_sales_total)}</div><div>${esc(item.financial_status)}</div></div>
+                <div class="optional-col"><small>${esc(tr('workflow'))}</small><div class="value">${esc(item.status)}</div>${item.is_urgent ? `<span class="badge danger">${esc(tr('urgentBadge'))}</span>` : ''}</div>
+            </button>`).join('');
+        container.querySelectorAll('.ticket-row').forEach(btn => btn.addEventListener('click', () => {
+            selectedTicketKey = btn.dataset.key;
+            renderTicketPanel();
+        }));
+        if (selectedTicketKey) renderTicketPanel();
+    }
+
+    function renderTicketPanel() {
+        const panel = document.getElementById('ticketPanel');
+        const item = currentList().find(x => ticketKey(x) === selectedTicketKey);
+        if (!item) { panel.style.display = 'none'; return; }
+        const L = tr('labels');
+        const fields = [
+            [L[0], item.service_id], [L[1], `${tr('cycle')} ${num(item.cycle_no)}`], [L[2], item.cycle_key], [L[3], item.workflow_state],
+            [L[4], item.cycle_started_at], [L[5], item.cycle_last_event_date], [L[6], item.cycle_last_event], [L[7], item.cycle_document_count],
+            [L[8], fmtAmount(item.cycle_sales_total)], [L[9], item.cycle_zero_sales_confirmed ? tr('yes') : tr('no')], [L[10], fmtAmount(item.cycle_payment_total)], [L[11], fmtAmount(item.cycle_partner_settlement_total)], [L[12], item.financial_status],
+            [L[13], item.collection_status], [L[14], item.partner_claim_status], [L[15], item.case_status], [L[16], item.closed_by],
+            [L[17], item.closed_at], [L[18], item.close_note], [L[19], item.customer_name], [L[20], item.phone_number],
+            [L[21], item.tool_name], [L[22], item.warranty_status], [L[23], item.reported_issue], [L[24], item.remarks],
+        ];
+        panel.innerHTML = `
+            <div class="ticket-panel-head"><h3>${esc(item.service_id)} · ${esc(tr('cycle'))} ${num(item.cycle_no)}</h3><button id="hidePanel" class="action-btn" type="button">${esc(tr('hideDetails'))}</button></div>
+            <div class="panel-body">
+                <div class="fields">${fields.map(([label,value]) => `<div class="field"><label>${esc(label)}</label><div>${esc(value)}</div></div>`).join('')}</div>
+                <div class="history"><b>${esc(tr('currentHistory'))}</b><br>${esc(item.cycle_history || item.document_history)}</div>
+                <div class="panel-actions">
+                    ${item.can_close_from_tv ? `<button id="confirmCollection" class="close-ticket-btn" type="button" ${latestData.write_ready ? '' : 'disabled'}>${esc(tr('confirmClose'))}</button>` : ''}
+                </div>
+            </div>`;
+        panel.style.display = 'block';
+        const hide = panel.querySelector('#hidePanel');
+        if (hide) hide.addEventListener('click', () => { panel.style.display='none'; selectedTicketKey=null; });
+        const closeBtn = panel.querySelector('#confirmCollection');
+        if (closeBtn) closeBtn.addEventListener('click', () => confirmCollection(item, closeBtn));
+        panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+    }
+
+    // Golden Palace 10-minute rotating voice collection.
+    // Preserves all approved existing wording and adds the approved Syrian team humor.
+    // Voice failures are isolated and can never stop dashboard rendering.
+    const TEAM_VOICE_INTERVAL_MS = 10 * 60 * 1000;
+    const TEAM_VOICE_RETRY_MS = 45 * 1000;
+    const TEAM_VOICE_VOLUME = 1.0;
+    const TEAM_VOICE_STORAGE_KEY = 'gpVoiceRotationV4';
+
+    const teamVoiceCatalog = [
+        {id:'m01',category:'golden',person:'',text:'Welcome to Golden Palace, where professional service, careful follow-up, and customer trust come first.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=c04953ea-1214-43fd-b946-498e539ffbe9.wav',lang:'en'},
+        {id:'m02',category:'golden',person:'',text:'Golden Palace service follows every repair from reception to completion, with clear tracking at every step.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=565c0e0b-7997-4518-aaeb-ea52ee81ebe7.wav',lang:'en'},
+        {id:'m03',category:'golden',person:'',text:'At Golden Palace, your equipment is handled with care, experience, and professional follow-up.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=668d6524-0187-43eb-8350-094fbe16a081.wav',lang:'en'},
+        {id:'m04',category:'motivation',person:'',text:'Golden Palace team, great work. Every completed job builds stronger customer trust.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=ef21e428-1a4a-41f9-a5ed-9ec502640125.wav',lang:'en'},
+        {id:'m05',category:'golden',person:'',text:'أهلاً وسهلاً بكم في القصر الذهبي، حيث الخدمة الاحترافية، المتابعة الدقيقة، وثقة العميل تأتي أولاً.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=804dcd6f-088b-47fa-b83a-8aa7cdce7b73.wav',lang:'ar'},
+        {id:'m06',category:'golden',person:'',text:'في القصر الذهبي نتابع كل حالة صيانة من لحظة الاستلام حتى الإنجاز، بخطوات واضحة وسريعة ومنظمة.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=982b3124-fe53-4cf9-95fa-1907d526cfa2.wav',lang:'ar'},
+        {id:'m07',category:'golden',person:'',text:'القصر الذهبي، خبرة في الصيانة، عناية حقيقية بالمعدات، ومتابعة تليق بثقة عملائنا.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=7ebe7d75-72df-48e3-8ab0-a45f32243a65.wav',lang:'ar'},
+        {id:'m08',category:'motivation',person:'',text:'يعطيكم العافية يا فريق القصر الذهبي. حافظوا على سرعة المتابعة، جودة الإصلاح، ووضوح التواصل مع كل عميل.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=3a82ac1c-ead4-4f2c-976c-75e806feb8be.wav',lang:'ar'},
+        {id:'m09',category:'golden',person:'',text:'ورشة القصر الذهبي للصيانة - دقة واحترافية عالية في إنجاز كافة المهام.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=72a41ccc-8048-4e54-b9fd-4b0270d74b62.wav',lang:'ar'},
+        {id:'m10',category:'golden',person:'',text:'فريق فني متميز ومحترف لخدمة وصيانة جميع معداتكم بأعلى معايير الجودة.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=d3b4e00a-ee7c-4480-af7f-8adf3457c7a6.wav',lang:'ar'},
+        {id:'m11',category:'golden',person:'',text:'ثقتكم هي سر نجاحنا - نسعى دائماً لتقديم الأفضل لعملائنا الكرام.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=4208e766-a0b0-49d9-8d4c-0e8c9313a063.wav',lang:'ar'},
+        {id:'m12',category:'golden',person:'',text:'بالقصر الذهبي، الصيانة مو بس إصلاح جهاز، هي متابعة واهتمام من أول لحظة لحد ما يرجع الجهاز لصاحبه.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=e985d6ce-f7b3-4547-ad1f-d464e426c1fa.wav',lang:'ar'},
+        {id:'m13',category:'golden',person:'',text:'أهلاً بكم في القصر الذهبي، هون كل حالة صيانة إلها متابعة واضحة، وكل تفصيل محسوب لخدمة أفضل.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=a8aa88ab-27fa-49a8-bbaf-fcf9869ba0bf.wav',lang:'ar'},
+        {id:'m14',category:'golden',person:'',text:'القصر الذهبي يطوّر أدواته باستمرار، لأن سرعة المتابعة وجودة الخدمة جزء أساسي من ثقة عملائنا.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=e968806d-7f9d-4451-be65-7b205e13a266.wav',lang:'ar'},
+        {id:'m15',category:'golden',person:'',text:'في القصر الذهبي، هدفنا مو بس نصلّح العطل، هدفنا نخلي تجربة الخدمة كاملة وأوضح وأسرع.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=f2619f05-7c10-419f-a7d6-c4c7e9d6523d.wav',lang:'ar'},
+        {id:'m16',category:'golden',person:'',text:'عميل القصر الذهبي يستحق متابعة دقيقة، ولهيك كل حالة عم تمر بخطوات واضحة من الاستلام حتى الإنجاز.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=fa696937-0ac6-4b7e-adff-fa8f038d1dec.wav',lang:'ar'},
+        {id:'m17',category:'golden',person:'',text:'القصر الذهبي، خدمة صيانة تجمع الخبرة، التنظيم، وسرعة المتابعة تحت سقف واحد.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=a2c48994-e472-48ef-a4ed-448f178b7f10.wav',lang:'ar'},
+        {id:'m18',category:'golden',person:'',text:'كل جهاز بيدخل ورشة القصر الذهبي بياخد حقه من الفحص والمتابعة، لأن ثقة العميل مسؤولية.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=528b12f9-6e7e-4b12-862c-ee07c27c2f37.wav',lang:'ar'},
+        {id:'m19',category:'golden',person:'',text:'بالقصر الذهبي عم نطوّر الخدمة كل يوم، حتى تكون الصيانة أسرع، المتابعة أوضح، والنتيجة أفضل.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=0af19232-b086-4845-a9ca-8cd3d814b2b4.wav',lang:'ar'},
+        {id:'m20',category:'motivation',person:'',text:'يعطيكم العافية يا شباب القصر الذهبي، خلونا اليوم نخلي قائمة المنجز أطول من قائمة الانتظار.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=16fd171b-f07e-4e8f-a40e-1985ddd28c0a.wav',lang:'ar'},
+        {id:'m21',category:'motivation',person:'',text:'يا فريق القصر الذهبي، جهاز ورا جهاز، حالة ورا حالة، والشغل المرتب آخر النهار بيحكي عن حاله.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=91e848a1-6e0a-4957-a669-6214f7d37ff9.wav',lang:'ar'},
+        {id:'m22',category:'workshop',person:'',text:'شباب القصر الذهبي، اليوم ممنوع الجهاز يزعل بالورشة، يا بيتصلّح يا منعرف بالضبط ليش ما بدو يتصلّح!',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=000348a4-2100-460f-a123-fdda585821dd.wav',lang:'ar'},
+        {id:'m23',category:'motivation',person:'',text:'شدّوا الهمة يا فريق القصر الذهبي، كل حالة عم تنسكر صح معناها زبون مرتاح أكتر.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=f0fd4a6b-168c-47ad-994c-710c909dbf46.wav',lang:'ar'},
+        {id:'m24',category:'workshop',person:'',text:'الورشة المرتبة بتريح الفني والزبون، يلا يا فريق القصر الذهبي خلونا نخلي الشغل ماشي متل الساعة.',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=0a79ba81-6ef5-4319-a363-8d46da758373.wav',lang:'ar'},
+        {id:'m25',category:'motivation',person:'',text:'صباح أو مسا النشاط يا فريق القصر الذهبي، الأجهزة كتيرة بس الخبرة أكتر!',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=7557e240-364a-4685-a6bc-1c0b0da0ae37.wav',lang:'ar'},
+        {id:'m26',category:'person',person:'abu_adnan',text:'أبو عدنان، اليوم الأجهزة عم تسأل عنك، شكلها عرفت إنو دورها وصلت للصيانة الصح!',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=89b675bf-e45c-459a-a1ed-dd4593785bd2.wav',lang:'ar'},
+        {id:'m27',category:'person',person:'abu_adnan',text:'يا أبو عدنان، إذا الجهاز ما رضي يحكي من أول فحص، عطيو نظرة الخبرة تبعك يمكن يعترف لحالو!',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=9820404d-3767-476f-9631-b3183d794f35.wav',lang:'ar'},
+        {id:'m28',category:'person',person:'abu_adnan',text:'أبو عدنان، شد الهمة، بدنا الأجهزة تطلع من عندك مبسوطة أكتر من أصحابها!',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=e4b9e1b6-2c2f-4bf2-a52a-c4665e3f4606.wav',lang:'ar'},
+        {id:'m29',category:'person',person:'khbeiti',text:'خبيطي، شوي شوي عالأجهزة، مو سباق رالي... بس إذا خلصتن بسرعة ما حدا رح يزعل!',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=6e40f831-0fb7-4bdf-b7f3-b87a1866c652.wav',lang:'ar'},
+        {id:'m30',category:'person',person:'khbeiti',text:'يا خبيطي، الورشة اليوم بدها همتك، بس دير بالك الجهاز مو لازم يعرف قديش مستعجلين عليه!',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=1cda7dfe-3251-4422-9bdc-4e506bbbb66b.wav',lang:'ar'},
+        {id:'m31',category:'person',person:'khbeiti',text:'خبيطي، إذا كل جهاز خلصته اليوم أخد نقطة، شكلك آخر الدوام بدك آلة حاسبة!',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=f3b2e9e4-e660-41de-8aae-733b206349fd.wav',lang:'ar'},
+        {id:'m32',category:'person',person:'abu_nuqta',text:'أبو نقطة، اليوم بدنا كل النقاط واضحة، وآخر نقطة بكل حالة تكون: تم الإنجاز!',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=38b428eb-3943-4dc7-b109-b18463de35bf.wav',lang:'ar'},
+        {id:'m33',category:'person',person:'abu_nuqta',text:'يا أبو نقطة، اسمك لحالو بيقول إنك ما بتترك الموضوع بلا نقطة أخيرة!',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=bf787b4a-920a-41c9-8c9c-23cc0dc08794.wav',lang:'ar'},
+        {id:'m34',category:'person',person:'abu_nuqta',text:'أبو نقطة، الجهاز إذا وصل لعندك بيعرف إنو رح نعرف وين النقطة اللي عاملة المشكلة!',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=b32885c0-6d8f-43d7-858a-973beb1273b9.wav',lang:'ar'},
+        {id:'m35',category:'person',person:'omar',text:'عمر، شد الهمة، قائمة الانتظار شايفتك وبلشت تخاف تصغر!',url:'https://resource2.heygen.ai/text_to_speech/628ccd7ec31243c99f2f4becb76ad697/1cd326303dc3411eaa9fcda84ee7b921/id=a26c3b1d-9984-423e-87b3-0c082fc29a81.wav',lang:'ar'},
+        {id:'m36',category:'person',person:'omar',text:'يا عمر، اليوم كل جهاز مخلص إلك بيحسب خطوة جديدة لخدمة القصر الذهبي.',url:'',lang:'ar'},
+        {id:'m37',category:'person',person:'omar',text:'عمر، واضح إنو الأجهزة عاملين موعد جماعي معك اليوم، الله يعطيك العافية من هلق!',url:'',lang:'ar'},
+        {id:'m38',category:'management',person:'abu_adam',text:'أبو آدم مدير التطوير والعمليات، إذا شاف حالة متأخرة، فجأة بيصير عنا تطوير للسرعة والعمليات بنفس الدقيقة!',url:'',lang:'ar'},
+        {id:'m39',category:'management',person:'abu_adam',text:'لما أبو آدم يقول: عندي تحسين بسيط، الفريق بيعرف إنو في فكرة جديدة بالطريق... وغالباً معها شوية شغل!',url:'',lang:'ar'},
+        {id:'m40',category:'management',person:'abu_adam',text:'أبو آدم عم يتابع التطوير والعمليات، والشباب عم يتابعوا الأجهزة... يعني ما ضل غير الأجهزة تتابع حالها!',url:'',lang:'ar'}
+    ];
+
+    let teamVoiceEnabled = false;
+    let teamVoiceTimer = null;
+    let teamVoicePlaying = false;
+    let teamVoiceAudio = null;
+    let lastVoicePerson = '';
+    let lastVoiceCategory = '';
+
+    function shuffledCopy(items) {
+        const a = items.slice();
+        for (let i = a.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+    }
+
+    function loadRotationState() {
+        try {
+            const raw = JSON.parse(localStorage.getItem(TEAM_VOICE_STORAGE_KEY) || '{}');
+            return {
+                remaining: Array.isArray(raw.remaining) ? raw.remaining.filter(id => teamVoiceCatalog.some(x => x.id === id)) : [],
+                played: Array.isArray(raw.played) ? raw.played : [],
+                lastPerson: String(raw.lastPerson || ''),
+                lastCategory: String(raw.lastCategory || '')
+            };
+        } catch (_) { return {remaining:[], played:[], lastPerson:'', lastCategory:''}; }
+    }
+
+    function saveRotationState(state) {
+        try { localStorage.setItem(TEAM_VOICE_STORAGE_KEY, JSON.stringify(state)); } catch (_) {}
+    }
+
+    function refillRotation(state) {
+        const categories = ['golden','motivation','person','workshop','management'];
+        const buckets = Object.fromEntries(categories.map(c => [c, shuffledCopy(teamVoiceCatalog.filter(x => x.category === c))]));
+        const result = [];
+        let previousPerson = state.lastPerson || '';
+        let previousCategory = state.lastCategory || '';
+        while (result.length < teamVoiceCatalog.length) {
+            let availableCategories = categories.filter(c => buckets[c].length && c !== previousCategory);
+            if (!availableCategories.length) availableCategories = categories.filter(c => buckets[c].length);
+            if (!availableCategories.length) break;
+            availableCategories.sort((a,b) => buckets[b].length - buckets[a].length);
+            let chosenCategory = availableCategories[0];
+            let bucket = buckets[chosenCategory];
+            let idx = bucket.findIndex(x => !x.person || x.person !== previousPerson);
+            if (idx < 0) idx = 0;
+            const [track] = bucket.splice(idx,1);
+            result.push(track.id);
+            previousPerson = track.person || '';
+            previousCategory = track.category;
+        }
+        state.remaining = result;
+        state.played = [];
+        saveRotationState(state);
+    }
+
+    function chooseVoiceTrack() {
+        const state = loadRotationState();
+        if (!state.remaining.length) refillRotation(state);
+        let candidates = state.remaining.map(id => teamVoiceCatalog.find(x => x.id === id)).filter(Boolean);
+        if (!candidates.length) { refillRotation(state); candidates = state.remaining.map(id => teamVoiceCatalog.find(x => x.id === id)).filter(Boolean); }
+        let idx = candidates.findIndex(x => (!x.person || x.person !== state.lastPerson) && x.category !== state.lastCategory);
+        if (idx < 0) idx = candidates.findIndex(x => !x.person || x.person !== state.lastPerson);
+        if (idx < 0) idx = 0;
+        const track = candidates[idx];
+        state.remaining = state.remaining.filter(id => id !== track.id);
+        state.played.push(track.id);
+        state.lastPerson = track.person || '';
+        state.lastCategory = track.category || '';
+        saveRotationState(state);
+        lastVoicePerson = state.lastPerson;
+        lastVoiceCategory = state.lastCategory;
+        return track;
+    }
+
+    function updateVoiceButton(state) {
+        const btn = document.getElementById('voiceButton');
+        if (!btn) return;
+        btn.classList.remove('on','off','blocked');
+        if (state === 'blocked') { btn.classList.add('blocked'); btn.textContent = tr('voiceBlocked'); return; }
+        if (teamVoiceEnabled) { btn.classList.add('on'); btn.textContent = tr('voiceOn'); }
+        else { btn.classList.add('off'); btn.textContent = tr('voiceOff'); }
+    }
+
+    function setVoiceCaption(text, visible) {
+        const el = document.getElementById('voiceCaption');
+        if (!el) return;
+        el.textContent = text || '';
+        el.classList.toggle('show', Boolean(visible && text));
+    }
+
+    function stopTeamVoiceAudio() {
+        try {
+            if (teamVoiceAudio) { teamVoiceAudio.pause(); teamVoiceAudio.currentTime = 0; }
+            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        } catch (_) {}
+        teamVoiceAudio = null;
+        teamVoicePlaying = false;
+        setVoiceCaption('', false);
+    }
+
+    function speakFallback(track) {
+        if (!('speechSynthesis' in window)) return false;
+        try {
+            const u = new SpeechSynthesisUtterance(track.text);
+            u.lang = track.lang === 'en' ? 'en-GB' : 'ar-SA';
+            u.rate = 1.08;
+            u.pitch = 1.28; // brighter/higher-pitched fallback voice
+            u.volume = 1.0;
+            const voices = window.speechSynthesis.getVoices();
+            const femaleHints = ['female','zira','samantha','sara','salma','hoda','mageda','laila','maryam','nora'];
+            const langPrefix = track.lang === 'en' ? 'en' : 'ar';
+            const matching = voices.filter(v => String(v.lang || '').toLowerCase().startsWith(langPrefix));
+            const preferred = matching.find(v => femaleHints.some(h => String(v.name || '').toLowerCase().includes(h))) || matching[0];
+            if (preferred) u.voice = preferred;
+            u.onend = () => { teamVoicePlaying=false; setVoiceCaption('',false); };
+            u.onerror = () => { teamVoicePlaying=false; setVoiceCaption('',false); };
+            teamVoicePlaying = true;
+            setVoiceCaption(track.text, true);
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(u);
+            return true;
+        } catch (_) { return false; }
+    }
+
+    function playTeamVoice(track, manual=false) {
+        if (!track || detailMode || teamVoicePlaying) return false;
+        if (!manual && (!teamVoiceEnabled || document.hidden)) return false;
+        try {
+            stopTeamVoiceAudio();
+            if (!track.url) return speakFallback(track);
+            const audio = new Audio(track.url);
+            audio.preload = 'auto';
+            audio.volume = TEAM_VOICE_VOLUME;
+            teamVoiceAudio = audio;
+            teamVoicePlaying = true;
+            setVoiceCaption(track.text, true);
+            const finish = () => {
+                if (teamVoiceAudio === audio) teamVoiceAudio = null;
+                teamVoicePlaying = false;
+                setVoiceCaption('', false);
+            };
+            audio.addEventListener('ended', finish, {once:true});
+            audio.addEventListener('error', () => { finish(); speakFallback(track); }, {once:true});
+            const promise = audio.play();
+            if (promise && typeof promise.catch === 'function') promise.catch(() => { finish(); if (!speakFallback(track)) updateVoiceButton('blocked'); });
+            return true;
+        } catch (_) { return speakFallback(track); }
+    }
+
+    function scheduleNextTeamVoice(delay=TEAM_VOICE_INTERVAL_MS) {
+        clearTimeout(teamVoiceTimer);
+        teamVoiceTimer = null;
+        if (detailMode || !teamVoiceEnabled) return;
+        teamVoiceTimer = setTimeout(() => {
+            try {
+                if (!teamVoiceEnabled || document.hidden || teamVoicePlaying) { scheduleNextTeamVoice(TEAM_VOICE_RETRY_MS); return; }
+                const ok = playTeamVoice(chooseVoiceTrack(), false);
+                scheduleNextTeamVoice(ok ? TEAM_VOICE_INTERVAL_MS : TEAM_VOICE_RETRY_MS);
+            } catch (_) { scheduleNextTeamVoice(TEAM_VOICE_RETRY_MS); }
+        }, Math.max(1000, delay));
+    }
+
+    function toggleTeamVoice() {
+        if (detailMode) return;
+        try {
+            teamVoiceEnabled = !teamVoiceEnabled;
+            localStorage.setItem('gpFemaleVoiceEnabled', teamVoiceEnabled ? '1' : '0');
+            if (!teamVoiceEnabled) {
+                clearTimeout(teamVoiceTimer);
+                stopTeamVoiceAudio();
+                updateVoiceButton();
+                showToast(tr('voiceDisabled'));
+                return;
+            }
+            updateVoiceButton();
+            const ok = playTeamVoice(chooseVoiceTrack(), true);
+            if (!ok) updateVoiceButton('blocked'); else showToast(tr('voiceEnabled'));
+            scheduleNextTeamVoice();
+        } catch (_) { updateVoiceButton('blocked'); }
+    }
+
+    function testTeamVoice() {
+        if (detailMode) return;
+        try {
+            const ok = playTeamVoice(chooseVoiceTrack(), true);
+            if (ok) showToast(tr('voicePlaying')); else showToast(tr('audioBlocked'), 7000);
+        } catch (_) { showToast(tr('audioBlocked'), 7000); }
+    }
+
+    function initialiseTeamVoice() {
+        if (detailMode) return;
+        try { teamVoiceEnabled = localStorage.getItem('gpFemaleVoiceEnabled') !== '0'; }
+        catch (_) { teamVoiceEnabled = true; }
+        updateVoiceButton();
+        if (teamVoiceEnabled) scheduleNextTeamVoice();
+    }
+
+    async function confirmCollection(item, button) {
+        const msg = currentLanguage === 'ar'
+            ? `${tr('confirmPrefix')} ${item.service_id} ${tr('confirmSuffix')}\n${tr('closesCycle')} ${item.cycle_no}.`
+            : `${tr('confirmPrefix')} ${item.service_id} ${tr('confirmSuffix')}\n${tr('closesCycle')} ${item.cycle_no}.`;
+        if (!window.confirm(msg)) return;
+        button.disabled = true; button.textContent = tr('saving');
+        foregroundRefreshPending = true; setLoading(true, tr('saving'));
+        try {
+            const response = await fetch('/api/close-ticket', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ service_id:item.service_id, cycle_key:item.cycle_key }) });
+            const result = await response.json();
+            if (!response.ok || result.status !== 'success') throw new Error(result.message || tr('closeFailed'));
+            showToast(`${tr('closed')} ${item.service_id} ${tr('currentCycle')}`);
+            selectedTicketKey = null;
+            await refreshDashboard(true);
+        } catch (err) {
+            foregroundRefreshPending = false; setLoading(false);
+            showToast(err.message || String(err), 7000);
+            button.disabled = false; button.textContent = tr('confirmClose');
+        }
+    }
+
+    async function closeRemark(row, button) {
+        button.disabled = true; button.textContent = tr('saving');
+        foregroundRefreshPending = true; setLoading(true, tr('saving'));
+        try {
+            const response = await fetch('/api/delete-remark', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({row}) });
+            const result = await response.json();
+            if (!response.ok || result.status !== 'success') throw new Error(result.message || tr('remarkFail'));
+            showToast(tr('remarkClosed'));
+            await refreshDashboard(true);
+        } catch (err) {
+            foregroundRefreshPending = false; setLoading(false);
+            showToast(err.message || String(err), 7000);
+            button.disabled = false; button.textContent = tr('closeRemark');
+        }
+    }
+
+    async function retrySync() {
+        const pill = document.getElementById('syncPill');
+        pill.disabled=true; pill.textContent=tr('checking');
+        foregroundRefreshPending = true; setLoading(true, tr('connecting'));
+        try {
+            const response = await fetch('/api/health?reconnect=1', {cache:'no-store'});
+            const data = await response.json();
+            if (data.write_ready) showToast(tr('syncReady'));
+            else showToast(data.write_error || tr('syncNotReady'), 8000);
+        } catch (err) { foregroundRefreshPending = false; setLoading(false); showToast(String(err), 7000); }
+        finally { pill.disabled=false; await refreshDashboard(true); }
+    }
+
+    let refreshInFlight = false;
+    let remarksRefreshInFlight = false;
+
+    async function refreshRemarks() {
+        if (remarksRefreshInFlight) return;
+        remarksRefreshInFlight = true;
+        try {
+            const response = await fetch(`/api/remarks?t=${Date.now()}`, {cache:'no-store'});
+            if (!response.ok) return;
+            const result = await response.json();
+            if (!latestData) latestData = {};
+            latestData.remarks_list = Array.isArray(result.remarks_list) ? result.remarks_list : [];
+            document.getElementById('remarksCount').textContent = latestData.remarks_list.length;
+            if (detailMode && activeCategory === 'remarks') renderRemarks();
+        } catch (_) {
+            // Remarks are secondary; never let them slow or interrupt the dashboard.
+        } finally {
+            remarksRefreshInFlight = false;
+        }
+    }
+
+    async function refreshDashboard(force=false) {
+        if (refreshInFlight) {
+            if (force) foregroundRefreshPending = true;
+            return;
+        }
+
+        const foreground = force || !latestData || foregroundRefreshPending;
+        if (foreground) {
+            foregroundRefreshPending = true;
+            setLoading(true, force ? tr('refreshing') : tr('loading'));
+        }
+
+        refreshInFlight = true;
+        let pollAgain = false;
+        try {
+            const forceArg = force ? '&force=1' : '';
+            const response = await fetch(`/api/data?t=${Date.now()}${forceArg}`, {cache:'no-store'});
+            if (!response.ok) throw new Error(`API ${response.status}`);
+            const incoming = await response.json();
+            const existingRemarks = latestData && Array.isArray(latestData.remarks_list)
+                ? latestData.remarks_list : [];
+            latestData = incoming;
+            if (!Array.isArray(latestData.remarks_list) || latestData.remarks_list.length === 0) {
+                latestData.remarks_list = existingRemarks;
+            }
+            updateConnection(latestData);
+            updateMain(latestData);
+            if (detailMode) renderTicketList();
+
+            const busy = Boolean(incoming && (incoming.loading || incoming.refreshing));
+            if (busy) {
+                pollAgain = true;
+                if (foregroundRefreshPending) setLoading(true, tr('refreshing'));
+            } else {
+                saveDashboardSnapshot(latestData);
+                foregroundRefreshPending = false;
+                setLoading(false);
+            }
+        } catch (err) {
+            foregroundRefreshPending = false;
+            setLoading(false);
+            const lastSync = document.getElementById('lastSync');
+            if (lastSync) lastSync.textContent = `${tr('refreshFailed')}: ${err.message || err}`;
+        } finally {
+            refreshInFlight = false;
+            if (pollAgain) setTimeout(() => refreshDashboard(false), 700);
+        }
+    }
+
+    document.querySelectorAll('.workflow-card').forEach(btn => btn.addEventListener('click', () => openCategory(btn.dataset.category)));
+    document.getElementById('remarksButton').addEventListener('click', () => openCategory('remarks'));
+    document.getElementById('syncPill').addEventListener('click', retrySync);
+    document.getElementById('voiceButton').addEventListener('click', () => { try { toggleTeamVoice(); } catch (_) {} });
+    document.getElementById('voiceTestButton').addEventListener('click', () => { try { testTeamVoice(); } catch (_) {} });
+    document.getElementById('languageSelect').addEventListener('change', e => {
+        currentLanguage = e.target.value === 'ar' ? 'ar' : 'en';
+        try { localStorage.setItem('gpDashboardLanguage', currentLanguage); } catch (_) {}
+        const u = new URL(window.location.href); u.searchParams.set('lang', currentLanguage); history.replaceState({},'',u);
+        stopTeamVoiceAudio();
+        teamVoicePlaying=false; setVoiceCaption('',false);
+        applyLanguage();
+        if (latestData) { updateConnection(latestData); updateMain(latestData); if(detailMode) renderTicketList(); }
+        if (!latestData || latestData.loading || latestData.refreshing) refreshDashboard(true);
+    });
+    document.getElementById('mainButton').addEventListener('click', () => { if (window.opener) window.close(); else window.location.href=`/tv?lang=${encodeURIComponent(currentLanguage)}`; });
+    document.getElementById('closeWindowButton').addEventListener('click', () => { if (window.opener) window.close(); else window.location.href=`/tv?lang=${encodeURIComponent(currentLanguage)}`; });
+    document.getElementById('refreshButton').addEventListener('click', () => refreshDashboard(true));
+    document.getElementById('searchBox').addEventListener('input', renderTicketList);
+
+    applyLanguage();
+    configureView();
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // Instant main-TV warm start from the previous successful summary, while the
+    // authoritative live Ledger refresh begins immediately in the background.
+    const warmSnapshot = loadDashboardSnapshot();
+    if (warmSnapshot) {
+        latestData = warmSnapshot;
+        updateConnection(latestData);
+        updateMain(latestData);
+        setLoading(false);
+    } else {
+        setLoading(true, tr('loading'));
+    }
+    refreshDashboard(false);
+    setTimeout(refreshRemarks, 1800);
+    setTimeout(() => { try { initialiseTeamVoice(); } catch (_) {} }, 800);
+    setInterval(() => refreshDashboard(false), 15000);
+    setInterval(refreshRemarks, 60000);
+})();
+</script>
+</body>
+</html>

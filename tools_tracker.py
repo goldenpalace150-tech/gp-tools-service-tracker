@@ -7,6 +7,8 @@ import requests
 import base64
 import urllib.parse
 import os
+import hashlib
+from contextlib import contextmanager
 from streamlit_gsheets import GSheetsConnection
 
 # ==========================================
@@ -29,6 +31,98 @@ st.set_page_config(page_title="Al-Qasr Al-Zahabi ERP", layout="wide", page_icon=
 
 query_params = st.query_params
 is_tv_mode = "tv" in query_params or query_params.get("mode") == "tv"
+
+if "ui_language" not in st.session_state:
+    requested_language = str(query_params.get("lang", "ar") or "ar").lower()
+    st.session_state["ui_language"] = requested_language if requested_language in {"ar", "en"} else "ar"
+
+
+UI_TEXT = {
+    "ar": {
+        "loading_data": "جارٍ تحميل البيانات مباشرة من المصدر...",
+        "saving_data": "جارٍ حفظ البيانات...",
+        "language": "اللغة",
+        "workspace_title": "مساحة العمل الموحدة",
+        "sidebar_title": "مساحة عمل ERPNext",
+        "user": "المستخدم",
+        "role": "الدور",
+        "core_modules": "العمليات الأساسية",
+        "workspace": "🏠 مساحة العمل",
+        "tv": "📺 شاشة الورشة",
+        "support": "🛠️ الدعم والصيانة",
+        "stock": "📦 المخزون",
+        "logistics": "🚚 اللوجستيات",
+        "accounting": "💰 المحاسبة",
+        "logout": "🚪 تسجيل الخروج",
+        "stock_title": "📦 وحدة المستودعات والمخزون",
+        "stock_reorder": "⚠️ يوجد {count} أصناف تتطلب إعادة طلب.",
+        "stock_export": "📥 تصدير السجل",
+        "stock_import_expander": "📤 استيراد تقرير المخزون / الأسعار",
+        "stock_upload": "رفع تقرير Excel أو CSV",
+        "stock_import": "استيراد",
+        "stock_imported": "✅ تم استيراد {count} صنف بنجاح.",
+        "stock_invalid": "❌ لم أتمكن من تحديد عمود كود المادة واسم المادة في التقرير.",
+        "stock_import_error": "❌ فشل استيراد تقرير المخزون",
+        "stock_save": "💾 حفظ التعديلات",
+        "stock_saved": "✅ تم حفظ المخزون.",
+        "open_repairs": "🛠️ صيانة مفتوحة",
+        "ready_tools": "✅ أجهزة جاهزة للتسليم",
+        "sales_total": "💰 إجمالي المبيعات",
+    },
+    "en": {
+        "loading_data": "Loading live data directly from the source...",
+        "saving_data": "Saving data...",
+        "language": "Language",
+        "workspace_title": "Unified Workspace",
+        "sidebar_title": "ERPNext Workspace",
+        "user": "User",
+        "role": "Role",
+        "core_modules": "CORE MODULES",
+        "workspace": "🏠 Workspace",
+        "tv": "📺 TV Display",
+        "support": "🛠️ Support & Maintenance",
+        "stock": "📦 Stock",
+        "logistics": "🚚 Logistics",
+        "accounting": "💰 Accounting",
+        "logout": "🚪 Logout",
+        "stock_title": "📦 Stock & Inventory",
+        "stock_reorder": "⚠️ {count} items require reordering.",
+        "stock_export": "📥 Export Stock",
+        "stock_import_expander": "📤 Import Stock / Price Report",
+        "stock_upload": "Upload Excel or CSV report",
+        "stock_import": "Import",
+        "stock_imported": "✅ Imported {count} stock items successfully.",
+        "stock_invalid": "❌ I could not identify the item-code and item-name columns in this report.",
+        "stock_import_error": "❌ Stock report import failed",
+        "stock_save": "💾 Save Stock Changes",
+        "stock_saved": "✅ Stock saved.",
+        "open_repairs": "🛠️ Open Repairs",
+        "ready_tools": "✅ Ready for Collection",
+        "sales_total": "💰 Total Sales",
+    },
+}
+
+
+def tr(key, **kwargs):
+    lang = st.session_state.get("ui_language", "ar")
+    value = UI_TEXT.get(lang, UI_TEXT["ar"]).get(key, key)
+    return value.format(**kwargs) if kwargs else value
+
+
+@contextmanager
+def golden_loading(message=None):
+    """Consistent Golden Palace waiting indicator without stacking nested spinners."""
+    depth = int(st.session_state.get("_golden_loading_depth", 0) or 0)
+    st.session_state["_golden_loading_depth"] = depth + 1
+    try:
+        if depth:
+            yield
+        else:
+            with st.spinner(f"🏢 Golden Palace · {message or tr('loading_data')}"):
+                yield
+    finally:
+        st.session_state["_golden_loading_depth"] = depth
+
 
 if is_tv_mode:
     st.markdown("""
@@ -53,6 +147,50 @@ else:
             .invoice-header { text-align: center; border-bottom: 2px solid #2b6cb0; padding-bottom: 15px; margin-bottom: 20px; }
         </style>
     """, unsafe_allow_html=True)
+
+ui_is_ar = st.session_state.get("ui_language", "ar") == "ar"
+ui_direction = "rtl" if ui_is_ar else "ltr"
+ui_align = "right" if ui_is_ar else "left"
+st.markdown(
+    f"""
+    <style>
+        .stApp {{ direction: {ui_direction} !important; text-align: {ui_align} !important; }}
+        .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp p, .stApp span,
+        .stApp label, .stApp div {{ text-align: {ui_align}; }}
+        div[data-testid="stSpinner"] {{
+            position: fixed !important;
+            left: 50% !important;
+            top: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            z-index: 999999 !important;
+            min-width: 300px;
+            max-width: min(520px, calc(100vw - 32px));
+            padding: 22px 26px !important;
+            border: 1px solid #c89b2c;
+            border-radius: 18px;
+            background: #06182a;
+            color: #ffffff;
+            box-shadow: 0 18px 60px rgba(0,0,0,.35);
+        }}
+        div[data-testid="stSpinner"]::before {{
+            content: "GP";
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 42px;
+            height: 42px;
+            margin-inline-end: 12px;
+            border-radius: 50%;
+            border: 2px solid #e7bd58;
+            color: #f4bd2d;
+            font-weight: 900;
+            letter-spacing: .04em;
+            background: #0b2238;
+        }}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # ==========================================
 # DATABASE ORM (DocType Engine)
@@ -853,13 +991,26 @@ def deduplicate_ledger(df):
     return work.drop(columns=["_cycle_no", "_workflow_rank", "_workflow_date"], errors="ignore").reset_index(drop=True)
 
 
+def _worksheet_missing_error(exc, worksheet_name=""):
+    name = type(exc).__name__.lower()
+    message = str(exc).strip().lower()
+    target = str(worksheet_name or "").strip().lower()
+    return (
+        "worksheetnotfound" in name
+        or ("worksheet" in message and ("not found" in message or "does not exist" in message))
+        or (target and message == target)
+    )
+
+
 def get_doctype(doctype_name):
+    """Read the requested worksheet directly from Google Sheets (no stale app cache)."""
     try:
         df = conn.read(worksheet=doctype_name, ttl=0)
         df = df.dropna(how='all')
 
         for col in SCHEMA[doctype_name]:
-            if col not in df.columns: df[col] = ""
+            if col not in df.columns:
+                df[col] = ""
 
         if doctype_name == "Ledger":
             df['service_id'] = df['service_id'].astype(str).replace({'nan': '', 'None': ''})
@@ -883,17 +1034,198 @@ def get_doctype(doctype_name):
         return df
     except Exception as e:
         error_msg = str(e).strip()
-        if error_msg != doctype_name and "not found" not in error_msg.lower() and "HTTPError" in error_msg:
+        if not _worksheet_missing_error(e, doctype_name) and "HTTPError" in error_msg:
             st.error(f"⚠️ خطأ في الاتصال (Connection Error): {error_msg}")
         return pd.DataFrame(columns=SCHEMA[doctype_name])
 
 
 def save_doctype(doctype_name, df):
+    """Update a worksheet; create it automatically on the first write if missing."""
     if doctype_name == "Ledger":
         df = apply_workflow_columns(df)
         df = deduplicate_ledger(df)
         df = df[df['service_id'].astype(str).str.strip() != ""]
-    conn.update(worksheet=doctype_name, data=df)
+
+    with golden_loading(tr("saving_data")):
+        try:
+            conn.update(worksheet=doctype_name, data=df)
+        except Exception as exc:
+            if not _worksheet_missing_error(exc, doctype_name):
+                raise
+            # First-ever import: create the missing worksheet with the same schema/data.
+            conn.create(worksheet=doctype_name, data=df)
+        # GSheetsConnection uses Streamlit's data cache internally; clear it after writes.
+        try:
+            st.cache_data.clear()
+        except Exception:
+            pass
+
+
+def _canonical_stock_header(value):
+    text = normalize_doc_string(value).lower().replace("ـ", "")
+    return re.sub(r"[^0-9a-zA-Z\u0600-\u06FF]+", "", text)
+
+
+def _clean_item_code(value):
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    if isinstance(value, (int, float)) and not pd.isna(value) and float(value).is_integer():
+        return str(int(value))
+    text = str(value).strip()
+    return re.sub(r"\.0$", "", text)
+
+
+def _stock_column_map(columns):
+    aliases = {
+        "item_code": {"mtcode", "itemcode", "code", "materialcode", "productcode", "كودالمادة", "رمزالمادة", "رقمالمادة", "كودالصنف", "رمزالصنف"},
+        "item_name": {"اسمالمادة", "itemname", "name", "description", "materialname", "productname", "اسمالصنف", "وصفالمادة", "الوصف"},
+        "quantity": {"quantity", "qty", "stock", "balance", "available", "onhand", "الكمية", "كمية", "الرصيد", "رصيد", "الرصيدالحالي", "الكميةالحالية", "المتوفر"},
+        "price": {"الجملة", "سعرالجملة", "wholesale", "wholesaleprice", "price", "unitprice", "السعر", "سعر", "سعرالبيع", "المبيع"},
+    }
+    normalized = {_canonical_stock_header(col): col for col in columns}
+    result = {}
+    for target, names in aliases.items():
+        for alias in names:
+            if alias in normalized:
+                result[target] = normalized[alias]
+                break
+    return result
+
+
+def read_stock_report(uploaded_file):
+    """Read Excel/CSV stock reports and auto-detect the actual header row/sheet."""
+    filename = str(getattr(uploaded_file, "name", "") or "").lower()
+    try:
+        file_bytes = uploaded_file.getvalue()
+    except Exception:
+        uploaded_file.seek(0)
+        file_bytes = uploaded_file.read()
+
+    if filename.endswith(".csv"):
+        last_error = None
+        for encoding in ("utf-8-sig", "utf-8", "cp1256", "latin1"):
+            try:
+                return pd.read_csv(io.BytesIO(file_bytes), sep=None, engine="python", encoding=encoding)
+            except Exception as exc:
+                last_error = exc
+        raise last_error or ValueError(tr("stock_invalid"))
+
+    excel = pd.ExcelFile(io.BytesIO(file_bytes))
+    fallback = None
+    for sheet_name in excel.sheet_names:
+        preview = pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_name, header=None, nrows=30)
+        if fallback is None:
+            fallback = (sheet_name, 0)
+        for idx, row in preview.iterrows():
+            mapping = _stock_column_map(row.tolist())
+            # Ameen stock reports may omit the code; name + quantity/price is still usable.
+            if "item_name" in mapping and any(key in mapping for key in ("item_code", "quantity", "price")):
+                return pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_name, header=int(idx))
+
+    sheet_name, header_row = fallback or (excel.sheet_names[0], 0)
+    return pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_name, header=header_row)
+
+
+def _normalized_stock_name(value):
+    return _canonical_stock_header(value)
+
+
+def _generated_stock_code(item_name):
+    """Stable internal code used only when a report genuinely has no item-code column."""
+    key = _normalized_stock_name(item_name)
+    digest = hashlib.sha1(key.encode("utf-8")).hexdigest()[:12].upper()
+    return f"AUTO-{digest}"
+
+def normalize_stock_report(raw, existing_stock=None):
+    """Normalize common stock/price reports without losing existing quantity or price."""
+    if raw is None or raw.empty:
+        raise ValueError(tr("stock_invalid"))
+
+    mapping = _stock_column_map(raw.columns)
+    if "item_name" not in mapping or not any(key in mapping for key in ("item_code", "quantity", "price")):
+        raise ValueError(tr("stock_invalid"))
+
+    existing_source = existing_stock.copy() if existing_stock is not None else pd.DataFrame(columns=STOCK_COLUMNS)
+    for col in STOCK_COLUMNS:
+        if col not in existing_source.columns:
+            existing_source[col] = "" if col in {"item_code", "item_name"} else 0.0
+
+    # Reuse an existing real code when a code-less report has one unambiguous name match.
+    existing_name_codes = {}
+    if not existing_source.empty:
+        name_groups = existing_source.assign(
+            _name_key=existing_source["item_name"].map(_normalized_stock_name),
+            _clean_code=existing_source["item_code"].map(_clean_item_code),
+        ).groupby("_name_key")["_clean_code"].agg(lambda values: [v for v in dict.fromkeys(values) if v])
+        existing_name_codes = {key: values[0] for key, values in name_groups.items() if key and len(values) == 1}
+
+    work = pd.DataFrame(index=raw.index)
+    work["item_name"] = raw[mapping["item_name"]].fillna("").astype(str).str.strip().str.strip('"')
+    if "item_code" in mapping:
+        work["item_code"] = raw[mapping["item_code"]].apply(_clean_item_code)
+    else:
+        work["item_code"] = work["item_name"].map(
+            lambda name: existing_name_codes.get(_normalized_stock_name(name), "") or _generated_stock_code(name)
+        )
+    work = work[work["item_name"].map(_normalized_stock_name).ne("")].copy()
+    work["item_code"] = work["item_code"].replace({"nan": "", "None": ""})
+    missing_code = work["item_code"].astype(str).str.strip().eq("")
+    work.loc[missing_code, "item_code"] = work.loc[missing_code, "item_name"].map(
+        lambda name: existing_name_codes.get(_normalized_stock_name(name), "") or _generated_stock_code(name)
+    )
+
+    has_quantity = "quantity" in mapping
+    has_price = "price" in mapping
+    if has_quantity:
+        quantity_text = raw.loc[work.index, mapping["quantity"]].astype(str).str.replace(",", "", regex=False)
+        work["quantity"] = pd.to_numeric(quantity_text, errors="coerce")
+    if has_price:
+        price_text = raw.loc[work.index, mapping["price"]].astype(str).str.replace(",", "", regex=False)
+        work["price"] = pd.to_numeric(price_text, errors="coerce")
+
+    # Consolidate reports that repeat one item across locations/batches.
+    aggregations = {"item_name": "last"}
+    if has_quantity:
+        aggregations["quantity"] = lambda s: s.sum(min_count=1)
+    if has_price:
+        aggregations["price"] = "last"
+    work = work.groupby("item_code", as_index=False, sort=False).agg(aggregations)
+
+    existing = existing_source.copy()
+    for col in STOCK_COLUMNS:
+        if col not in existing.columns:
+            existing[col] = "" if col in {"item_code", "item_name"} else 0.0
+    if not existing.empty:
+        existing["item_code"] = existing["item_code"].apply(_clean_item_code)
+        existing["quantity"] = pd.to_numeric(existing["quantity"], errors="coerce").fillna(0.0)
+        existing["price"] = pd.to_numeric(existing["price"], errors="coerce").fillna(0.0)
+    existing = existing.drop_duplicates("item_code", keep="last").set_index("item_code", drop=False)
+
+    rows = []
+    for _, incoming in work.iterrows():
+        code = incoming["item_code"]
+        old = existing.loc[code] if code in existing.index else None
+        old_name = normalize_doc_string(old.get("item_name", "")) if old is not None else ""
+        old_quantity = float(old.get("quantity", 0.0)) if old is not None else 0.0
+        old_price = float(old.get("price", 0.0)) if old is not None else 0.0
+        qty = incoming.get("quantity") if has_quantity else None
+        price = incoming.get("price") if has_price else None
+        rows.append({
+            "item_code": code,
+            "item_name": normalize_doc_string(incoming.get("item_name", "")) or old_name,
+            "quantity": float(qty) if has_quantity and pd.notna(qty) else old_quantity,
+            "price": float(price) if has_price and pd.notna(price) else old_price,
+        })
+
+    imported = pd.DataFrame(rows, columns=STOCK_COLUMNS)
+
+    # Keep existing items that were not present in this particular report.
+    if not existing.empty:
+        untouched = existing[~existing.index.isin(imported["item_code"])][STOCK_COLUMNS].reset_index(drop=True)
+        imported = pd.concat([untouched, imported], ignore_index=True)
+
+    imported = imported.drop_duplicates("item_code", keep="last").reset_index(drop=True)
+    return imported, {"has_quantity": has_quantity, "has_price": has_price, "imported_count": len(work)}
 
 
 def convert_df_to_excel(df):
@@ -908,7 +1240,7 @@ def upload_to_cloud(file_buffer):
         return ""
     try:
         b64_img = base64.b64encode(file_buffer.getvalue()).decode("utf-8")
-        res = requests.post(f"https://api.imgbb.com/1/upload?key={IMGBB_API_KEY}", data={"image": b64_img})
+        res = requests.post(f"https://api.imgbb.com/1/upload?key={IMGBB_API_KEY}", data={"image": b64_img}, timeout=20)
         if res.status_code == 200: return res.json()["data"]["url"]
     except: return ""
     return ""
@@ -965,44 +1297,74 @@ if st.session_state['logged_in_user'] is None:
 current_user = st.session_state['logged_in_user']
 is_admin = current_user in USERS and "Administrator" in USERS[current_user]["role"]
 
-ledger_df = get_doctype("Ledger")
-stock_df = get_doctype("Stock")
-hawara_df = get_doctype("Hawara")
-dispatch_df = get_doctype("Dispatch")
-
-stock_list = stock_df['item_name'].dropna().unique().tolist() if not stock_df.empty else []
-
 if not is_tv_mode:
     with st.sidebar:
-        st.title("🏢 ERPNext Workspace")
-        st.markdown(f"**المستخدم:** {current_user} <br> **الدور:** {USERS.get(current_user, {}).get('role', 'Viewer')}", unsafe_allow_html=True)
+        st.title(f"🏢 {tr('sidebar_title')}")
+        st.selectbox(
+            "🌐 اللغة / Language",
+            options=["ar", "en"],
+            key="ui_language",
+            format_func=lambda value: "العربية" if value == "ar" else "English",
+        )
+        st.markdown(
+            f"**{tr('user')}:** {current_user} <br> **{tr('role')}:** {USERS.get(current_user, {}).get('role', 'Viewer')}",
+            unsafe_allow_html=True,
+        )
         st.divider()
 
-        st.caption("العمليات الأساسية (CORE MODULES)")
-        if st.button("🏠 مساحة العمل (Workspace)", use_container_width=True): st.session_state['current_module'] = 'Workspace'
-        if st.button("📺 شاشة الورشة (TV Display)", use_container_width=True): st.session_state['current_module'] = 'TV_Display'
-        if st.button("🛠️ الدعم والصيانة (Support)", use_container_width=True): st.session_state['current_module'] = 'Support'
-        if st.button("📦 المخزون (Stock)", use_container_width=True): st.session_state['current_module'] = 'Stock'
-        if st.button("🚚 اللوجستيات (Logistics)", use_container_width=True): st.session_state['current_module'] = 'Logistics'
+        st.caption(tr("core_modules"))
+        if st.button(tr("workspace"), use_container_width=True): st.session_state['current_module'] = 'Workspace'
+        if st.button(tr("tv"), use_container_width=True): st.session_state['current_module'] = 'TV_Display'
+        if st.button(tr("support"), use_container_width=True): st.session_state['current_module'] = 'Support'
+        if st.button(tr("stock"), use_container_width=True): st.session_state['current_module'] = 'Stock'
+        if st.button(tr("logistics"), use_container_width=True): st.session_state['current_module'] = 'Logistics'
 
-        st.caption("المالية والتقارير (ACCOUNTING)")
-        if st.button("💰 المحاسبة (Accounting)", use_container_width=True): st.session_state['current_module'] = 'Accounting'
+        st.caption("ACCOUNTING" if st.session_state.get("ui_language") == "en" else "المالية والتقارير")
+        if st.button(tr("accounting"), use_container_width=True): st.session_state['current_module'] = 'Accounting'
 
         st.divider()
-        if st.button("🚪 تسجيل الخروج (Logout)", use_container_width=True):
+        if st.button(tr("logout"), use_container_width=True):
             st.session_state['logged_in_user'] = None
             st.rerun()
 
+# Load only what the selected module needs. This avoids four Google calls on every rerun.
+ledger_df = pd.DataFrame(columns=SCHEMA["Ledger"])
+stock_df = pd.DataFrame(columns=SCHEMA["Stock"])
+hawara_df = pd.DataFrame(columns=SCHEMA["Hawara"])
+dispatch_df = pd.DataFrame(columns=SCHEMA["Dispatch"])
+current_module = st.session_state['current_module']
+module_sources = {
+    "Workspace": {"Ledger"},
+    "TV_Display": {"Ledger"},
+    "Support": {"Ledger", "Stock"},
+    "Stock": {"Stock"},
+    "Logistics": {"Ledger", "Hawara", "Dispatch"},
+    "Accounting": {"Ledger"},
+}
+needed_sources = module_sources.get(current_module, set())
+if needed_sources:
+    with golden_loading(tr("loading_data")):
+        if "Ledger" in needed_sources:
+            ledger_df = get_doctype("Ledger")
+        if "Stock" in needed_sources:
+            stock_df = get_doctype("Stock")
+        if "Hawara" in needed_sources:
+            hawara_df = get_doctype("Hawara")
+        if "Dispatch" in needed_sources:
+            dispatch_df = get_doctype("Dispatch")
+
+stock_list = stock_df['item_name'].dropna().unique().tolist() if not stock_df.empty else []
+
 if st.session_state['current_module'] == 'Workspace':
-    st.title("مساحة العمل الموحدة (Workspace)")
+    st.title(tr("workspace_title"))
     active_count = len(ledger_df[~ledger_df['case_status'].astype(str).eq(CASE_STATUS_CLOSED)]) if not ledger_df.empty else 0
     ready_count = len(ledger_df[ledger_df['status'].str.contains('جاهز', na=False)]) if not ledger_df.empty else 0
     total_rev = float(ledger_df['cost_debit'].sum()) if not ledger_df.empty else 0.0
 
     col1, col2, col3 = st.columns(3)
-    with col1: st.markdown(f"<div class='erp-card'><h3>🛠️ صيانة مفتوحة</h3><h1>{active_count}</h1></div>", unsafe_allow_html=True)
-    with col2: st.markdown(f"<div class='erp-card'><h3>✅ أجهزة جاهزة للتسليم</h3><h1>{ready_count}</h1></div>", unsafe_allow_html=True)
-    with col3: st.markdown(f"<div class='erp-card'><h3>💰 إجمالي المبيعات</h3><h1>${total_rev:,.2f}</h1></div>", unsafe_allow_html=True)
+    with col1: st.markdown(f"<div class='erp-card'><h3>{tr('open_repairs')}</h3><h1>{active_count}</h1></div>", unsafe_allow_html=True)
+    with col2: st.markdown(f"<div class='erp-card'><h3>{tr('ready_tools')}</h3><h1>{ready_count}</h1></div>", unsafe_allow_html=True)
+    with col3: st.markdown(f"<div class='erp-card'><h3>{tr('sales_total')}</h3><h1>${total_rev:,.2f}</h1></div>", unsafe_allow_html=True)
 
 # ==========================================
 # MODULE 2: TV WORKSHOP DISPLAY (KIOSK MODE)
@@ -1403,41 +1765,46 @@ elif st.session_state['current_module'] == 'Support':
 # MODULE 4: STOCK & INVENTORY
 # ==========================================
 elif st.session_state['current_module'] == 'Stock':
-    st.title("📦 وحدة المستودعات والمخزون (Stock Module)")
+    st.title(tr("stock_title"))
     st.markdown("<div class='erp-card'>", unsafe_allow_html=True)
     if not stock_df.empty:
         stock_df['quantity'] = pd.to_numeric(stock_df['quantity'], errors='coerce').fillna(0)
+        stock_df['price'] = pd.to_numeric(stock_df['price'], errors='coerce').fillna(0.0)
         low_stock = stock_df[stock_df['quantity'] <= 2]
         if not low_stock.empty:
-            st.error(f"⚠️ يوجد {len(low_stock)} أصناف تتطلب إعادة طلب (Reorder Alert).")
+            st.error(tr("stock_reorder", count=len(low_stock)))
 
     c1, c2 = st.columns(2)
-    with c1: st.download_button("📥 تصدير السجل (Export)", data=convert_df_to_excel(stock_df) if not stock_df.empty else b"", file_name="Stock_Master.xlsx", use_container_width=True)
+    with c1:
+        st.download_button(
+            tr("stock_export"),
+            data=convert_df_to_excel(stock_df) if not stock_df.empty else b"",
+            file_name="Stock_Master.xlsx",
+            use_container_width=True,
+        )
     with c2:
-        with st.expander("📤 استيراد لائحة الأسعار (Import List)"):
-            uploaded_stock = st.file_uploader("رفع ملف Excel", type=["xlsx"])
-            if uploaded_stock and st.button("استيراد (Import)"):
-                raw = pd.read_excel(uploaded_stock)
-                if 'MtCode' in raw.columns and 'اسم المادة' in raw.columns:
-                    p_col = 'الجملة' if 'الجملة' in raw.columns else raw.columns[-1]
-                    new_items = raw[['MtCode', 'اسم المادة', p_col]].copy()
-                    new_items.columns = ['item_code', 'item_name', 'price']
-                    new_items = new_items.dropna(subset=['item_code'])
-                    new_items['price'] = pd.to_numeric(new_items['price'], errors='coerce').fillna(0.0)
-                    new_items['quantity'] = 0
-                    if not stock_df.empty:
-                        q_dict = dict(zip(stock_df['item_code'], stock_df['quantity']))
-                        new_items['quantity'] = new_items['item_code'].map(q_dict).fillna(0)
-                    save_doctype("Stock", new_items[STOCK_COLUMNS])
-                    st.success("✅ اكتمل الاستيراد.")
+        with st.expander(tr("stock_import_expander")):
+            uploaded_stock = st.file_uploader(tr("stock_upload"), type=["xlsx", "xls", "csv"], key="stock_report_upload")
+            if uploaded_stock and st.button(tr("stock_import"), key="stock_report_import"):
+                try:
+                    with golden_loading(tr("loading_data")):
+                        raw = read_stock_report(uploaded_stock)
+                        merged_stock, import_meta = normalize_stock_report(raw, stock_df)
+                        save_doctype("Stock", merged_stock[STOCK_COLUMNS])
+                    st.success(tr("stock_imported", count=import_meta["imported_count"]))
                     st.rerun()
+                except Exception as exc:
+                    st.error(f"{tr('stock_import_error')}: {exc}")
 
     if not stock_df.empty:
-        edited_stock = st.data_editor(stock_df, num_rows="dynamic", use_container_width=True)
-        if st.button("💾 حفظ التعديلات (Save Stock)", use_container_width=True):
-            save_doctype("Stock", edited_stock)
-            st.success("تم الحفظ!")
-            st.rerun()
+        edited_stock = st.data_editor(stock_df[STOCK_COLUMNS], num_rows="dynamic", use_container_width=True)
+        if st.button(tr("stock_save"), use_container_width=True):
+            try:
+                save_doctype("Stock", edited_stock[STOCK_COLUMNS])
+                st.success(tr("stock_saved"))
+                st.rerun()
+            except Exception as exc:
+                st.error(f"{tr('stock_import_error')}: {exc}")
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
@@ -1591,7 +1958,7 @@ elif st.session_state['current_module'] == 'Accounting':
             st.subheader("📥 استيراد كشوفات الأمين (Legacy Import Tool)")
             uploaded_legacy = st.file_uploader("رفع ملف Excel", type=["xlsx"])
             if uploaded_legacy and st.button("تنفيذ الاستيراد (Run Import)"):
-                with st.spinner("Processing Ameen repair ledger..."):
+                with golden_loading("Processing Ameen repair ledger..." if st.session_state.get("ui_language") == "en" else "جارٍ معالجة كشف الأمين..."):
                     raw_excel = pd.read_excel(uploaded_legacy, sheet_name=0, header=0)
                     imported_df = normalize_ameen_dataframe(raw_excel)
 
