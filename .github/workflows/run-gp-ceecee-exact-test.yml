@@ -1,8 +1,7 @@
-name: Run GP Exact Ceecee Voice
+name: Run GP Levantine Voice
 on:
   push:
     paths:
-      - scripts/apply_gp_ceecee_exact_test.py
       - scripts/apply_gp_ceecee_activation_v2.py
       - .github/workflows/run-gp-ceecee-exact-test.yml
 permissions:
@@ -15,28 +14,46 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Apply exact Ceecee test voice
-        run: python scripts/apply_gp_ceecee_exact_test.py
-      - name: Apply exact Ceecee activation rotation
+      - name: Apply Levantine dynamic voice
         run: python scripts/apply_gp_ceecee_activation_v2.py
-      - name: Validate TV JavaScript and Ceecee paths
+      - name: Validate Python and TV JavaScript
         run: |
+          python -m py_compile flask_app.py
           python - <<'PY'
           from pathlib import Path
           import re
           html=Path('templates/tv.html').read_text(encoding='utf-8')
-          required=['GP_CEECEE_EXACT_TEST_V1','GP_CEECEE_ACTIVATION_V2','1cd326303dc3411eaa9fcda84ee7b921','Enable / Disable','تفعيل / إيقاف','chooseCeeceeActivationTrack']
+          required=['GP_LEVANTINE_VOICE_V4','Enable / Disable','تفعيل / إيقاف','gpPlayDynamicLevantine','gpFetchServerVoiceTrack','gpNextStaffPerson','حريري','أبو غسان','حازم','أبو آدم']
           missing=[x for x in required if x not in html]
-          if missing: raise SystemExit('Missing markers: '+str(missing))
+          if missing: raise SystemExit('Missing TV markers: '+str(missing))
           script=re.findall(r'<script>(.*?)</script>',html,re.S)[-1]
           Path('/tmp/tv.js').write_text(script,encoding='utf-8')
+          flask=Path('flask_app.py').read_text(encoding='utf-8')
+          required_flask=['GP_LEVANTINE_VOICE_V4','ar-LB-LaylaNeural','GP_STAFF_AR','GP_AR_MANAGER_JOKES','final_rate = "-5%"','final_pitch = "-3Hz"']
+          missing=[x for x in required_flask if x not in flask]
+          if missing: raise SystemExit('Missing Flask markers: '+str(missing))
           PY
           node --check /tmp/tv.js
-      - name: Commit verified TV voice update
+      - name: Validation pass 2
+        run: |
+          python -m py_compile flask_app.py
+          node --check /tmp/tv.js
+          python - <<'PY'
+          from pathlib import Path
+          src=Path('flask_app.py').read_text(encoding='utf-8')
+          tv=Path('templates/tv.html').read_text(encoding='utf-8')
+          assert 'ar-LB-LaylaNeural' in src
+          assert 'GP_STAFF_AR = ["أبو عدنان", "خبيطي", "أبو نقطة", "عمر", "أبو آدم", "حريري", "أبو غسان", "حازم"]' in src
+          assert 'gpCommitStaffPerson' in tv
+          assert 'GP_CEECEE_ACTIVATION_CATALOG' in tv  # retained only as old reference; final override is Levantine dynamic
+          assert tv.rfind('GP_LEVANTINE_VOICE_V4') > tv.rfind('GP_CEECEE_ACTIVATION_V2')
+          print('Second validation pass OK')
+          PY
+      - name: Commit verified voice update
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add templates/tv.html
+          git add flask_app.py templates/tv.html
           git diff --cached --quiet && exit 0
-          git commit -m "Use exact original Ceecee voice for activation rotation"
+          git commit -m "Use natural Levantine female voice with dynamic staff rotation"
           git push
