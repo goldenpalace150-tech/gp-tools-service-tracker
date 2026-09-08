@@ -2,7 +2,13 @@
 <html lang="en" dir="ltr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#071a2d">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <!-- GP_AMANY_KIOSK_2026_09_08 -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>Service Workshop Tracker - Golden Palace</title>
     <style>
@@ -562,7 +568,7 @@
     const UI = {
         en: {
             heading:'Service Workshop Tracker', tagline:'Track Today · Fix Tomorrow · Build Trust', urgent:'🔥 Urgent', delayed:'⚠️ Delayed', remarks:'📝 Remarks',
-            voiceOn:'🔊 Golden Palace Syrian female voice ON', voiceOff:'🔇 Golden Palace Syrian female voice OFF', voiceBlocked:'⚠️ Click to enable voice', voiceTest:'▶ Test voice', dashboard:'↩ Dashboard',
+            voiceOn:'🔊 Amany · Syrian female natural voice ON', voiceOff:'🔇 Amany · Syrian female natural voice OFF', voiceBlocked:'⚠️ Open in Microsoft Edge for Amany Syrian voice', voiceTest:'▶ Test voice', dashboard:'↩ Dashboard',
             openHint:'Click to view details ↗', search:'Search service ID, customer, tool…', refresh:'🔄 Refresh now', closeWindow:'✕ Close window',
             footerTitle:'Great work team!', footerText:'Every completed job builds more customer trust in Golden Palace.', footerSlogan:'Together\nWe Keep the World Working',
             progressTitle:'In Repair', progressDesc:'Tools currently in an active repair cycle.', collectionTitle:'Waiting Collection', collectionDesc:'Sales invoice > 0 and physical collection is not confirmed yet.',
@@ -573,13 +579,13 @@
             hideDetails:'Hide details', currentHistory:'Current cycle history', confirmClose:'✅ Confirm physical collection & close current cycle',
             labels:['Service ID','Repair cycle','Cycle key','Workflow state','Cycle started','Last event date','Last Ameen event','Cycle documents','Sales total','Zero invoice verified','Collection/payment','Partner settlement','Financial status','Collection status','Partner claim','Case status','Closed by','Closed at','Close note','Customer','Phone','Tool','Warranty','Reported issue','Remarks'],
             yes:'YES', no:'NO', syncLive:'🟢 Google Sheets live', trackerLive:'🟢 Tools Tracker Live', trackerBackup:'🟡 Backup Feed', writeReady:'🟢 Write ready', readOnly:'🔴 Google Sheets read-only', lastSync:'Last sync', refreshFailed:'Refresh failed',
-            voiceDisabled:'Golden Palace announcements disabled.', voiceEnabled:'Golden Palace announcements enabled. A new message will play every 10 minutes.', voicePlaying:'Voice test playing.', audioBlocked:'The browser blocked audio. Click Golden Palace voice once and allow sound for this site.',
+            voiceDisabled:'Golden Palace announcements disabled.', voiceEnabled:'Golden Palace announcements enabled. A new message will play every 10 minutes.', voicePlaying:'Voice test playing.', audioBlocked:'Amany Syrian female neural voice is not available in this browser. Open the TV in Microsoft Edge.',
             confirmPrefix:'Confirm that', confirmSuffix:'was physically collected?', closesCycle:'This closes only Cycle', saving:'Saving…', closed:'Closed', currentCycle:'current cycle.', remarkClosed:'Remark closed.',
             syncReady:'Google Sheets live read/write is ready.', syncNotReady:'Google Sheets write connection is not ready.', checking:'Checking…', closeFailed:'Close failed', remarkFail:'Unable to close remark', loading:'Loading live Golden Palace data…', refreshing:'Refreshing directly from the source…', connecting:'Connecting to Google Sheets…'
         },
         ar: {
             heading:'متابعة خدمة الورشة', tagline:'تابع اليوم · أصلح للغد · ابنِ الثقة', urgent:'🔥 عاجل', delayed:'⚠️ متأخر', remarks:'📝 الملاحظات',
-            voiceOn:'🔊 الصوت النسائي السوري للقصر الذهبي مفعّل', voiceOff:'🔇 الصوت النسائي السوري للقصر الذهبي متوقف', voiceBlocked:'⚠️ اضغط لتفعيل الصوت', voiceTest:'▶ اختبار الصوت', dashboard:'↩ العودة للوحة',
+            voiceOn:'🔊 أماني السورية · صوت نسائي طبيعي مفعّل', voiceOff:'🔇 أماني السورية · صوت نسائي طبيعي متوقف', voiceBlocked:'⚠️ افتح الشاشة بMicrosoft Edge لتفعيل أماني السورية', voiceTest:'▶ اختبار الصوت', dashboard:'↩ العودة للوحة',
             openHint:'اضغط لعرض التفاصيل ↗', search:'ابحث برقم الخدمة أو الزبون أو الجهاز…', refresh:'🔄 تحديث الآن', closeWindow:'✕ إغلاق النافذة',
             footerTitle:'يعطيكم العافية يا فريق!', footerText:'كل حالة تنتهي بشكل صحيح تزيد ثقة الزبون بخدمة القصر الذهبي.', footerSlogan:'معاً\nنحافظ على العمل مستمراً',
             progressTitle:'قيد المعالجة', progressDesc:'الأجهزة الموجودة ضمن دورة صيانة فعالة.', collectionTitle:'بانتظار الاستلام', collectionDesc:'فاتورة المبيع أكبر من صفر ولم يتم تأكيد الاستلام بعد.',
@@ -590,7 +596,7 @@
             hideDetails:'إخفاء التفاصيل', currentHistory:'سجل الدورة الحالية', confirmClose:'✅ تأكيد الاستلام وإغلاق الدورة الحالية',
             labels:['رقم الخدمة','دورة الصيانة','مفتاح الدورة','حالة مسار العمل','بداية الدورة','تاريخ آخر حركة','آخر حركة في الأمين','عدد مستندات الدورة','إجمالي المبيع','تأكيد الفاتورة الصفرية','القبض / الاستلام المالي','تسوية الشريك','الحالة المالية','حالة الاستلام','مطالبة الشريك','حالة الملف','أغلق بواسطة','تاريخ الإغلاق','ملاحظة الإغلاق','الزبون','الهاتف','الجهاز','الكفالة','العطل المبلغ عنه','الملاحظات'],
             yes:'نعم', no:'لا', syncLive:'🟢 Google Sheets مباشر', trackerLive:'🟢 مرتبط بـ Tools Tracker', trackerBackup:'🟡 مصدر احتياطي', writeReady:'🟢 الكتابة جاهزة', readOnly:'🔴 Google Sheets قراءة فقط', lastSync:'آخر مزامنة', refreshFailed:'فشل التحديث',
-            voiceDisabled:'تم إيقاف إعلانات القصر الذهبي الصوتية.', voiceEnabled:'تم تفعيل صوت القصر الذهبي. سيتم تشغيل رسالة جديدة كل 10 دقائق.', voicePlaying:'يتم تشغيل اختبار الصوت.', audioBlocked:'المتصفح منع تشغيل الصوت. اضغط على زر صوت القصر الذهبي مرة واسمح بالصوت لهذا الموقع.',
+            voiceDisabled:'تم إيقاف إعلانات القصر الذهبي الصوتية.', voiceEnabled:'تم تفعيل صوت القصر الذهبي. سيتم تشغيل رسالة جديدة كل 10 دقائق.', voicePlaying:'يتم تشغيل اختبار الصوت.', audioBlocked:'صوت أماني السوري النسائي الطبيعي غير متاح بهالمتصفح. افتح شاشة TV بMicrosoft Edge.',
             confirmPrefix:'تأكيد أن', confirmSuffix:'تم استلامه فعلياً؟', closesCycle:'سيتم إغلاق الدورة فقط رقم', saving:'جارٍ الحفظ…', closed:'تم إغلاق', currentCycle:'الدورة الحالية.', remarkClosed:'تم إغلاق الملاحظة.',
             syncReady:'اتصال Google Sheets للقراءة والكتابة جاهز.', syncNotReady:'اتصال الكتابة إلى Google Sheets غير جاهز.', checking:'جارٍ الفحص…', closeFailed:'فشل الإغلاق', remarkFail:'تعذر إغلاق الملاحظة', loading:'جارٍ تحميل بيانات القصر الذهبي مباشرة…', refreshing:'جارٍ التحديث مباشرة من المصدر…', connecting:'جارٍ الاتصال بـ Google Sheets…'
         }
@@ -1171,18 +1177,122 @@
     }
 
 
-    const GP_STAFF={ar:['أبو عدنان','خبيطي','أبو نقطة','عمر','أبو آدم','حريري','أبو غسان','حازم'],en:['Abu Adnan','Khbeiti','Abu Nuqta','Omar','Abu Adam','Hariri','Abu Ghassan','Hazem']};
+    // Exact Arabic voice policy: Microsoft Amany Online (Natural) - Arabic (Syria).
+    // Never fall back to a generic Arabic/robotic voice.
+    const GP_STAFF={ar:['أبو عدنان','خبيطي','أبو نقطة','عمر','حريري','أبو غسان','حازم'],en:['Abu Adnan','Khbeiti','Abu Nuqta','Omar','Hariri','Abu Ghassan','Hazem']};
+    const GP_MANAGER={ar:'أبو آدم',en:'Abu Adam'};
     const GP_VOICE_BANK={
-      ar:{starts:['يا أبطال القصر الذهبي','يعطيكم العافية يا شباب','يا جماعة الورشة','يا فريقنا الذهبي','أهل الهمة بالورشة','شباب القصر الذهبي'],motivation:['كل حالة منسكرها صح بتزيد ثقة الزبون فينا','الشغل المرتب اليوم بيريّحنا بكرا','كل جهاز عم يطلع مضبوط هو نقطة إلنا','السرعة حلوة بس الدقة أحلى','المتابعة الواضحة بتختصر نص الشغل','ما منترك حالة معلقة بلا سبب واضح','كل خطوة صغيرة اليوم بتعمل فرق كبير بنهاية الدوام','خبرتنا بتبين بالتفاصيل مو بالحكي'],action:['خلونا نركز على الحالات الأقدم أول','يلا منقفل المفتوح حالة ورا حالة','اللي جاهز ما نخليه يستنى','كل واحد يحدّث حالته أول بأول','خلونا نخلي القائمة أخف قبل نهاية الدوام','إذا في عائق نرفعه بسرعة وما نخليه ينام','الأولوية اليوم للحالة اللي مستنية قرار واضح','نرتب الشغل ونخلي كل جهاز بمكانه الصحيح'],funny:['اليوم الأجهزة داخلة الورشة متوترة، طمنوها إنو وصلت لعند أهل الخبرة','إذا جهاز عنّد معنا، ما في مشكلة… منعنّد عليه بالخبرة أكتر','قائمة الانتظار عم تعمل حالها كبيرة، بس نحنا منعرف كيف نصغّرها','الجهاز اللي مفكر يقضي عطلة عنا، خبرّوه إنو الحجز فل اليوم','إذا مفك البراغي اختفى مرة تانية، رح نعمله سند صيانة لحالو','الورشة اليوم بدها شغل مرتب وابتسامة، لأن الأجهزة كمان إلها نفسية','أي جهاز عم يمثل إنو ما فيه عطل، عنا فنيين بيعرفوا يخلّوه يعترف','خلونا نشتغل بهدوء… بس بسرعة تخلي القائمة نفسها تستغرب'],person:['{name}، اليوم عليك حركة حلوة بالقائمة، بدنا نشوف كم حالة رح تختفي','{name}، الأجهزة عاملة موعد معك اليوم، لا تخليها تنتظر كتير','{name}، ورجينا لمسة الخبرة وخلي آخر كلمة بالحالة: تم','{name}، عندك مهمة بسيطة… بس القائمة شايفتها مو بسيطة أبداً','{name}، شد الهمة، كل حالة بتخلصها عم تفتح مجال للي بعدها','{name}، إذا الجهاز ما حكى من أول فحص، اسأله بالطريقة الفنية تبعك'],ends:['والله يعطيكم العافية','وبالتوفيق يا شباب','يلا نكمّلها صح','والقهوة بعد الإنجاز أطيب','وخلي الزبون يحس بالفرق','ومنكمّل بنفس النفس الحلو']},
-      en:{starts:['Golden Palace team','Workshop heroes','Great team','Golden Palace crew','Team, quick reminder','Service team'],motivation:['every properly closed case builds more customer trust','clean follow-up today saves time tomorrow','every finished tool is another win for the workshop','speed matters, but accuracy matters more','clear updates make the whole workshop faster','small improvements add up by the end of the day','our experience shows in the details','a tidy queue makes everyone’s work easier'],action:['let’s clear the oldest cases first','let’s close the ready cases one by one','keep every case updated as you work','raise blockers early instead of letting them sleep','give priority to anything waiting for a clear decision','keep the queue moving before the end of the shift','finish what is ready before opening extra work','keep the workshop organized and the status accurate'],funny:['the tools look nervous today, so remind them they came to the right workshop','if a tool refuses to cooperate, we have more experience than it has stubbornness','the waiting list is trying to look big again, let’s disappoint it','any tool planning a vacation in the workshop should know we are fully booked','if the screwdriver disappears again, we may open a service ticket for it','work fast, stay calm, and let the queue wonder what happened','some tools pretend nothing is wrong; luckily our technicians know better','the queue asked for an easy day; unfortunately it works for Golden Palace'],person:['{name}, the queue is watching you today; make a few cases disappear','{name}, the tools booked an appointment with you, so do not keep them waiting','{name}, give us the expert touch and make the final status Completed','{name}, one clean update can save the team several questions later','{name}, every case you finish makes room for the next one','{name}, if the tool stays quiet, ask it the technician way'],ends:['great work team','keep the good energy going','let’s finish strong','and keep the customer smiling','thank you team','one case at a time']}
+      ar:{
+        starts:['يا أبطال القصر الذهبي','يعطيكم العافية يا شباب','يا جماعة الورشة','يا فريقنا الذهبي','أهل الهمة بالورشة','شباب القصر الذهبي'],
+        motivation:['كل حالة منسكرها صح بتزيد ثقة الزبون فينا','الشغل المرتب اليوم بيريّحنا بكرا','كل جهاز عم يطلع مضبوط هو نقطة إلنا','السرعة حلوة بس الدقة أحلى','المتابعة الواضحة بتختصر نص الشغل','ما منترك حالة معلقة بلا سبب واضح','كل خطوة صغيرة اليوم بتعمل فرق كبير بنهاية الدوام','خبرتنا بتبين بالتفاصيل مو بالحكي'],
+        action:['خلونا نركز على الحالات الأقدم أول','يلا منقفل المفتوح حالة ورا حالة','اللي جاهز ما نخليه يستنى','كل واحد يحدّث حالته أول بأول','خلونا نخلي القائمة أخف قبل نهاية الدوام','إذا في عائق نرفعه بسرعة وما نخليه ينام','الأولوية اليوم للحالة اللي مستنية قرار واضح','نرتب الشغل ونخلي كل جهاز بمكانه الصحيح'],
+        funny:['اليوم الأجهزة داخلة الورشة متوترة، طمنوها إنو وصلت لعند أهل الخبرة','إذا جهاز عنّد معنا، ما في مشكلة… منعنّد عليه بالخبرة أكتر','قائمة الانتظار عم تعمل حالها كبيرة، بس نحنا منعرف كيف نصغّرها','الجهاز اللي مفكر يقضي عطلة عنا، خبرّوه إنو الحجز فل اليوم','إذا مفك البراغي اختفى مرة تانية، رح نعمله سند صيانة لحالو','الورشة اليوم بدها شغل مرتب وابتسامة، لأن الأجهزة كمان إلها نفسية','أي جهاز عم يمثل إنو ما فيه عطل، عنا فنيين بيعرفوا يخلّوه يعترف','خلونا نشتغل بهدوء… بس بسرعة تخلي القائمة نفسها تستغرب'],
+        person:['{name}، اليوم عليك حركة حلوة بالقائمة، بدنا نشوف كم حالة رح تختفي','{name}، الأجهزة عاملة موعد معك اليوم، لا تخليها تنتظر كتير','{name}، ورجينا لمسة الخبرة وخلي آخر كلمة بالحالة: تم','{name}، عندك مهمة بسيطة… بس القائمة شايفتها مو بسيطة أبداً','{name}، شد الهمة، كل حالة بتخلصها عم تفتح مجال للي بعدها','{name}، إذا الجهاز ما حكى من أول فحص، اسأله بالطريقة الفنية تبعك'],
+        manager:[
+          'توجيه من أبو آدم: الأولوية للحالات المتأخرة والعالقة، وأي عائق واضح ارفعوه بسرعة مشان ما يوقف حركة الشغل',
+          'أبو آدم متابع حركة العمليات اليوم؛ خلّوا كل حالة محدثة والخطوة الجاية واضحة حتى كل فريق يعرف شو عليه',
+          'رسالة أبو آدم للفريق: السرعة مهمة، بس التنظيم والدقة أهم، وإذا في تأخير سببه واضح منحلّه سوا',
+          'أبو آدم يذكّر الفريق: ما بدنا بطولة فردية، بدنا شغل فريق يسلّم الحالة صح من أول مرة',
+          'أبو آدم عم يتابع الأرقام، بس الأهم إنو كل حالة يكون إلها مسؤول وخطوة جاية واضحة',
+          'من أبو آدم للفريق: إذا في عائق خبرونا بكير؛ التأخير المعلوم منقدر نحلّه، التأخير المخفي هو المشكلة',
+          'أبو آدم بيقول: اليوم الناجح مو بس بعدد الحالات اللي تسكرت، كمان بقديش خففنا العوائق ووقت انتظار الزبون',
+          'أبو آدم عم ينسّق حركة الشغل بين الأقسام؛ خلّوا الأولويات واضحة، والمعلومة توصل بسرعة، وما نخلي أي حالة تضيع بين فريق وفريق'
+        ],
+        ends:['والله يعطيكم العافية','وبالتوفيق يا شباب','يلا نكمّلها صح','والقهوة بعد الإنجاز أطيب','وخلي الزبون يحس بالفرق','ومنكمّل بنفس النفس الحلو']
+      },
+      en:{
+        starts:['Golden Palace team','Workshop heroes','Great team','Golden Palace crew','Team, quick reminder','Service team'],
+        motivation:['every properly closed case builds more customer trust','clean follow-up today saves time tomorrow','every finished tool is another win for the workshop','speed matters, but accuracy matters more','clear updates make the whole workshop faster','small improvements add up by the end of the day','our experience shows in the details','a tidy queue makes everyone’s work easier'],
+        action:['let’s clear the oldest cases first','let’s close the ready cases one by one','keep every case updated as you work','raise blockers early instead of letting them sleep','give priority to anything waiting for a clear decision','keep the queue moving before the end of the shift','finish what is ready before opening extra work','keep the workshop organized and the status accurate'],
+        funny:['the tools look nervous today, so remind them they came to the right workshop','if a tool refuses to cooperate, we have more experience than it has stubbornness','the waiting list is trying to look big again, let’s disappoint it','any tool planning a vacation in the workshop should know we are fully booked','if the screwdriver disappears again, we may open a service ticket for it','work fast, stay calm, and let the queue wonder what happened','some tools pretend nothing is wrong; luckily our technicians know better','the queue asked for an easy day; unfortunately it works for Golden Palace'],
+        person:['{name}, the queue is watching you today; make a few cases disappear','{name}, the tools booked an appointment with you, so do not keep them waiting','{name}, give us the expert touch and make the final status Completed','{name}, one clean update can save the team several questions later','{name}, every case you finish makes room for the next one','{name}, if the tool stays quiet, ask it the technician way'],
+        manager:[
+          'A note from Abu Adam: prioritize delayed and blocked cases, and raise obstacles early so operations keep moving',
+          'Abu Adam is following today’s operations; keep every case updated and make the next action clear for the whole team',
+          'Abu Adam’s message to the team: speed matters, but organization and accuracy matter more; visible blockers can be solved together',
+          'Abu Adam reminds the team: we do not need individual heroes; we need coordinated teamwork that closes each case correctly',
+          'Abu Adam is watching the numbers, but the key is that every case has a clear owner and a clear next step',
+          'From Abu Adam: raise blockers early; a known delay can be managed, a hidden delay is the real problem',
+          'Abu Adam says a successful day is not only the number of closed cases, but also fewer blockers and less customer waiting time',
+          'Abu Adam is coordinating the flow between teams; keep priorities visible, information moving, and do not let a case fall between departments'
+        ],
+        ends:['great work team','keep the good energy going','let’s finish strong','and keep the customer smiling','thank you team','one case at a time']
+      }
     };
     function gpPick(a){return a[Math.floor(Math.random()*a.length)];}
-    function gpRecentVoice(){try{return JSON.parse(localStorage.getItem('gpVoiceRecentV5')||'[]')}catch(_){return[]}}
-    function gpRememberVoice(t){try{const a=gpRecentVoice().filter(x=>x!==t);a.push(t);localStorage.setItem('gpVoiceRecentV5',JSON.stringify(a.slice(-80)))}catch(_){}}
-    function buildDynamicVoiceTrack(){const lang=currentLanguage==='ar'?'ar':'en',b=GP_VOICE_BANK[lang],name=gpPick(GP_STAFF[lang]),r=Math.random();let text='',category='motivation',tone='warm';if(r<.28){category='funny';tone='funny';text=`${gpPick(b.starts)}، ${gpPick(b.funny)}. ${gpPick(b.ends)}.`}else if(r<.52){category='person';tone=Math.random()<.55?'funny':'warm';text=`${gpPick(b.person).replace('{name}',name)}. ${gpPick(b.ends)}.`}else if(r<.82){text=`${gpPick(b.starts)}، ${gpPick(b.motivation)}، ${gpPick(b.action)}. ${gpPick(b.ends)}.`}else{category='workshop';text=`${gpPick(b.starts)}، ${gpPick(b.action)}. ${gpPick(b.motivation)}. ${gpPick(b.ends)}.`}return{id:`dyn-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,category,person:name,text:text.replace(/\s+/g,' ').trim(),url:'',lang,tone}}
-    function chooseVoiceTrack(){const recent=gpRecentVoice();let track=buildDynamicVoiceTrack();for(let i=0;i<30&&recent.includes(track.text);i++)track=buildDynamicVoiceTrack();gpRememberVoice(track.text);return track}
-    function speakFallback(track){if(!('speechSynthesis'in window)||!track)return false;try{const u=new SpeechSynthesisUtterance(track.text),isAr=track.lang==='ar';u.lang=isAr?'ar-SY':'en-US';u.rate=track.tone==='funny'?1.12:1.03;u.pitch=track.tone==='funny'?1.34:1.18;u.volume=1;const voices=window.speechSynthesis.getVoices(),h=['female','zira','samantha','sara','salma','hoda','laila','layla','maryam','mariam','nora','rana','jenny','aria','ava','emma'],female=v=>h.some(x=>String(v.name||'').toLowerCase().includes(x)),lang=v=>String(v.lang||'').toLowerCase();let preferred=isAr?(voices.find(v=>lang(v).startsWith('ar-sy')&&female(v))||voices.find(v=>lang(v).startsWith('ar-sy'))||voices.find(v=>lang(v).startsWith('ar')&&female(v))||voices.find(v=>lang(v).startsWith('ar'))):(voices.find(v=>lang(v).startsWith('en')&&female(v))||voices.find(v=>lang(v).startsWith('en-us'))||voices.find(v=>lang(v).startsWith('en')));if(preferred)u.voice=preferred;u.onend=()=>{teamVoicePlaying=false;setVoiceCaption('',false)};u.onerror=()=>{teamVoicePlaying=false;setVoiceCaption('',false)};teamVoicePlaying=true;setVoiceCaption(track.text,true);window.speechSynthesis.cancel();window.speechSynthesis.speak(u);return true}catch(_){return false}}
+    function gpRecentVoice(){try{return JSON.parse(localStorage.getItem('gpVoiceRecentV6')||'[]')}catch(_){return[]}}
+    function gpRememberVoice(t){try{const a=gpRecentVoice().filter(x=>x!==t);a.push(t);localStorage.setItem('gpVoiceRecentV6',JSON.stringify(a.slice(-120)))}catch(_){}}
+    function buildDynamicVoiceTrack(){
+      const lang=currentLanguage==='ar'?'ar':'en',b=GP_VOICE_BANK[lang],r=Math.random();let text='',category='motivation',tone='warm',person='';
+      if(r<.16){category='management';person=GP_MANAGER[lang];text=`${gpPick(b.manager)}. ${gpPick(b.ends)}.`}
+      else if(r<.38){category='funny';tone='funny';text=`${gpPick(b.starts)}، ${gpPick(b.funny)}. ${gpPick(b.ends)}.`}
+      else if(r<.58){category='person';person=gpPick(GP_STAFF[lang]);tone=Math.random()<.45?'funny':'warm';text=`${gpPick(b.person).replace('{name}',person)}. ${gpPick(b.ends)}.`}
+      else if(r<.84){text=`${gpPick(b.starts)}، ${gpPick(b.motivation)}، ${gpPick(b.action)}. ${gpPick(b.ends)}.`}
+      else{category='workshop';text=`${gpPick(b.starts)}، ${gpPick(b.action)}. ${gpPick(b.motivation)}. ${gpPick(b.ends)}.`}
+      return{id:`dyn-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,category,person,text:text.replace(/\s+/g,' ').trim(),url:'',lang,tone}
+    }
+    function chooseVoiceTrack(){const recent=gpRecentVoice();let track=buildDynamicVoiceTrack();for(let i=0;i<50&&recent.includes(track.text);i++)track=buildDynamicVoiceTrack();gpRememberVoice(track.text);return track}
+
+    function gpVoiceName(v){return String((v&&v.name)||'').toLowerCase()}
+    function gpVoiceLang(v){return String((v&&v.lang)||'').toLowerCase().replace('_','-')}
+    function findAmanySyrianVoice(){
+      if(!('speechSynthesis' in window)) return null;
+      const voices=window.speechSynthesis.getVoices()||[];
+      return voices.find(v=>gpVoiceLang(v)==='ar-sy' && gpVoiceName(v).includes('amany'))
+          || voices.find(v=>gpVoiceName(v).includes('amany') && (gpVoiceName(v).includes('syria')||gpVoiceLang(v)==='ar-sy'))
+          || voices.find(v=>gpVoiceName(v).includes('ar-sy-amanyneural'))
+          || null;
+    }
+    function findEnglishFemaleVoice(){
+      if(!('speechSynthesis' in window)) return null;
+      const voices=window.speechSynthesis.getVoices()||[], hints=['female','zira','samantha','sara','jenny','aria','ava','emma','sonia','libby'];
+      return voices.find(v=>gpVoiceLang(v).startsWith('en')&&hints.some(h=>gpVoiceName(v).includes(h))) || voices.find(v=>gpVoiceLang(v).startsWith('en')) || null;
+    }
+    function refreshExactVoiceStatus(){
+      if(currentLanguage!=='ar') { updateVoiceButton(); return; }
+      if(teamVoiceEnabled && !findAmanySyrianVoice()) updateVoiceButton('blocked'); else updateVoiceButton();
+    }
+    if('speechSynthesis' in window){
+      window.speechSynthesis.addEventListener?.('voiceschanged',refreshExactVoiceStatus);
+      window.speechSynthesis.onvoiceschanged=refreshExactVoiceStatus;
+    }
+    function speakFallback(track){
+      if(!('speechSynthesis'in window)||!track)return false;
+      try{
+        const isAr=track.lang==='ar';
+        const preferred=isAr?findAmanySyrianVoice():findEnglishFemaleVoice();
+        if(isAr && !preferred){
+          teamVoicePlaying=false;setVoiceCaption('',false);updateVoiceButton('blocked');
+          showToast(currentLanguage==='ar'?'صوت أماني السوري النسائي الطبيعي غير موجود بهالمتصفح. افتح الشاشة بMicrosoft Edge.':'Amany Syrian female natural voice is unavailable. Open the TV in Microsoft Edge.',9000);
+          return false;
+        }
+        const u=new SpeechSynthesisUtterance(track.text);
+        u.lang=isAr?'ar-SY':'en-US';
+        u.voice=preferred||null;
+        u.rate=track.tone==='funny'?1.08:1.00;
+        u.pitch=track.tone==='funny'?1.08:1.02;
+        u.volume=1;
+        u.onend=()=>{teamVoicePlaying=false;setVoiceCaption('',false)};
+        u.onerror=()=>{teamVoicePlaying=false;setVoiceCaption('',false)};
+        teamVoicePlaying=true;setVoiceCaption(track.text,true);window.speechSynthesis.cancel();window.speechSynthesis.speak(u);return true
+      }catch(_){return false}
+    }
     function playTeamVoice(track,manual=false){if(!track||detailMode||teamVoicePlaying)return false;if(!manual&&(!teamVoiceEnabled||document.hidden))return false;stopTeamVoiceAudio();return speakFallback(track)}
+
+    // Best-effort browser fullscreen; true bar-free startup is provided by the Edge kiosk launcher/PWA.
+    async function gpRequestFullscreen(){
+      if(detailMode||document.fullscreenElement||window.matchMedia('(display-mode: fullscreen)').matches) return;
+      try{await document.documentElement.requestFullscreen({navigationUI:'hide'})}catch(_){}
+    }
+    ['pointerdown','keydown','touchstart'].forEach(evt=>document.addEventListener(evt,gpRequestFullscreen,{once:true,passive:true}));
+    setTimeout(gpRequestFullscreen,250);
+
+    let gpWakeLock=null;
+    async function gpKeepScreenAwake(){try{if('wakeLock'in navigator&&document.visibilityState==='visible')gpWakeLock=await navigator.wakeLock.request('screen')}catch(_){}}
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')gpKeepScreenAwake()});
+    setTimeout(gpKeepScreenAwake,600);
+
+    if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}
 
     async function confirmCollection(item, button) {
         const msg = currentLanguage === 'ar'

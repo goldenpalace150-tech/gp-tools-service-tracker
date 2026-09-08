@@ -1,0 +1,12 @@
+{
+  "name": "Golden Palace Workshop TV",
+  "short_name": "GP TV",
+  "start_url": "/?lang=ar",
+  "scope": "/",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
+  "orientation": "landscape",
+  "background_color": "#071a2d",
+  "theme_color": "#071a2d",
+  "icons": [{"src":"/gp-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
