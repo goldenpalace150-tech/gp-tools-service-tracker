@@ -121,64 +121,108 @@ os.makedirs(GP_VOICE_CACHE_DIR, exist_ok=True)
 GP_VOICE_FILE_LOCKS = {}
 GP_VOICE_FILE_LOCKS_GUARD = threading.Lock()
 
-GP_STAFF_AR = ["أبو عدنان", "خبيطي", "أبو نقطة", "عمر", "حريري", "أبو غسان", "حازم"]
-GP_STAFF_EN = ["Abu Adnan", "Khbeiti", "Abu Nuqta", "Omar", "Hariri", "Abu Ghassan", "Hazem"]
+# GP_VOICE_BALANCE_PROSODY_V3
+GP_STAFF_AR = ["أبو عدنان", "خبيطي", "أبو نقطة", "عمر", "أبو آدم", "حريري", "أبو غسان", "حازم"]
+GP_STAFF_EN = ["Abu Adnan", "Khbeiti", "Abu Nuqta", "Omar", "Abu Adam", "Hariri", "Abu Ghassan", "Hazem"]
 
-GP_AR_STARTS = ["يا أبطال القصر الذهبي", "يعطيكم العافية يا شباب", "يا جماعة الورشة", "يا فريقنا الذهبي", "أهل الهمة بالورشة", "شباب القصر الذهبي"]
-GP_AR_MOTIVATION = ["كل حالة منسكرها صح بتزيد ثقة الزبون فينا", "الشغل المرتب اليوم بيريحنا بكرا", "كل جهاز عم يطلع مضبوط هو نقطة إلنا", "السرعة حلوة بس الدقة أحلى", "المتابعة الواضحة بتختصر نص الشغل", "ما منترك حالة معلقة بلا سبب واضح", "كل خطوة صغيرة اليوم بتعمل فرق كبير بنهاية الدوام", "خبرتنا بتبين بالتفاصيل مو بالحكي", "الزبون ما بيشوف كل التعب اللي ورا الكواليس، بس بيحس بالنتيجة المرتبة", "لما كل واحد يحدث حالته بوقتها، الفريق كله بيصير أسرع"]
-GP_AR_ACTION = ["خلونا نركز على الحالات الأقدم أول", "يلا منقفل المفتوح حالة ورا حالة", "اللي جاهز ما نخليه يستنى", "كل واحد يحدث حالته أول بأول", "خلونا نخلي القائمة أخف قبل نهاية الدوام", "إذا في عائق نرفعه بسرعة وما نخليه ينام", "الأولوية اليوم للحالة اللي مستنية قرار واضح", "نرتب الشغل ونخلي كل جهاز بمكانه الصحيح", "الحالة اللي ما إلها خطوة جاية واضحة بدها قرار اليوم", "نخلي المعلومة تمشي أسرع من الجهاز بين الأقسام"]
-GP_AR_FUNNY = ["اليوم الأجهزة داخلة الورشة متوترة، طمنوها إنو وصلت لعند أهل الخبرة", "إذا جهاز عند معنا، ما في مشكلة، منعنّد عليه بالخبرة أكتر", "قائمة الانتظار عم تعمل حالها كبيرة، بس نحنا منعرف كيف نصغرها", "الجهاز اللي مفكر يقضي عطلة عنا، خبرّوه إنو الحجز فل اليوم", "إذا مفك البراغي اختفى مرة تانية، رح نعمله سند صيانة لحالو", "الورشة اليوم بدها شغل مرتب وابتسامة، لأن الأجهزة كمان إلها نفسية", "أي جهاز عم يمثل إنو ما فيه عطل، عنا فنيين بيعرفوا يخلّوه يعترف", "خلونا نشتغل بهدوء، بس بسرعة تخلي القائمة نفسها تستغرب", "إذا الشاشة صارت كلها أخضر، لا حدا يعمل ريفريش من الخوف، هاد اسمه إنجاز", "الداشبورد ما بيصلح الأجهزة، بس بيحرج الحالة اللي قاعدة بلا تحديث"]
-GP_AR_PERSON = ["{name}، اليوم عليك حركة حلوة بالقائمة، بدنا نشوف كم حالة رح تختفي", "{name}، الأجهزة عاملة موعد معك اليوم، لا تخليها تنتظر كتير", "{name}، ورجينا لمسة الخبرة وخلي آخر كلمة بالحالة تم", "{name}، شد الهمة، كل حالة بتخلصها عم تفتح مجال للي بعدها", "{name}، إذا الجهاز ما حكى من أول فحص، اسأله بالطريقة الفنية تبعك", "{name}، تحديث صغير منك هلق بيوفر ثلاث أسئلة بعد شوي"]
-GP_AR_MANAGER = ["توجيه من أبو آدم: الأولوية للحالات المتأخرة والعالقة، وأي عائق واضح ارفعوه بسرعة مشان ما يوقف حركة الشغل", "أبو آدم متابع حركة العمليات اليوم، خلوا كل حالة محدثة والخطوة الجاية واضحة حتى كل فريق يعرف شو عليه", "رسالة أبو آدم للفريق: السرعة مهمة، بس التنظيم والدقة أهم، وإذا في تأخير سببه واضح منحلّه سوا", "أبو آدم يذكّر الفريق: ما بدنا بطولة فردية، بدنا شغل فريق يسلّم الحالة صح من أول مرة", "أبو آدم عم يتابع الأرقام، بس الأهم إنو كل حالة يكون إلها مسؤول وخطوة جاية واضحة", "من أبو آدم للفريق: إذا في عائق خبرونا بكير، التأخير المعلوم منقدر نحلّه، التأخير المخفي هو المشكلة", "أبو آدم بيقول: اليوم الناجح مو بس بعدد الحالات اللي تسكرت، كمان بقديش خففنا العوائق ووقت انتظار الزبون", "أبو آدم عم ينسق حركة الشغل بين الأقسام، خلوا الأولويات واضحة والمعلومة توصل بسرعة وما نخلي أي حالة تضيع بين فريق وفريق"]
-GP_AR_MANAGER_JOKES = ["أبو آدم طلب تطوير بسيط، ومن خبرتنا بالتطوير البسيط، إذا خلصناه اليوم بكرا بيطلعله إصدار رقم اثنين", "أبو آدم بيقول إذا الداشبورد صار أخضر كله لا تخافوا، مو عطل بالنظام، هاد اسمه إنجاز حقيقي", "أبو آدم طلب نشيل البوتل نِك، بس رجاء لا حدا ينقله من قسم لقسم ويسميها إعادة توزيع", "رسالة تطوير من أبو آدم: أي اختصار بخطوات الشغل مرحب فيه، إلا إذا الاختصار رجعنا ثلاث خطوات لورا", "أبو آدم عم يطور العمليات لدرجة إذا العملية زبطت زيادة، غالباً رح نفتح مشروع تطوير جديد لنعرف ليش زبطت", "إذا لقينا عملية بدها خمس موافقات مشان تصير أسرع، خبروا أبو آدم قبل ما نضيف الموافقة السادسة"]
-GP_AR_ENDS = ["والله يعطيكم العافية", "وبالتوفيق يا شباب", "يلا نكملها صح", "والقهوة بعد الإنجاز أطيب", "وخلي الزبون يحس بالفرق", "ومنكمّل بنفس النفس الحلو"]
+GP_AR_PERSON = [
+    "{name}، يعطيك العافية. اليوم بدنا نخلي كل حالة عندك محدثة، والخطوة الجاية واضحة.",
+    "{name}، شغلك المرتب بيفرق. خلّينا نخلص الجاهز، وما نخلي أي حالة واقفة بلا سبب.",
+    "{name}، كل تحديث صغير بوقته بيوفّر علينا أسئلة وتأخير بعدين.",
+    "{name}، ركّز اليوم على الأقدم، وخلي الحالة تنتقل للخطوة الجاية من دون تأخير.",
+    "{name}، إذا في عائق بالحالة، ارفعه بكير. هيك منحلّه قبل ما يكبر.",
+    "{name}، ورجينا لمسة الخبرة. بدنا الحالة واضحة من أولها لآخرها.",
+    "{name}، خفّف القائمة حالة ورا حالة، بس خليك دقيق بالتحديث.",
+    "{name}، إذا الجهاز عم يتدلّع، ذكّره إنو وصل لعند أهل الخبرة.",
+]
+GP_AR_MANAGER = [
+    "أبو آدم، متابعة العمليات اليوم واضحة: الأولوية للحالات المتأخرة، وأي عائق لازم يطلع بسرعة قبل ما يوقف الشغل.",
+    "أبو آدم، التنسيق بين الأقسام هو الأساس اليوم. كل حالة بدها مسؤول واضح وخطوة جاية واضحة.",
+    "أبو آدم، الأرقام مهمة، بس الأهم إنو ما تضل أي حالة معلّقة بلا قرار.",
+    "أبو آدم، اليوم الناجح مو بس بعدد الحالات اللي تسكرت، كمان بقديش خفّ وقت انتظار الزبون.",
+    "أبو آدم، ترتيب الأولويات اليوم أهم من فتح شغل جديد. خلّينا نخلّص الجاهز أول.",
+    "أبو آدم، إذا في تأخير معروف منقدر نديره. التأخير المخفي هو اللي بيعمل المشكلة.",
+]
+GP_AR_MANAGER_JOKES = [
+    "أبو آدم، طلبت تطوير بسيط. ومن خبرتنا بالتطوير البسيط، الإصدار رقم اثنين غالباً واقف عالباب.",
+    "أبو آدم، إذا الداشبورد صار كله أخضر، لا تعمل ريفريش من الخوف. هاد اسمه إنجاز.",
+    "أبو آدم، طلبت نشيل الاختناق من العملية. بس ممنوع ننقله لقسم تاني ونسميها إعادة توزيع.",
+    "أبو آدم، أي اختصار بخطوات الشغل مرحّب فيه، إلا إذا الاختصار رجّعنا ثلاث خطوات لورا.",
+    "أبو آدم، واضح إنو تطوير العمليات ما بيخلص. كل ما نزبط شغلة، بتطلع شغلة أذكى بدها تطوير.",
+]
+GP_AR_FUNNY = [
+    "اليوم الأجهزة داخلة الورشة متوترة. طمنوها إنو وصلت لعند أهل الخبرة.",
+    "إذا جهاز عَنَّد معنا، ما في مشكلة. منعنّد عليه بالخبرة أكتر.",
+    "قائمة الانتظار عم تعمل حالها كبيرة اليوم. خلّونا نصغّرها شوي.",
+    "الجهاز اللي مفكّر يقضي عطلة عنا، خبرّوه إنو الحجز فل.",
+    "إذا مفك البراغي اختفى مرة تانية، رح نفتحله سند صيانة لحاله.",
+    "الداشبورد ما بيصلّح الأجهزة، بس بصراحة بيحرج الحالة اللي قاعدة بلا تحديث.",
+]
+GP_AR_FINALS = [
+    "يعطيكم العافية يا شباب.",
+    "نكملها صح اليوم.",
+    "خلي الزبون يحس بالفرق.",
+    "مشكورين، وكملوا بنفس النفس الحلو.",
+    "الله يقويكم، ومنكمّل.",
+    "تمام يا شباب، هيك بدنا الشغل.",
+]
+GP_EN_PERSON = [
+    "{name}, keep every case updated and make the next action clear.",
+    "{name}, clear the ready work first and raise any blocker early.",
+    "{name}, one accurate update now saves several questions later.",
+]
+GP_EN_MANAGER = [
+    "Abu Adam, today’s operations priority is delayed work, visible blockers, and clear ownership.",
+    "Abu Adam, keep the flow between teams clear and make sure every case has a next action.",
+]
+GP_EN_MANAGER_JOKES = [
+    "Abu Adam, you asked for one small improvement. Version two is probably already waiting.",
+    "Abu Adam, if the dashboard turns completely green, do not restart it. That is called progress.",
+]
+GP_EN_FINALS = ["Great work, team.", "Let us finish strong.", "Thank you, team.", "Keep it moving."]
 
-GP_EN_STARTS = ["Golden Palace team", "Workshop heroes", "Great team", "Golden Palace crew", "Service team"]
-GP_EN_MOTIVATION = ["every properly closed case builds more customer trust", "clean follow-up today saves time tomorrow", "speed matters, but accuracy matters more", "clear updates make the whole workshop faster", "our experience shows in the details"]
-GP_EN_ACTION = ["let us clear the oldest cases first", "keep every case updated as you work", "raise blockers early instead of letting them sleep", "keep the queue moving", "make the next action clear on every case"]
-GP_EN_FUNNY = ["the waiting list is trying to look big again, let us disappoint it", "if the screwdriver disappears again, we may open a service ticket for it", "if the dashboard turns completely green, do not panic, that is called progress"]
-GP_EN_MANAGER = ["A note from Abu Adam: prioritize delayed and blocked cases, and raise obstacles early so operations keep moving", "Abu Adam is following today’s operations; keep every case updated and make the next action clear", "Abu Adam reminds the team that good operations means clear ownership, fewer blockers, and less customer waiting time"]
-GP_EN_MANAGER_JOKES = ["Abu Adam asked for one small improvement; operations experience says version two is already waiting around the corner", "Abu Adam says if the dashboard turns completely green, do not restart it; that is called an achievement", "Abu Adam asked us to remove the bottleneck, not move it to another department and call it redistribution"]
-GP_EN_ENDS = ["great work team", "keep the good energy going", "let us finish strong", "thank you team"]
 
-
-def gp_build_voice_message(lang="ar"):
+def gp_build_voice_message(lang="ar", force_named=""):
     lang = "en" if str(lang).lower().startswith("en") else "ar"
-    r = random.random()
+    requested_person = str(force_named or "").strip()
     tone = "warm"
-    category = "motivation"
-    person = ""
+    category = "person"
+    person = requested_person
     if lang == "ar":
-        if r < 0.12:
-            category = "management_joke"; person = "أبو آدم"; text = f"{random.choice(GP_AR_MANAGER_JOKES)}. {random.choice(GP_AR_ENDS)}."; tone = "funny"
-        elif r < 0.27:
-            category = "management"; person = "أبو آدم"; text = f"{random.choice(GP_AR_MANAGER)}. {random.choice(GP_AR_ENDS)}."
-        elif r < 0.48:
-            category = "funny"; text = f"{random.choice(GP_AR_STARTS)}، {random.choice(GP_AR_FUNNY)}. {random.choice(GP_AR_ENDS)}."; tone = "funny"
-        elif r < 0.66:
-            category = "person"; person = random.choice(GP_STAFF_AR); text = f"{random.choice(GP_AR_PERSON).format(name=person)}. {random.choice(GP_AR_ENDS)}."
-        elif r < 0.86:
-            text = f"{random.choice(GP_AR_STARTS)}، {random.choice(GP_AR_MOTIVATION)}، {random.choice(GP_AR_ACTION)}. {random.choice(GP_AR_ENDS)}."
+        if person not in set(GP_STAFF_AR):
+            person = random.choice(GP_STAFF_AR)
+        if person == "أبو آدم":
+            if random.random() < 0.35:
+                body = random.choice(GP_AR_MANAGER_JOKES); category = "management_joke"; tone = "funny"
+            else:
+                body = random.choice(GP_AR_MANAGER); category = "management"
         else:
-            category = "workshop"; text = f"{random.choice(GP_AR_STARTS)}، {random.choice(GP_AR_ACTION)}. {random.choice(GP_AR_MOTIVATION)}. {random.choice(GP_AR_ENDS)}."
+            if random.random() < 0.22:
+                body = f"{person}، {random.choice(GP_AR_FUNNY)}"; category = "person_funny"; tone = "funny"
+            else:
+                body = random.choice(GP_AR_PERSON).format(name=person)
+        final = random.choice(GP_AR_FINALS)
     else:
-        if r < 0.12:
-            category = "management_joke"; person = "Abu Adam"; text = f"{random.choice(GP_EN_MANAGER_JOKES)}. {random.choice(GP_EN_ENDS)}."; tone = "funny"
-        elif r < 0.27:
-            category = "management"; person = "Abu Adam"; text = f"{random.choice(GP_EN_MANAGER)}. {random.choice(GP_EN_ENDS)}."
-        elif r < 0.48:
-            category = "funny"; text = f"{random.choice(GP_EN_STARTS)}, {random.choice(GP_EN_FUNNY)}. {random.choice(GP_EN_ENDS)}."; tone = "funny"
-        elif r < 0.66:
-            category = "person"; person = random.choice(GP_STAFF_EN); text = f"{person}, keep the case moving and make the next update clear. {random.choice(GP_EN_ENDS)}."
+        if person not in set(GP_STAFF_EN):
+            person = random.choice(GP_STAFF_EN)
+        if person == "Abu Adam":
+            if random.random() < 0.35:
+                body = random.choice(GP_EN_MANAGER_JOKES); category = "management_joke"; tone = "funny"
+            else:
+                body = random.choice(GP_EN_MANAGER); category = "management"
         else:
-            text = f"{random.choice(GP_EN_STARTS)}, {random.choice(GP_EN_MOTIVATION)}, {random.choice(GP_EN_ACTION)}. {random.choice(GP_EN_ENDS)}."
-    return {"lang": lang, "text": re.sub(r"\\s+", " ", text).strip(), "tone": tone, "category": category, "person": person}
+            body = random.choice(GP_EN_PERSON).format(name=person)
+        final = random.choice(GP_EN_FINALS)
+    body = re.sub(r"\s+", " ", body).strip()
+    final = re.sub(r"\s+", " ", final).strip()
+    text = f"{body} {final}".strip()
+    return {"lang": lang, "text": text, "body": body, "final": final, "tone": tone, "category": category, "person": person}
 
 
 def gp_voice_settings(lang, tone):
     voice = GP_AR_VOICE if lang == "ar" else GP_EN_VOICE
-    if tone == "funny": return voice, "+5%", "+2Hz"
-    return voice, "-3%", "+0Hz"
+    if tone == "funny": return voice, "+2%", "+1Hz"
+    return voice, "-2%", "+0Hz"
 
 
 def gp_voice_cache_path(text, voice, rate, pitch):
@@ -214,14 +258,18 @@ def gp_ensure_voice_file(text, voice, rate, pitch):
 @app.route("/api/voice-track")
 def api_voice_track():
     lang = "en" if str(request.args.get("lang", "ar")).lower().startswith("en") else "ar"
-    track = gp_build_voice_message(lang)
-    voice, rate, pitch = gp_voice_settings(lang, track["tone"])
+    requested_person = str(request.args.get("person", "")).strip()
+    track = gp_build_voice_message(lang, requested_person)
+    voice, body_rate, body_pitch = gp_voice_settings(lang, track["tone"])
+    final_rate = "-12%" if lang == "ar" else "-9%"
+    final_pitch = "-8Hz" if lang == "ar" else "-5Hz"
     try:
-        token, _path = gp_ensure_voice_file(track["text"], voice, rate, pitch)
+        body_token, _ = gp_ensure_voice_file(track["body"], voice, body_rate, body_pitch)
+        final_token, _ = gp_ensure_voice_file(track["final"], voice, final_rate, final_pitch)
     except Exception as exc:
         print("VOICE GENERATION ERROR:", repr(exc))
         return jsonify({"ok": False, "error": "voice_generation_failed"}), 503
-    return jsonify({"ok": True, "text": track["text"], "lang": lang, "tone": track["tone"], "category": track["category"], "person": track["person"], "voice": voice, "audio_url": f"/api/voice-audio/{token}.mp3"})
+    return jsonify({"ok": True, "text": track["text"], "lang": lang, "tone": track["tone"], "category": track["category"], "person": track["person"], "voice": voice, "audio_urls": [f"/api/voice-audio/{body_token}.mp3", f"/api/voice-audio/{final_token}.mp3"]})
 
 
 @app.route("/api/voice-audio/<token>.mp3")

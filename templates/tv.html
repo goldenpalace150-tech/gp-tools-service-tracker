@@ -1295,30 +1295,30 @@
     if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}
 
 
+    // GP_VOICE_BALANCE_PROSODY_V3
+    const GP_BALANCED_STAFF={ar:['أبو عدنان','خبيطي','أبو نقطة','عمر','أبو آدم','حريري','أبو غسان','حازم'],en:['Abu Adnan','Khbeiti','Abu Nuqta','Omar','Abu Adam','Hariri','Abu Ghassan','Hazem']};
+    const GP_STAFF_ROTATION_KEY='gpBalancedStaffRotationV3';
+    function gpNextStaffPerson(){const lang=currentLanguage==='ar'?'ar':'en',names=GP_BALANCED_STAFF[lang];let i=0;try{i=parseInt(localStorage.getItem(GP_STAFF_ROTATION_KEY+lang)||'0',10)||0}catch(_){}return{lang,name:names[i%names.length],index:i%names.length,next:(i+1)%names.length}}
+    function gpCommitStaffPerson(slot){try{localStorage.setItem(GP_STAFF_ROTATION_KEY+slot.lang,String(slot.next))}catch(_){}}
     // GP_SERVER_VOICE_CLIENT_V2
     let gpServerVoicePrefetch = null;
-    async function gpFetchServerVoiceTrack(){
-        const response = await fetch(apiUrl(`/api/voice-track?lang=${encodeURIComponent(currentLanguage)}&t=${Date.now()}`), {cache:'no-store'});
+    async function gpFetchServerVoiceTrack(manual=false){
+        const slot=gpNextStaffPerson();
+        const response = await fetch(apiUrl(`/api/voice-track?lang=${encodeURIComponent(currentLanguage)}&person=${encodeURIComponent(slot.name)}&manual=${manual ? '1' : '0'}&t=${Date.now()}`), {cache:'no-store'});
         if(!response.ok) throw new Error(`voice ${response.status}`);
         const track = await response.json();
-        if(!track || !track.ok || !track.audio_url) throw new Error('invalid voice track');
-        track.url = apiUrl(track.audio_url);
-        return track;
+        if(!track || !track.ok || !Array.isArray(track.audio_urls) || !track.audio_urls.length) throw new Error('invalid voice track');
+        track.urls=track.audio_urls.map(apiUrl); track._staffSlot=slot; return track;
     }
-    function gpPrefetchServerVoice(){ if(!gpServerVoicePrefetch){ gpServerVoicePrefetch = gpFetchServerVoiceTrack().catch(() => null); } return gpServerVoicePrefetch; }
+    function gpPrefetchServerVoice(){ if(!gpServerVoicePrefetch){ gpServerVoicePrefetch = gpFetchServerVoiceTrack(false).catch(() => null); } return gpServerVoicePrefetch; }
+    async function playVoiceSequence(track){for(let i=0;i<track.urls.length;i++){const audio=new Audio(track.urls[i]);audio.preload='auto';audio.volume=TEAM_VOICE_VOLUME;teamVoiceAudio=audio;await new Promise((resolve,reject)=>{audio.addEventListener('ended',resolve,{once:true});audio.addEventListener('error',reject,{once:true});audio.play().catch(reject)});if(i<track.urls.length-1)await new Promise(r=>setTimeout(r,180));}}
     async function playTeamVoice(_ignoredTrack=null, manual=false){
         if(detailMode || teamVoicePlaying) return false;
         if(!manual && (!teamVoiceEnabled || document.hidden)) return false;
-        stopTeamVoiceAudio();
-        let track = null;
-        try{ track = await (gpServerVoicePrefetch || gpFetchServerVoiceTrack()); }catch(_){ track = null; }
-        gpServerVoicePrefetch = null; gpPrefetchServerVoice();
-        if(!track){ updateVoiceButton('blocked'); return false; }
-        try{
-            const audio = new Audio(track.url); audio.preload='auto'; audio.volume=TEAM_VOICE_VOLUME; teamVoiceAudio=audio; teamVoicePlaying=true; setVoiceCaption(track.text,true);
-            const finish=()=>{ if(teamVoiceAudio===audio) teamVoiceAudio=null; teamVoicePlaying=false; setVoiceCaption('',false); };
-            audio.addEventListener('ended',finish,{once:true}); audio.addEventListener('error',finish,{once:true}); await audio.play(); updateVoiceButton(); return true;
-        }catch(_){ teamVoiceAudio=null; teamVoicePlaying=false; setVoiceCaption('',false); updateVoiceButton('blocked'); return false; }
+        stopTeamVoiceAudio(); let track=null;
+        try{track=await(gpServerVoicePrefetch||gpFetchServerVoiceTrack(manual))}catch(_){track=null}
+        gpServerVoicePrefetch=null; if(!track){updateVoiceButton('blocked');return false}
+        try{teamVoicePlaying=true;setVoiceCaption(track.text,true);await playVoiceSequence(track);gpCommitStaffPerson(track._staffSlot);teamVoiceAudio=null;teamVoicePlaying=false;setVoiceCaption('',false);updateVoiceButton();gpPrefetchServerVoice();return true}catch(_){teamVoiceAudio=null;teamVoicePlaying=false;setVoiceCaption('',false);updateVoiceButton('blocked');gpPrefetchServerVoice();return false}
     }
     function scheduleNextTeamVoice(delay=TEAM_VOICE_INTERVAL_MS){
         clearTimeout(teamVoiceTimer); teamVoiceTimer=null; if(detailMode||!teamVoiceEnabled)return;
