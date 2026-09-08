@@ -4,6 +4,7 @@ on:
     paths:
       - scripts/apply_gp_ceecee_exact_test.py
       - scripts/apply_gp_ceecee_activation_v2.py
+      - .github/workflows/run-gp-ceecee-exact-test.yml
 permissions:
   contents: write
 jobs:
