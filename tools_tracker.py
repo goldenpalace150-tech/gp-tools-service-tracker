@@ -124,6 +124,98 @@ def golden_loading(message=None):
         st.session_state["_golden_loading_depth"] = depth
 
 
+if "ui_language" not in st.session_state:
+    requested_language = str(query_params.get("lang", "ar") or "ar").lower()
+    st.session_state["ui_language"] = requested_language if requested_language in {"ar", "en"} else "ar"
+
+
+UI_TEXT = {
+    "ar": {
+        "loading_data": "جارٍ تحميل البيانات مباشرة من المصدر...",
+        "saving_data": "جارٍ حفظ البيانات...",
+        "language": "اللغة",
+        "workspace_title": "مساحة العمل الموحدة",
+        "sidebar_title": "مساحة عمل ERPNext",
+        "user": "المستخدم",
+        "role": "الدور",
+        "core_modules": "العمليات الأساسية",
+        "workspace": "🏠 مساحة العمل",
+        "tv": "📺 شاشة الورشة",
+        "support": "🛠️ الدعم والصيانة",
+        "stock": "📦 المخزون",
+        "logistics": "🚚 اللوجستيات",
+        "accounting": "💰 المحاسبة",
+        "logout": "🚪 تسجيل الخروج",
+        "stock_title": "📦 وحدة المستودعات والمخزون",
+        "stock_reorder": "⚠️ يوجد {count} أصناف تتطلب إعادة طلب.",
+        "stock_export": "📥 تصدير السجل",
+        "stock_import_expander": "📤 استيراد تقرير المخزون / الأسعار",
+        "stock_upload": "رفع تقرير Excel أو CSV",
+        "stock_import": "استيراد",
+        "stock_imported": "✅ تم استيراد {count} صنف بنجاح.",
+        "stock_invalid": "❌ لم أتمكن من تحديد عمود كود المادة واسم المادة في التقرير.",
+        "stock_import_error": "❌ فشل استيراد تقرير المخزون",
+        "stock_save": "💾 حفظ التعديلات",
+        "stock_saved": "✅ تم حفظ المخزون.",
+        "open_repairs": "🛠️ صيانة مفتوحة",
+        "ready_tools": "✅ أجهزة جاهزة للتسليم",
+        "sales_total": "💰 إجمالي المبيعات",
+    },
+    "en": {
+        "loading_data": "Loading live data directly from the source...",
+        "saving_data": "Saving data...",
+        "language": "Language",
+        "workspace_title": "Unified Workspace",
+        "sidebar_title": "ERPNext Workspace",
+        "user": "User",
+        "role": "Role",
+        "core_modules": "CORE MODULES",
+        "workspace": "🏠 Workspace",
+        "tv": "📺 TV Display",
+        "support": "🛠️ Support & Maintenance",
+        "stock": "📦 Stock",
+        "logistics": "🚚 Logistics",
+        "accounting": "💰 Accounting",
+        "logout": "🚪 Logout",
+        "stock_title": "📦 Stock & Inventory",
+        "stock_reorder": "⚠️ {count} items require reordering.",
+        "stock_export": "📥 Export Stock",
+        "stock_import_expander": "📤 Import Stock / Price Report",
+        "stock_upload": "Upload Excel or CSV report",
+        "stock_import": "Import",
+        "stock_imported": "✅ Imported {count} stock items successfully.",
+        "stock_invalid": "❌ I could not identify the item-code and item-name columns in this report.",
+        "stock_import_error": "❌ Stock report import failed",
+        "stock_save": "💾 Save Stock Changes",
+        "stock_saved": "✅ Stock saved.",
+        "open_repairs": "🛠️ Open Repairs",
+        "ready_tools": "✅ Ready for Collection",
+        "sales_total": "💰 Total Sales",
+    },
+}
+
+
+def tr(key, **kwargs):
+    lang = st.session_state.get("ui_language", "ar")
+    value = UI_TEXT.get(lang, UI_TEXT["ar"]).get(key, key)
+    return value.format(**kwargs) if kwargs else value
+
+
+@contextmanager
+def golden_loading(message=None):
+    """Consistent Golden Palace waiting indicator without stacking nested spinners."""
+    depth = int(st.session_state.get("_golden_loading_depth", 0) or 0)
+    st.session_state["_golden_loading_depth"] = depth + 1
+    try:
+        if depth:
+            yield
+        else:
+            with st.spinner(f"🏢 Golden Palace · {message or tr('loading_data')}"):
+                yield
+    finally:
+        st.session_state["_golden_loading_depth"] = depth
+
+
 if is_tv_mode:
     st.markdown("""
         <style>
@@ -569,6 +661,50 @@ if not is_tv_mode:
     </style>
     """, unsafe_allow_html=True)
 
+
+ui_is_ar = st.session_state.get("ui_language", "ar") == "ar"
+ui_direction = "rtl" if ui_is_ar else "ltr"
+ui_align = "right" if ui_is_ar else "left"
+st.markdown(
+    f"""
+    <style>
+        .stApp {{ direction: {ui_direction} !important; text-align: {ui_align} !important; }}
+        .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp p, .stApp span,
+        .stApp label, .stApp div {{ text-align: {ui_align}; }}
+        div[data-testid="stSpinner"] {{
+            position: fixed !important;
+            left: 50% !important;
+            top: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            z-index: 999999 !important;
+            min-width: 300px;
+            max-width: min(520px, calc(100vw - 32px));
+            padding: 22px 26px !important;
+            border: 1px solid #c89b2c;
+            border-radius: 18px;
+            background: #06182a;
+            color: #ffffff;
+            box-shadow: 0 18px 60px rgba(0,0,0,.35);
+        }}
+        div[data-testid="stSpinner"]::before {{
+            content: "GP";
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 42px;
+            height: 42px;
+            margin-inline-end: 12px;
+            border-radius: 50%;
+            border: 2px solid #e7bd58;
+            color: #f4bd2d;
+            font-weight: 900;
+            letter-spacing: .04em;
+            background: #0b2238;
+        }}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # ==========================================
 # DATABASE ORM (DocType Engine)
@@ -1368,6 +1504,17 @@ def deduplicate_ledger(df):
     )
     work = work.groupby("service_id", as_index=False, sort=False).tail(1)
     return work.drop(columns=["_cycle_no", "_workflow_rank", "_workflow_date"], errors="ignore").reset_index(drop=True)
+
+
+def _worksheet_missing_error(exc, worksheet_name=""):
+    name = type(exc).__name__.lower()
+    message = str(exc).strip().lower()
+    target = str(worksheet_name or "").strip().lower()
+    return (
+        "worksheetnotfound" in name
+        or ("worksheet" in message and ("not found" in message or "does not exist" in message))
+        or (target and message == target)
+    )
 
 
 def _worksheet_missing_error(exc, worksheet_name=""):
