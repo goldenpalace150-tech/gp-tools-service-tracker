@@ -290,6 +290,96 @@ def api_followup_voice():
 
 
 
+
+# GP_MANUAL_TV_ANNOUNCEMENT_API_V1
+GP_MANUAL_ANNOUNCEMENT_FILE = os.path.join(tempfile.gettempdir(), "gp_manual_tv_announcement_v1.json")
+GP_MANUAL_ANNOUNCEMENT_LOCK = threading.RLock()
+GP_TV_ANNOUNCEMENT_KEY = os.environ.get("GP_TV_ANNOUNCEMENT_KEY", "").strip()
+
+
+def gp_detect_announcement_language(text, requested="auto"):
+    requested = str(requested or "auto").lower().strip()
+    if requested in {"ar", "en"}:
+        return requested
+    return "ar" if re.search(r"[\u0600-\u06ff]", str(text or "")) else "en"
+
+
+def gp_read_manual_announcement():
+    try:
+        with GP_MANUAL_ANNOUNCEMENT_LOCK:
+            if not os.path.exists(GP_MANUAL_ANNOUNCEMENT_FILE):
+                return None
+            with open(GP_MANUAL_ANNOUNCEMENT_FILE, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        if float(data.get("expires_at", 0) or 0) < time.time():
+            return None
+        return data
+    except Exception as exc:
+        print("Manual announcement read error:", repr(exc))
+        return None
+
+
+def gp_write_manual_announcement(data):
+    temp_path = f"{GP_MANUAL_ANNOUNCEMENT_FILE}.{os.getpid()}.tmp"
+    with GP_MANUAL_ANNOUNCEMENT_LOCK:
+        try:
+            with open(temp_path, "w", encoding="utf-8") as handle:
+                json.dump(data, handle, ensure_ascii=False)
+            os.replace(temp_path, GP_MANUAL_ANNOUNCEMENT_FILE)
+        finally:
+            try:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except Exception:
+                pass
+
+
+def gp_manual_announcement_authorized():
+    if not GP_TV_ANNOUNCEMENT_KEY:
+        return True
+    return request.headers.get("X-GP-Announcement-Key", "").strip() == GP_TV_ANNOUNCEMENT_KEY
+
+
+@app.route("/api/manual-announcement", methods=["POST", "OPTIONS"])
+def api_manual_announcement():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    if not gp_manual_announcement_authorized():
+        return jsonify({"ok": False, "error": "unauthorized"}), 403
+    payload = request.get_json(silent=True) or {}
+    text = re.sub(r"\s+", " ", str(payload.get("text", ""))).strip()
+    if not text:
+        return jsonify({"ok": False, "error": "missing_text"}), 400
+    text = text[:700]
+    lang = gp_detect_announcement_language(text, payload.get("lang", "auto"))
+    now = time.time()
+    announcement_id = f"{int(now * 1000)}-{hashlib.sha1(text.encode('utf-8')).hexdigest()[:8]}"
+    announcement = {
+        "id": announcement_id,
+        "text": text,
+        "lang": lang,
+        "published_by": re.sub(r"\s+", " ", str(payload.get("published_by", ""))).strip()[:80],
+        "created_at": now,
+        "expires_at": now + 600,
+    }
+    gp_write_manual_announcement(announcement)
+    response = jsonify({"ok": True, **announcement})
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    return response
+
+
+@app.route("/api/manual-announcement/latest")
+def api_manual_announcement_latest():
+    announcement = gp_read_manual_announcement()
+    after = str(request.args.get("after", "")).strip()
+    if not announcement or (after and after == str(announcement.get("id", ""))):
+        response = jsonify({"ok": True, "announcement": None})
+    else:
+        response = jsonify({"ok": True, "announcement": announcement})
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    return response
+
+
 @app.route("/api/voice-audio/<token>.mp3")
 def api_voice_audio(token):
     token = str(token or "").lower().strip()

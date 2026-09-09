@@ -27,6 +27,36 @@ def get_runtime_secret(name):
 
 IMGBB_API_KEY = get_runtime_secret("IMGBB_API_KEY")
 
+
+# GP_MANUAL_TV_ANNOUNCEMENT_V1
+GP_TV_BACKEND_URL = get_runtime_secret("GP_TV_BACKEND_URL") or "https://golden-palace-service-tracker.onrender.com"
+GP_TV_ANNOUNCEMENT_KEY = get_runtime_secret("GP_TV_ANNOUNCEMENT_KEY")
+
+
+def publish_manual_tv_announcement(text, language="auto", published_by=""):
+    message = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not message:
+        raise ValueError("Announcement text is empty")
+    payload = {
+        "text": message[:700],
+        "lang": str(language or "auto").strip().lower(),
+        "published_by": str(published_by or "").strip(),
+    }
+    headers = {"Accept": "application/json"}
+    if GP_TV_ANNOUNCEMENT_KEY:
+        headers["X-GP-Announcement-Key"] = GP_TV_ANNOUNCEMENT_KEY
+    response = requests.post(
+        f"{GP_TV_BACKEND_URL.rstrip('/')}/api/manual-announcement",
+        json=payload,
+        headers=headers,
+        timeout=(5, 15),
+    )
+    response.raise_for_status()
+    data = response.json()
+    if not data.get("ok"):
+        raise RuntimeError(data.get("error") or "TV announcement publish failed")
+    return data
+
 st.set_page_config(page_title="Al-Qasr Al-Zahabi ERP", layout="wide", page_icon="🏢")
 
 query_params = st.query_params
@@ -2462,6 +2492,37 @@ elif st.session_state['current_module'] == 'Support':
 # ==========================================
 elif st.session_state['current_module'] == 'FollowUp':
     gp_render_module_header('FollowUp')
+
+    # GP_MANUAL_TV_ANNOUNCEMENT_UI_V1
+    with st.expander("📣 إعلان مباشر إلى شاشة الورشة (Live TV Announcement)", expanded=False):
+        st.caption("اكتب المهمة أو الرسالة هنا. ستظهر على شاشة التلفزيون فوراً وتُقرأ بنفس صوت إعلانات المتابعة الحالي.")
+        with st.form("gp_manual_tv_announcement_form", clear_on_submit=True):
+            manual_announcement_text = st.text_area(
+                "نص الإعلان (Announcement text)",
+                placeholder="مثال: أبو عدنان، الرجاء إنهاء فحص الجهاز S125 قبل الساعة 2.",
+                height=110,
+            )
+            lang_choice = st.selectbox(
+                "لغة الصوت (Voice language)",
+                ["auto", "ar", "en"],
+                format_func=lambda x: {"auto": "تلقائي / Auto", "ar": "العربية", "en": "English"}[x],
+            )
+            manual_announcement_submit = st.form_submit_button("📡 نشر الآن على التلفزيون (Publish Now)", use_container_width=True)
+        if manual_announcement_submit:
+            if not str(manual_announcement_text or "").strip():
+                st.warning("يرجى كتابة نص الإعلان أولاً.")
+            else:
+                try:
+                    with golden_loading("جارٍ نشر الإعلان إلى شاشة الورشة..."):
+                        published = publish_manual_tv_announcement(
+                            manual_announcement_text,
+                            language=lang_choice,
+                            published_by=current_user,
+                        )
+                    st.success(f"✅ تم نشر الإعلان إلى التلفزيون · {published.get('id', '')}")
+                except Exception as exc:
+                    st.error(f"❌ تعذر نشر الإعلان إلى التلفزيون: {exc}")
+
     followup_df = normalize_followup_dataframe(followup_df)
 
     # Objective repair blockers are synced automatically when this module opens.
