@@ -1,0 +1,52 @@
+name: Apply Manual TV Voice Toggle
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/apply_manual_tv_voice_toggle.py
+      - .github/workflows/apply-manual-tv-voice-toggle.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply voice toggle
+        run: python scripts/apply_manual_tv_voice_toggle.py
+      - name: Validate Python
+        run: python -m py_compile tools_tracker.py flask_app.py
+      - name: Validate TV inline JavaScript
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html = Path('templates/tv.html').read_text(encoding='utf-8')
+          scripts = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', html, flags=re.S|re.I)
+          if not scripts:
+              raise SystemExit('No inline scripts found')
+          Path('/tmp/tv-inline.js').write_text('\n'.join(scripts), encoding='utf-8')
+          PY
+          node --check /tmp/tv-inline.js
+      - name: Verify toggle markers
+        run: |
+          grep -q 'GP_MANUAL_TV_VOICE_TOGGLE_V1' tools_tracker.py
+          grep -q 'GP_MANUAL_TV_VOICE_TOGGLE_V1' flask_app.py
+          grep -q 'GP_MANUAL_TV_VOICE_TOGGLE_V1' templates/tv.html
+      - name: Commit applied files
+        run: |
+          if git diff --quiet -- tools_tracker.py flask_app.py templates/tv.html; then
+            echo 'No app changes required.'
+            exit 0
+          fi
+          git config user.name 'Golden Palace Update Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add tools_tracker.py flask_app.py templates/tv.html
+          git commit -m 'Add backend voice toggle for TV announcements'
+          git push
