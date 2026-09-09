@@ -2,7 +2,8 @@ name: Apply Follow-Up TV Auto Slides
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
       - '.github/workflows/apply-followup-tv-slides.yml'
 
@@ -13,103 +14,13 @@ jobs:
   apply:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Patch Follow-Up TV slideshow and announcement
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
-
-          tv_path = Path('templates/tv.html')
-          flask_path = Path('flask_app.py')
-          tv = tv_path.read_text(encoding='utf-8')
-          flask = flask_path.read_text(encoding='utf-8')
-
-          if 'GP_FOLLOWUP_AUTO_SLIDES_V2' not in tv:
-              style_marker = '    <!-- GP_UI_REFRESH_2026_09_08 -->'
-              if style_marker not in tv:
-                  raise SystemExit('TV style insertion marker not found')
-              slide_style = r'''
-    <!-- GP_FOLLOWUP_AUTO_SLIDES_V2 -->
-    <style id="gp-followup-auto-slides-v2">
-      .followup-station{position:relative;flex:0 0 auto;margin:8px 0 10px;min-height:188px;overflow:hidden;border:1px solid #315472;border-radius:18px;background:linear-gradient(135deg,#071a2d 0%,#0b2741 58%,#102f4b 100%);box-shadow:0 10px 30px rgba(0,0,0,.20);color:#f8fafc;direction:ltr}
-      body.lang-ar .followup-station{direction:rtl}.followup-station::before{content:"";position:absolute;inset:0 auto 0 0;width:5px;background:#d5a62e;z-index:2}body.lang-ar .followup-station::before{left:auto;right:0}
-      .followup-station-head{height:45px;padding:7px 14px 6px 17px;display:flex;align-items:center;justify-content:space-between;gap:14px;border-bottom:1px solid rgba(148,163,184,.18)}body.lang-ar .followup-station-head{padding:7px 17px 6px 14px}
-      .followup-station-title{display:flex;align-items:center;gap:8px;font-weight:950;font-size:clamp(14px,1.05vw,19px);white-space:nowrap}.followup-station-title .live-dot{width:9px;height:9px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 5px rgba(34,197,94,.10)}
-      .followup-station-counts{display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden}.followup-kpi{display:inline-flex;align-items:center;gap:5px;border:1px solid #315472;background:rgba(8,31,51,.76);border-radius:999px;padding:4px 8px;color:#dbe7f2;font-size:clamp(10px,.75vw,13px);font-weight:800;white-space:nowrap}.followup-kpi b{font-size:clamp(13px,.95vw,17px);color:#f4bd2d}.followup-kpi.overdue b{color:#ff7078}.followup-kpi.today b{color:#ffc553}
-      .followup-slide{position:relative;width:100%;height:142px;border:0;background:transparent;color:inherit;padding:10px 17px 13px;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(380px,.95fr);gap:18px;text-align:left;cursor:pointer}body.lang-ar .followup-slide{text-align:right}.followup-slide:hover{background:rgba(255,255,255,.025)}
-      .followup-slide-main{min-width:0;display:flex;flex-direction:column;justify-content:center}.followup-slide-top{display:flex;align-items:center;gap:8px;min-width:0;margin-bottom:5px}.followup-category-badge{display:inline-flex;align-items:center;border-radius:999px;padding:4px 9px;border:1px solid #466581;background:#102d47;font-size:clamp(10px,.75vw,13px);font-weight:900;white-space:nowrap}.followup-slide-position{color:#9fb4c8;font-size:12px;font-weight:800;white-space:nowrap}
-      .followup-slide-title{font-size:clamp(21px,1.75vw,31px);line-height:1.08;font-weight:950;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff}.followup-slide-brief{margin-top:6px;font-size:clamp(15px,1.18vw,21px);line-height:1.32;font-weight:750;color:#dbe7f2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-      .followup-slide-meta{display:grid;grid-template-columns:1fr 1fr;gap:7px 8px;align-content:center}.followup-slide-meta .meta-box{min-width:0;border:1px solid rgba(112,145,174,.28);border-radius:10px;background:rgba(5,24,41,.48);padding:7px 9px}.followup-slide-meta small{display:block;color:#91a9be;font-size:10px;font-weight:800;margin-bottom:2px;text-transform:uppercase;letter-spacing:.03em}.followup-slide-meta strong{display:block;color:#f8fafc;font-size:clamp(12px,.85vw,15px);font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .followup-slide-progress{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(255,255,255,.07);overflow:hidden}.followup-slide-progress span{display:block;height:100%;width:100%;transform-origin:left center;background:linear-gradient(90deg,#d5a62e,#f1d16c);animation:gp-followup-slide-progress 18s linear forwards}body.lang-ar .followup-slide-progress span{transform-origin:right center}
-      .followup-station.cat-overdue{border-color:#8f3239}.followup-station.cat-overdue .followup-category-badge{border-color:#9b4148;background:#351a22;color:#ffb2b7}.followup-station.cat-today{border-color:#8a6416}.followup-station.cat-today .followup-category-badge{border-color:#947024;background:#342711;color:#ffd784}.followup-station.cat-spares{border-color:#7b6826}.followup-station.cat-spares .followup-category-badge{border-color:#87732d;background:#312b14;color:#f3db7a}.followup-station.cat-inquiries{border-color:#316c96}.followup-station.cat-inquiries .followup-category-badge{border-color:#397ba9;background:#102c43;color:#9bd5ff}
-      .followup-station.empty .followup-slide{grid-template-columns:1fr}.followup-station.empty .followup-slide-meta{display:none}@keyframes gp-followup-slide-progress{from{transform:scaleX(0)}to{transform:scaleX(1)}}
-      @media(max-width:1100px){.followup-station{min-height:176px}.followup-slide{height:130px;grid-template-columns:minmax(0,1.4fr) minmax(300px,.8fr);gap:10px}.followup-kpi span{display:none}}@media(max-width:760px){.followup-station{min-height:220px}.followup-station-head{height:auto;align-items:flex-start;flex-direction:column}.followup-station-counts{width:100%}.followup-slide{height:158px;grid-template-columns:1fr}.followup-slide-meta{grid-template-columns:repeat(4,1fr)}.followup-slide-meta small{font-size:9px}}
-    </style>
-'''
-              tv = tv.replace(style_marker, slide_style + '\n' + style_marker, 1)
-              station_html = r'''
-        <section id="followupStation" class="followup-station empty" aria-label="Follow-up station">
-            <div class="followup-station-head"><div class="followup-station-title"><span class="live-dot"></span><span id="followupStationTitle">📌 Follow-Up Station</span></div><div class="followup-station-counts" aria-label="Follow-up counts"><span class="followup-kpi overdue"><span id="label-followup-overdue">🔴 Overdue</span><b id="followup-count-overdue">0</b></span><span class="followup-kpi today"><span id="label-followup-today">🟠 Today</span><b id="followup-count-today">0</b></span><span class="followup-kpi spares"><span id="label-followup-spares">🟡 Spares</span><b id="followup-count-spares">0</b></span><span class="followup-kpi inquiries"><span id="label-followup-inquiries">🔵 Inquiries</span><b id="followup-count-inquiries">0</b></span></div></div>
-            <button id="followupSlide" class="followup-slide" type="button" aria-label="Open current follow-up group"><div class="followup-slide-main"><div class="followup-slide-top"><span id="followupSlideCategory" class="followup-category-badge">Follow-Up</span><span id="followupSlidePosition" class="followup-slide-position"></span></div><div id="followupSlideTitle" class="followup-slide-title">No follow-up cases waiting</div><div id="followupSlideBrief" class="followup-slide-brief">The station will automatically rotate through active follow-up cases.</div></div><div class="followup-slide-meta"><div class="meta-box"><small id="followupOwnerLabel">Owner</small><strong id="followupSlideOwner">—</strong></div><div class="meta-box"><small id="followupWaitingLabel">Waiting on</small><strong id="followupSlideWaiting">—</strong></div><div class="meta-box"><small id="followupDueLabel">Next follow-up</small><strong id="followupSlideDue">—</strong></div><div class="meta-box"><small id="followupRelatedLabel">Related ID</small><strong id="followupSlideRelated">—</strong></div></div><div class="followup-slide-progress"><span id="followupSlideProgress"></span></div></button>
-        </section>'''
-              pattern = re.compile(r'\n\s*<section class="followup-strip" aria-label="Follow-up queue">.*?</section>', re.S)
-              tv, n = pattern.subn('\n' + station_html, tv, count=1)
-              if n != 1: raise SystemExit(f'Expected one old follow-up strip, replaced {n}')
-              slide_js = r'''
-
-    // GP_FOLLOWUP_AUTO_SLIDES_V2
-    const GP_FOLLOWUP_SLIDE_MS = 18 * 1000;
-    let gpFollowupSlides = [], gpFollowupSlideIndex = 0, gpFollowupSlideTimer = null, gpFollowupSlideSignature = '', gpFollowupLastAnnouncedKey = '', gpFollowupLastAnnouncedAt = 0, gpFollowupVoiceRequestSeq = 0;
-    function gpFollowupValue(value,fallback='—'){const text=String(value==null?'':value).trim();return text||fallback}
-    function gpFollowupCategoryMeta(category){const ar=currentLanguage==='ar';const map={followup_overdue:{css:'overdue',label:ar?'🔴 متابعة متأخرة':'🔴 Overdue Follow-Up',spoken:ar?'متابعة متأخرة':'overdue follow-up'},followup_today:{css:'today',label:ar?'🟠 متابعة اليوم':'🟠 Due Today',spoken:ar?'متابعة مطلوبة اليوم':'follow-up due today'},followup_spares:{css:'spares',label:ar?'🟡 قطع غيار':'🟡 Spare Parts',spoken:ar?'متابعة قطع غيار':'spare parts follow-up'},followup_inquiries:{css:'inquiries',label:ar?'🔵 استفسار':'🔵 Inquiry',spoken:ar?'متابعة استفسار':'inquiry follow-up'}};return map[category]||{css:'inquiries',label:ar?'📌 متابعة':'📌 Follow-Up',spoken:ar?'متابعة':'follow-up'}}
-    function gpBuildFollowupSlides(data){const sources=[['followup_overdue','followup_overdue_list'],['followup_today','followup_due_today_list'],['followup_spares','followup_spare_parts_list'],['followup_inquiries','followup_inquiry_list']],slides=[],seen=new Set();for(const [category,key] of sources){const list=Array.isArray(data&&data[key])?data[key]:[];for(const item of list){const unique=String(item.followup_id||`${item.related_id||''}|${item.title||''}|${item.next_followup||''}`);if(!unique||seen.has(unique))continue;seen.add(unique);slides.push({...item,_gpCategory:category,_gpKey:unique})}}return slides}
-    function gpFollowupAnnouncementText(item,meta){const ar=currentLanguage==='ar',title=gpFollowupValue(item.title,''),action=gpFollowupValue(item.next_action,''),owner=gpFollowupValue(item.owner,''),waiting=gpFollowupValue(item.waiting_on,''),due=gpFollowupValue(item.next_followup,''),related=gpFollowupValue(item.related_id,''),days=Number(item.days_overdue||0),parts=[];if(ar){parts.push(meta.spoken);if(title)parts.push(title);if(action)parts.push(`الخطوة الجاية: ${action}`);if(owner)parts.push(`المسؤول: ${owner}`);if(waiting)parts.push(`بانتظار: ${waiting}`);if(days>0)parts.push(`متأخرة ${days} يوم`);else if(due)parts.push(`موعد المتابعة: ${due}`);if(related)parts.push(`الحالة المرتبطة: ${related}`)}else{parts.push(meta.spoken);if(title)parts.push(title);if(action)parts.push(`Next action: ${action}`);if(owner)parts.push(`Owner: ${owner}`);if(waiting)parts.push(`Waiting on: ${waiting}`);if(days>0)parts.push(`${days} days overdue`);else if(due)parts.push(`Next follow-up: ${due}`);if(related)parts.push(`Related case: ${related}`)}return parts.join('. ').replace(/\s+/g,' ').trim().slice(0,430)}
-    async function gpAnnounceFollowupSlide(item,meta){if(!item||detailMode||!teamVoiceEnabled||document.hidden||teamVoicePlaying)return false;const text=gpFollowupAnnouncementText(item,meta);if(!text)return false;const key=`${currentLanguage}|${item._gpKey}|${item.next_action||''}|${item.waiting_on||''}`,now=Date.now();if(key===gpFollowupLastAnnouncedKey&&now-gpFollowupLastAnnouncedAt<120000)return false;const seq=++gpFollowupVoiceRequestSeq;try{const response=await fetch(apiUrl(`/api/followup-voice?lang=${encodeURIComponent(currentLanguage)}&text=${encodeURIComponent(text)}&t=${Date.now()}`),{cache:'no-store'});if(!response.ok||seq!==gpFollowupVoiceRequestSeq)return false;const track=await response.json();if(!track||!track.ok||!track.audio_url||detailMode||document.hidden||teamVoicePlaying)return false;stopTeamVoiceAudio();const audio=new Audio(apiUrl(track.audio_url));audio.preload='auto';audio.volume=TEAM_VOICE_VOLUME;teamVoiceAudio=audio;teamVoicePlaying=true;gpFollowupLastAnnouncedKey=key;gpFollowupLastAnnouncedAt=Date.now();setVoiceCaption(text,true);await new Promise((resolve,reject)=>{audio.addEventListener('ended',resolve,{once:true});audio.addEventListener('error',reject,{once:true});audio.play().catch(reject)});teamVoiceAudio=null;teamVoicePlaying=false;setVoiceCaption('',false);return true}catch(_){teamVoiceAudio=null;teamVoicePlaying=false;setVoiceCaption('',false);return false}}
-    function gpResetFollowupProgress(){const bar=document.getElementById('followupSlideProgress');if(!bar)return;bar.style.animation='none';void bar.offsetWidth;bar.style.animation=''}
-    function renderFollowupSlide(announce=false){const station=document.getElementById('followupStation'),slide=document.getElementById('followupSlide');if(!station||!slide)return;const titleEl=document.getElementById('followupSlideTitle'),briefEl=document.getElementById('followupSlideBrief'),categoryEl=document.getElementById('followupSlideCategory'),positionEl=document.getElementById('followupSlidePosition'),ownerEl=document.getElementById('followupSlideOwner'),waitingEl=document.getElementById('followupSlideWaiting'),dueEl=document.getElementById('followupSlideDue'),relatedEl=document.getElementById('followupSlideRelated');document.getElementById('followupStationTitle').textContent=currentLanguage==='ar'?'📌 محطة المتابعة':'📌 Follow-Up Station';document.getElementById('followupOwnerLabel').textContent=currentLanguage==='ar'?'المسؤول':'Owner';document.getElementById('followupWaitingLabel').textContent=currentLanguage==='ar'?'بانتظار':'Waiting on';document.getElementById('followupDueLabel').textContent=currentLanguage==='ar'?'المتابعة القادمة':'Next follow-up';document.getElementById('followupRelatedLabel').textContent=currentLanguage==='ar'?'الحالة المرتبطة':'Related ID';if(!gpFollowupSlides.length){station.className='followup-station empty';slide.dataset.category='';categoryEl.textContent=currentLanguage==='ar'?'✅ لا يوجد متابعات':'✅ Follow-Up Clear';positionEl.textContent='';titleEl.textContent=currentLanguage==='ar'?'لا يوجد حالات متابعة معلّقة':'No follow-up cases waiting';briefEl.textContent=currentLanguage==='ar'?'أي حالة جديدة رح تظهر هون تلقائياً.':'New follow-up cases will appear here automatically.';ownerEl.textContent=waitingEl.textContent=dueEl.textContent=relatedEl.textContent='—';gpResetFollowupProgress();return}if(gpFollowupSlideIndex>=gpFollowupSlides.length)gpFollowupSlideIndex=0;const item=gpFollowupSlides[gpFollowupSlideIndex],meta=gpFollowupCategoryMeta(item._gpCategory);station.className=`followup-station cat-${meta.css}`;slide.dataset.category=item._gpCategory;categoryEl.textContent=meta.label;positionEl.textContent=`${gpFollowupSlideIndex+1} / ${gpFollowupSlides.length}`;titleEl.textContent=gpFollowupValue(item.title,gpFollowupValue(item.related_id,gpFollowupValue(item.followup_id,currentLanguage==='ar'?'حالة متابعة':'Follow-Up Case')));briefEl.textContent=gpFollowupValue(item.next_action,gpFollowupValue(item.waiting_on,currentLanguage==='ar'?'لا توجد خطوة تالية مسجلة':'No next action recorded'));ownerEl.textContent=gpFollowupValue(item.owner);waitingEl.textContent=gpFollowupValue(item.waiting_on);dueEl.textContent=item.timing==='overdue'&&Number(item.days_overdue||0)>0?(currentLanguage==='ar'?`متأخرة ${Number(item.days_overdue)} يوم`:`${Number(item.days_overdue)} days overdue`):gpFollowupValue(item.next_followup);relatedEl.textContent=gpFollowupValue(item.related_id,gpFollowupValue(item.followup_id));gpResetFollowupProgress();if(announce)setTimeout(()=>gpAnnounceFollowupSlide(item,meta),450)}
-    function updateFollowupSlideshow(data){const previous=gpFollowupSlides[gpFollowupSlideIndex],previousKey=previous&&previous._gpKey,slides=gpBuildFollowupSlides(data),signature=slides.map(x=>`${x._gpCategory}:${x._gpKey}:${x.next_action||''}:${x.waiting_on||''}`).join('|');gpFollowupSlides=slides;if(previousKey){const kept=slides.findIndex(x=>x._gpKey===previousKey);gpFollowupSlideIndex=kept>=0?kept:0}else if(gpFollowupSlideIndex>=slides.length)gpFollowupSlideIndex=0;renderFollowupSlide(false);if(!gpFollowupSlideTimer){setTimeout(()=>renderFollowupSlide(true),900);gpFollowupSlideTimer=setInterval(()=>{if(!gpFollowupSlides.length||detailMode||document.hidden)return;gpFollowupSlideIndex=(gpFollowupSlideIndex+1)%gpFollowupSlides.length;renderFollowupSlide(true)},GP_FOLLOWUP_SLIDE_MS)}else if(signature!==gpFollowupSlideSignature&&slides.length)renderFollowupSlide(false);gpFollowupSlideSignature=signature}
-'''
-              marker='\n    function updateMain(data) {'
-              if marker not in tv: raise SystemExit('updateMain marker not found')
-              tv=tv.replace(marker,slide_js+marker,1)
-              count_line="        if(fuSpares) fuSpares.textContent=num(data.followup_spare_parts_count); if(fuInquiries) fuInquiries.textContent=num(data.followup_inquiry_count);\n"
-              if count_line not in tv: raise SystemExit('Follow-up count line not found')
-              tv=tv.replace(count_line,count_line+'        updateFollowupSlideshow(data);\n',1)
-              old="    document.querySelectorAll('.followup-mini').forEach(btn => btn.addEventListener('click', () => openCategory(btn.dataset.category)));"
-              if old not in tv: raise SystemExit('Old follow-up listener not found')
-              tv=tv.replace(old,"    document.getElementById('followupSlide')?.addEventListener('click', e => { const category=e.currentTarget.dataset.category; if(category) openCategory(category); });",1)
-
-          if 'GP_FOLLOWUP_VOICE_V1' not in flask:
-              marker='\n\n@app.route("/api/voice-audio/<token>.mp3")'
-              if marker not in flask: raise SystemExit('Voice route marker not found')
-              route=r'''
-
-# GP_FOLLOWUP_VOICE_V1
-@app.route("/api/followup-voice")
-def api_followup_voice():
-    lang = "en" if str(request.args.get("lang", "ar")).lower().startswith("en") else "ar"
-    text = re.sub(r"\s+", " ", str(request.args.get("text", ""))).strip()
-    if not text:
-        return jsonify({"ok": False, "error": "missing_text"}), 400
-    text = text[:500]
-    voice = GP_AR_VOICE if lang == "ar" else GP_EN_VOICE
-    rate = "-3%" if lang == "ar" else "-5%"
-    pitch = "+1Hz"
-    try:
-        token, _ = gp_ensure_voice_file(text, voice, rate, pitch)
-    except Exception as exc:
-        print("FollowUp voice generation error:", repr(exc))
-        return jsonify({"ok": False, "error": "voice_generation_failed"}), 503
-    return jsonify({"ok": True,"text": text,"lang": lang,"voice": voice,"audio_url": f"/api/voice-audio/{token}.mp3"})
-'''
-              flask=flask.replace(marker,route+marker,1)
-          tv_path.write_text(tv,encoding='utf-8');flask_path.write_text(flask,encoding='utf-8')
-          PY
+      - name: Apply follow-up TV patch
+        run: python .github/scripts/apply_followup_tv.py
 
       - name: Validate Python and TV JavaScript
         shell: bash
@@ -118,24 +29,25 @@ def api_followup_voice():
           python - <<'PY'
           from pathlib import Path
           import re
-          html=Path('templates/tv.html').read_text(encoding='utf-8')
-          assert 'GP_FOLLOWUP_AUTO_SLIDES_V2' in html
+          html = Path('templates/tv.html').read_text(encoding='utf-8')
+          assert 'GP_FOLLOWUP_AUTO_SLIDES_V3' in html
           assert 'updateFollowupSlideshow(data);' in html
-          scripts=re.findall(r'<script[^>]*>(.*?)</script>',html,flags=re.S|re.I)
-          Path('/tmp/gp-tv.js').write_text('\n'.join(scripts),encoding='utf-8')
+          scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, flags=re.S | re.I)
+          Path('/tmp/gp-tv.js').write_text('\n'.join(scripts), encoding='utf-8')
           PY
           node --check /tmp/gp-tv.js
-          grep -q 'GP_FOLLOWUP_VOICE_V1' flask_app.py
+          grep -q 'GP_FOLLOWUP_VOICE_V2' flask_app.py
           grep -q '/api/followup-voice' flask_app.py
 
-      - name: Commit final source and remove deployment workflow
+      - name: Commit tested source
         shell: bash
         run: |
           git config user.name 'Golden Palace Update Bot'
           git config user.email 'actions@users.noreply.github.com'
-          git rm -f .github/workflows/apply-followup-tv-slides.yml
           git add templates/tv.html flask_app.py
-          if git diff --cached --quiet; then echo 'No changes to commit'; exit 0; fi
-          git commit -m 'Add TV follow-up auto slides with case announcements'
+          if git diff --cached --quiet; then
+            echo 'No source changes needed'
+            exit 0
+          fi
+          git commit -m 'Add TV follow-up auto slides and case announcements'
           git push origin HEAD:main
-# trigger 2
