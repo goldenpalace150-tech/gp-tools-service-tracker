@@ -25,5 +25,11 @@ replacement = "    if old not in text:\n        Path('PATCH_ERROR.txt').write_te
 if needle in src:
     src = src.replace(needle, replacement, 1)
 
+# Run the Follow-Up Station slideshow patch after the existing backend/UI patch
+# so the slideshow is applied to the final current TV source, not an older intermediate version.
+followup_hook = "\n# GP_FOLLOWUP_STATION_DEPLOY_HOOK_V1\nexec(Path('.github/scripts/apply_followup_tv.py').read_text(encoding='utf-8'), {'__name__': '__main__'})\n"
+if 'GP_FOLLOWUP_STATION_DEPLOY_HOOK_V1' not in src:
+    src += followup_hook
+
 path.write_text(src, encoding='utf-8')
 print('Follow-up patch targets aligned with current source')
