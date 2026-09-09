@@ -1179,7 +1179,7 @@
 
     // Exact Arabic voice policy: Microsoft Amany Online (Natural) - Arabic (Syria).
     // Never fall back to a generic Arabic/robotic voice.
-    const GP_STAFF={ar:['أبو عدنان','خبيطي','أبو نقطة','عمر','حريري','أبو غسان','حازم'],en:['Abu Adnan','Khbeiti','Abu Nuqta','Omar','Hariri','Abu Ghassan','Hazem']};
+    const GP_STAFF={ar:['أبو عدنان','غبيطي','أبو نقطة','عمر','حريري','أبو غسان','حازم'],en:['Abu Adnan','Khbeiti','Abu Nuqta','Omar','Hariri','Abu Ghassan','Hazem']};
     const GP_MANAGER={ar:'أبو آدم',en:'Abu Adam'};
     const GP_VOICE_BANK={
       ar:{
@@ -1296,7 +1296,7 @@
 
 
     // GP_VOICE_BALANCE_PROSODY_V3
-    const GP_BALANCED_STAFF={ar:['أبو عدنان','خبيطي','أبو نقطة','عمر','أبو آدم','حريري','أبو غسان','حازم'],en:['Abu Adnan','Khbeiti','Abu Nuqta','Omar','Abu Adam','Hariri','Abu Ghassan','Hazem']};
+    const GP_BALANCED_STAFF={ar:['أبو عدنان','غبيطي','أبو نقطة','عمر','أبو آدم','حريري','أبو غسان','حازم'],en:['Abu Adnan','Khbeiti','Abu Nuqta','Omar','Abu Adam','Hariri','Abu Ghassan','Hazem']};
     const GP_STAFF_ROTATION_KEY='gpBalancedStaffRotationV3';
     function gpNextStaffPerson(){const lang=currentLanguage==='ar'?'ar':'en',names=GP_BALANCED_STAFF[lang];let i=0;try{i=parseInt(localStorage.getItem(GP_STAFF_ROTATION_KEY+lang)||'0',10)||0}catch(_){}return{lang,name:names[i%names.length],index:i%names.length,next:(i+1)%names.length}}
     function gpCommitStaffPerson(slot){try{localStorage.setItem(GP_STAFF_ROTATION_KEY+slot.lang,String(slot.next))}catch(_){}}
@@ -1551,6 +1551,7 @@
 
 
     // GP_CRISP_FEMALE_V6
+    // GP_ACCOUNTANT_GHBEITI_V9: غبيطي = accountant, 2 normal + 1 funny accounting clip.
     // GP_FUNNY_BALANCED_CRISP_V8: exactly 2 normal + 1 funny clip per staff member.
     // GP_ROLE_SCOPED_CRISP_V7: حريري كهرباء، أبو غسان فني مواقع، حازم دعم المكتب والضيافة.
     // Approved female "Crisp" voice catalog. These are the exact generated MP3 previews
@@ -1561,10 +1562,10 @@
         {text:'أبو عدنان، اليوم بدنا كل حالة عندك تكون واضحة ومحدّثة، والجاهز يطلع من الورشة بلا تأخير. يعطيك العافية.',url:'https://storage.googleapis.com/adm--audio-playback--7d--public/mcp-preview/c4c3269a-c508-42b3-8281-c2aea7862794.mp3'},
         {text:'أبو عدنان، إذا في حالة واقفة بلا سبب، خلّينا نعرف السبب اليوم ونحرّكها. خبرتك بتفرق، وشغلك المرتب بيبين.',url:'https://storage.googleapis.com/adm--audio-playback--7d--public/mcp-preview/f1da361f-4313-4e28-b4d0-25d1dcac1a85.mp3'},
         {text:'أبو عدنان، إذا الجهاز قرر يعمل حاله أذكى منّا اليوم، ذكّره بهدوء إنو آخر شي رح ينحط عالطاولة ويتفحص قطعة قطعة. يعطيك العافية.',url:'https://storage.googleapis.com/adm--audio-playback--7d--public/mcp-preview/03a682f7-3068-4682-ade4-1084a53de1ae.mp3'}]},
-      {name:'خبيطي',tracks:[
-        {text:'خبيطي، شدّ الهمة اليوم. خلّص الجاهز أول، وإذا جهاز عم يتدلّع ذكّره إنو وصل لعند أهل الخبرة. هيك الشغل الصح.',url:'https://storage.googleapis.com/adm--audio-playback--7d--public/mcp-preview/a9609a8e-3fe7-41ae-9c7b-6dac1d9f3f81.mp3'},
-        {text:'خبيطي، اليوم ممنوع الحالة تنام بالورشة من دون تحديث. يا منكمّلها، يا منكتب بوضوح شو ناطرين. تمام.',url:'https://storage.googleapis.com/adm--audio-playback--7d--public/mcp-preview/43f41114-f7f1-43c7-b51c-f0b08436a395.mp3'},
-        {text:'خبيطي، إذا جهاز حاول يقنعك إنو العطل لحاله رح يروح، لا تناقشه كتير. افتح العدة وخليه يعرف إنو اليوم ما في عطلة. شدّ الهمة.',url:'https://storage.googleapis.com/adm--audio-playback--7d--public/mcp-preview/bf344609-8515-402e-8fd2-1d60ca6842cd.mp3'}]},
+      {name:'غبيطي',tracks:[
+        {text:'غبيطي، يعطيك العافية. اليوم بدنا الحسابات واضحة، كل مبلغ بمكانه، وكل فاتورة مسجلة قبل ما يخلص اليوم.',url:'https://storage.googleapis.com/adm--audio-playback--7d--public/mcp-preview/6d20d63a-a250-4239-b5a7-073ce8952f1d.mp3'},
+        {text:'غبيطي، ركّز اليوم عالمطابقات والدفعات، وإذا في رقم مو راكب لا تمرّقه. خلّيه واضح قبل ما نسكّر الحساب.',url:'https://storage.googleapis.com/adm--audio-playback--7d--public/mcp-preview/6e7f4e37-7702-465a-8e2c-f84bed3c7195.mp3'},
+        {text:'غبيطي، إذا آخر اليوم طلع معك فرق بالحساب، لا تقنعنا إنو الأرقام زعلت من بعض. رجّع المطابقة وخلي كل ليرة تعرف محلها.',url:'https://storage.googleapis.com/adm--audio-playback--7d--public/mcp-preview/953aa18a-cab4-441e-a902-c4b57dde2873.mp3'}]},
       {name:'أبو نقطة',tracks:[
         {text:'أبو نقطة، بدنا كل نقطة بالحالة تكون واضحة، وآخر نقطة تكون: تم الإنجاز. يعطيك العافية.',url:'https://storage.googleapis.com/adm--audio-playback--7d--public/mcp-preview/ab4ca135-e5fa-44e4-aea8-c3d2dcb5719a.mp3'},
         {text:'أبو نقطة، كل حالة إلها قصة، بس ما بدنا القصة تطول. حدّثها بوقتها وخلي آخر سطر واضح: تم الإنجاز.',url:'https://storage.googleapis.com/adm--audio-playback--7d--public/mcp-preview/195a5335-090c-4430-9753-646f7e4c4ed8.mp3'},
