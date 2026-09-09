@@ -1,0 +1,79 @@
+name: Run Backend UI V2
+on:
+  push:
+    paths:
+      - scripts/apply_backend_ui_v2.py
+      - .github/workflows/run-backend-ui-v2.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply backend UI V2
+        run: python scripts/apply_backend_ui_v2.py
+      - name: Validate Python and UI markers
+        run: |
+          python -m py_compile tools_tracker.py
+          python - <<'PY'
+          from pathlib import Path
+          src = Path('tools_tracker.py').read_text(encoding='utf-8')
+          required = [
+              'GP_BACKEND_UI_V2',
+              'gp_render_module_header',
+              'gp_nav_button',
+              'gp-side-brand',
+              'gp-user-card',
+              'gp-module-hero',
+              'gp-login-brand',
+              "gp_render_module_header('Workspace')",
+              "gp_render_module_header('Support')",
+              "gp_render_module_header('Stock')",
+              "gp_render_module_header('Logistics')",
+              "gp_render_module_header('Accounting')",
+              'gp_quick_support',
+              'gp_quick_stock',
+              'gp_quick_logistics',
+              'gp_quick_accounting',
+          ]
+          missing = [x for x in required if x not in src]
+          if missing:
+              raise SystemExit('Missing backend UI markers: ' + str(missing))
+
+          # Guardrails: core workflow symbols must still exist untouched.
+          workflow_required = [
+              'WF_WAITING', 'WF_IN_REPAIR', 'WF_WAIT_COLLECTION', 'WF_WAIT_PARTNER',
+              'WF_CLOSED_ZERO', 'WF_CLOSED_COLLECTED', 'WF_CLOSED_PARTNER', 'WF_CLOSED_TV',
+              'preserve_manual_closures', 'apply_workflow_columns', 'save_doctype', 'get_doctype'
+          ]
+          missing_workflow = [x for x in workflow_required if x not in src]
+          if missing_workflow:
+              raise SystemExit('Workflow symbol missing: ' + str(missing_workflow))
+          print('Backend UI V2 validation pass 1 OK')
+          PY
+      - name: Validation pass 2
+        run: |
+          python -m py_compile tools_tracker.py
+          python - <<'PY'
+          from pathlib import Path
+          src = Path('tools_tracker.py').read_text(encoding='utf-8')
+          assert src.count('GP_BACKEND_UI_V2') == 1
+          assert "type='primary' if active else 'secondary'" in src
+          assert "st.session_state['current_module'] = module" in src
+          assert "st.session_state['logged_in_user'] = None" in src
+          assert 'APP_ADMIN_PASSWORD' in src and 'APP_TECH_PASSWORD' in src
+          assert 'GSheetsConnection' in src
+          print('Backend UI V2 validation pass 2 OK')
+          PY
+      - name: Commit verified backend UI upgrade
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tools_tracker.py
+          git diff --cached --quiet && exit 0
+          git commit -m "Upgrade backend ERP interface"
+          git push
