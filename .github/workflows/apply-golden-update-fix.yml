@@ -1,0 +1,39 @@
+name: Finish Golden Palace update
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.deploy_parts/READY2'
+permissions:
+  contents: write
+jobs:
+  apply-update:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply and verify tested patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          import base64,gzip,re
+          from pathlib import Path
+          text=Path('.github/workflows/apply-golden-update.yml').read_text()
+          m=re.search(r'^\s*TOOLS_PATCH_B64:\s*(\S+)\s*$', text, re.M)
+          if not m:
+              raise SystemExit('embedded patch not found')
+          Path('/tmp/tools.patch').write_bytes(gzip.decompress(base64.b64decode(m.group(1))))
+          PY
+          patch tools_tracker.py < /tmp/tools.patch
+          python -m py_compile tools_tracker.py
+      - name: Commit final Tools Tracker source
+        shell: bash
+        run: |
+          git config user.name 'Golden Palace Update Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add tools_tracker.py
+          git rm -r .deploy_parts .github/workflows/apply-golden-update.yml .github/workflows/apply-golden-update-fix.yml
+          git commit -m 'Apply Golden Palace performance and stock import update'
+          git push origin main
