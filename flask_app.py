@@ -331,6 +331,7 @@ NO_PAYMENT_SPECIAL_CASES = {
 
 remarks_sheet = None
 main_sheet = None
+followup_sheet = None
 spreadsheet_obj = None
 
 LAST_WRITE_ERROR = ""
@@ -341,7 +342,7 @@ RECONNECT_INTERVAL_SECONDS = 30
 
 def initialize_google_sheets():
     """Connect to the editable Google Sheet for live read/write operations."""
-    global remarks_sheet, main_sheet, spreadsheet_obj
+    global remarks_sheet, main_sheet, followup_sheet, spreadsheet_obj
     global LAST_WRITE_ERROR, LAST_CONNECT_ATTEMPT
 
     LAST_CONNECT_ATTEMPT = time.monotonic()
@@ -349,6 +350,7 @@ def initialize_google_sheets():
 
     remarks_sheet = None
     main_sheet = None
+    followup_sheet = None
     spreadsheet_obj = None
 
     try:
@@ -429,6 +431,12 @@ def initialize_google_sheets():
                             break
                     except Exception:
                         pass
+
+        # FollowUp is optional so TV/collection writes remain available before the new sheet exists.
+        try:
+            followup_sheet = spreadsheet_obj.worksheet("FollowUp")
+        except Exception:
+            followup_sheet = None
 
         if main_sheet is None:
             LAST_WRITE_ERROR = "Ledger/Main worksheet was not found."
@@ -644,6 +652,81 @@ def parse_days(date_value):
         return 0
 
 
+
+# GP_FOLLOWUP_TV_API_V1
+FOLLOWUP_CLOSED_STATUSES = {"Done", "Closed", "مغلق", "منجز"}
+
+
+def get_tv_followups():
+    """Read structured FollowUp items from the same editable spreadsheet when available."""
+    global followup_sheet
+    try:
+        if followup_sheet is None:
+            maybe_reconnect_google_sheets(force=True)
+            if spreadsheet_obj is not None and followup_sheet is None:
+                try:
+                    followup_sheet = spreadsheet_obj.worksheet("FollowUp")
+                except Exception:
+                    return []
+        if followup_sheet is None:
+            return []
+        df = dataframe_from_worksheet(followup_sheet).dropna(how="all")
+        if df.empty or "followup_id" not in df.columns:
+            return []
+        defaults = {
+            "type":"", "related_id":"", "title":"", "owner":"", "waiting_on":"", "priority":"Normal",
+            "status":"Open", "created_at":"", "next_followup":"", "last_update":"", "next_action":"",
+            "history":"", "source":"", "closed_at":"", "closed_by":"",
+        }
+        for col, default in defaults.items():
+            if col not in df.columns:
+                df[col] = default
+        records = []
+        today = pd.Timestamp(datetime.now().date())
+        for _, row in df.iterrows():
+            status = normalize_doc_string(row.get("status", "")) or "Open"
+            if status in FOLLOWUP_CLOSED_STATUSES:
+                continue
+            due_raw = normalize_doc_string(row.get("next_followup", ""))
+            due = pd.to_datetime(due_raw, errors="coerce")
+            timing = "unscheduled"
+            days_overdue = 0
+            if pd.notna(due):
+                due_day = pd.Timestamp(due.date())
+                if due_day < today:
+                    timing = "overdue"
+                    days_overdue = int((today - due_day).days)
+                elif due_day == today:
+                    timing = "today"
+                else:
+                    timing = "future"
+            records.append({
+                "followup_id": normalize_doc_string(row.get("followup_id", "")),
+                "type": normalize_doc_string(row.get("type", "")),
+                "related_id": normalize_doc_string(row.get("related_id", "")),
+                "title": normalize_doc_string(row.get("title", "")),
+                "owner": normalize_doc_string(row.get("owner", "")),
+                "waiting_on": normalize_doc_string(row.get("waiting_on", "")),
+                "priority": normalize_doc_string(row.get("priority", "")) or "Normal",
+                "status": status,
+                "created_at": normalize_doc_string(row.get("created_at", "")),
+                "next_followup": due_raw,
+                "last_update": normalize_doc_string(row.get("last_update", "")),
+                "next_action": normalize_doc_string(row.get("next_action", "")),
+                "history": normalize_doc_string(row.get("history", "")),
+                "source": normalize_doc_string(row.get("source", "")),
+                "timing": timing,
+                "days_overdue": days_overdue,
+            })
+        priority_rank = {"Urgent":0, "Important":1, "Normal":2}
+        timing_rank = {"overdue":0, "today":1, "unscheduled":2, "future":3}
+        records.sort(key=lambda x: (timing_rank.get(x["timing"], 9), priority_rank.get(x["priority"], 9), x["next_followup"], x["followup_id"]))
+        return records
+    except Exception as exc:
+        print("FollowUp TV read error:", repr(exc))
+        return []
+
+
 # ==========================================================
 # READ TV DATA
 # ==========================================================
@@ -766,6 +849,16 @@ def _empty_tv_payload():
         "urgent_count": 0,
         "delayed_count": 0,
         "special_count": 0,
+        "followup_open_count": 0,
+        "followup_overdue_count": 0,
+        "followup_due_today_count": 0,
+        "followup_spare_parts_count": 0,
+        "followup_inquiry_count": 0,
+        "followup_list": [],
+        "followup_overdue_list": [],
+        "followup_due_today_list": [],
+        "followup_spare_parts_list": [],
+        "followup_inquiry_list": [],
         "progress_list": [],
         "collection_list": [],
         "partner_list": [],
@@ -1231,6 +1324,11 @@ def tv_display():
 def build_tv_api_payload():
     records, _ = get_tv_queue(include_remarks=False)
     groups = separate_jobs(records)
+    followups = get_tv_followups()
+    followup_overdue = [x for x in followups if x.get("timing") == "overdue"]
+    followup_today = [x for x in followups if x.get("timing") == "today"]
+    followup_spares = [x for x in followups if x.get("type") == "Spare Part"]
+    followup_inquiries = [x for x in followups if x.get("type") in {"Customer Inquiry", "Supplier Inquiry"}]
 
     data = {
         "progress_count": len(groups["progress"]),
@@ -1242,6 +1340,16 @@ def build_tv_api_payload():
         "urgent_count": len(groups["urgent"]),
         "delayed_count": len(groups["delayed"]),
         "special_count": len(groups["special"]),
+        "followup_open_count": len(followups),
+        "followup_overdue_count": len(followup_overdue),
+        "followup_due_today_count": len(followup_today),
+        "followup_spare_parts_count": len(followup_spares),
+        "followup_inquiry_count": len(followup_inquiries),
+        "followup_list": followups,
+        "followup_overdue_list": followup_overdue,
+        "followup_due_today_list": followup_today,
+        "followup_spare_parts_list": followup_spares,
+        "followup_inquiry_list": followup_inquiries,
         "progress_list": groups["progress"],
         "collection_list": groups["collection"],
         "partner_list": groups["partner"],

@@ -440,6 +440,19 @@
         .loading-card small { display:block; margin-top:5px; color:#b8c5d3; }
         @keyframes gp-spin { to { transform:rotate(360deg); } }
 
+    /* GP_FOLLOWUP_TV_UI_V1 */
+    .followup-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:8px 0;flex:0 0 auto;direction:ltr}
+    .followup-mini{border:1px solid #315472;border-radius:14px;background:linear-gradient(135deg,#0b2238,#102f4b);color:#fff;min-height:66px;padding:8px 13px;display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;box-shadow:0 6px 16px rgba(0,0,0,.14)}
+    body.lang-ar .followup-mini{direction:rtl;text-align:right}
+    .followup-mini span{font-weight:850;font-size:clamp(12px,.9vw,16px)}
+    .followup-mini b{font-size:clamp(27px,2vw,38px);line-height:1;color:#f4bd2d}
+    .followup-mini.overdue{border-color:#a83b42}.followup-mini.overdue b{color:#ff7078}
+    .followup-mini.today{border-color:#9a6a19}.followup-mini.today b{color:#ffc553}
+    .followup-mini.spares{border-color:#917628}.followup-mini.inquiries{border-color:#316c96}
+    .followup-row{background:#0b2238;border:1px solid #294b69;border-radius:15px;padding:14px 16px;display:grid;grid-template-columns:130px 150px minmax(200px,1.4fr) 150px 170px minmax(210px,1fr);gap:12px;align-items:center;color:#f8fafc}
+    .followup-row small{display:block;color:#aebfd0;font-size:11px;margin-bottom:3px}.followup-row .value{font-weight:800;overflow-wrap:anywhere}.followup-row.overdue{border-color:#8f3239;background:#261921}.followup-row.today{border-color:#8a6416}
+    @media(max-width:1100px){.followup-row{grid-template-columns:120px 130px minmax(180px,1fr) 140px}.followup-row .followup-hide{display:none}}
+    @media(max-width:700px){.followup-strip{grid-template-columns:1fr 1fr}.followup-row{grid-template-columns:1fr}.followup-row .followup-hide{display:block}}
     </style>
 
     <!-- GP_UI_REFRESH_2026_09_08 -->
@@ -486,6 +499,12 @@
     </header>
 
     <main id="mainView">
+        <section class="followup-strip" aria-label="Follow-up queue">
+            <button class="followup-mini overdue" data-category="followup_overdue" type="button"><span id="label-followup-overdue">🔴 Overdue follow-ups</span><b id="followup-count-overdue">0</b></button>
+            <button class="followup-mini today" data-category="followup_today" type="button"><span id="label-followup-today">🟠 Due today</span><b id="followup-count-today">0</b></button>
+            <button class="followup-mini spares" data-category="followup_spares" type="button"><span id="label-followup-spares">🟡 Spare parts</span><b id="followup-count-spares">0</b></button>
+            <button class="followup-mini inquiries" data-category="followup_inquiries" type="button"><span id="label-followup-inquiries">🔵 Inquiries</span><b id="followup-count-inquiries">0</b></button>
+        </section>
         <section class="dashboard-grid">
             <button class="workflow-card progress" data-category="progress" type="button">
                 <span class="open-hint" data-openhint>Click to view details ↗</span><div class="icon">🔧</div>
@@ -567,7 +586,7 @@
 
     const UI = {
         en: {
-            heading:'Service Workshop Tracker', tagline:'Track Today · Fix Tomorrow · Build Trust', urgent:'🔥 Urgent', delayed:'⚠️ Delayed', remarks:'📝 Remarks',
+            followupOverdue:'🔴 Overdue follow-ups', followupToday:'🟠 Due today', followupSpares:'🟡 Spare parts', followupInquiries:'🔵 Inquiries', owner:'Owner', waitingOn:'Waiting on', nextAction:'Next action', nextFollowup:'Next follow-up', priority:'Priority', related:'Related ID', daysOverdue:'Days overdue', heading:'Service Workshop Tracker', tagline:'Track Today · Fix Tomorrow · Build Trust', urgent:'🔥 Urgent', delayed:'⚠️ Delayed', remarks:'📝 Remarks',
             voiceOn:'Enable / Disable', voiceOff:'Enable / Disable', voiceBlocked:'⚠️ Syrian voice service unavailable', voiceTest:'▶ Test voice', dashboard:'↩ Dashboard',
             openHint:'Click to view details ↗', search:'Search service ID, customer, tool…', refresh:'🔄 Refresh now', closeWindow:'✕ Close window',
             footerTitle:'Great work team!', footerText:'Every completed job builds more customer trust in Golden Palace.', footerSlogan:'Together\nWe Keep the World Working',
@@ -584,7 +603,7 @@
             syncReady:'Google Sheets live read/write is ready.', syncNotReady:'Google Sheets write connection is not ready.', checking:'Checking…', closeFailed:'Close failed', remarkFail:'Unable to close remark', loading:'Loading live Golden Palace data…', refreshing:'Refreshing directly from the source…', connecting:'Connecting to Google Sheets…'
         },
         ar: {
-            heading:'متابعة خدمة الورشة', tagline:'تابع اليوم · أصلح للغد · ابنِ الثقة', urgent:'🔥 عاجل', delayed:'⚠️ متأخر', remarks:'📝 الملاحظات',
+            followupOverdue:'🔴 متابعات متأخرة', followupToday:'🟠 متابعة اليوم', followupSpares:'🟡 قطع غيار', followupInquiries:'🔵 استفسارات', owner:'المسؤول', waitingOn:'بانتظار', nextAction:'الخطوة القادمة', nextFollowup:'المتابعة القادمة', priority:'الأولوية', related:'المرجع', daysOverdue:'أيام التأخير', heading:'متابعة خدمة الورشة', tagline:'تابع اليوم · أصلح للغد · ابنِ الثقة', urgent:'🔥 عاجل', delayed:'⚠️ متأخر', remarks:'📝 الملاحظات',
             voiceOn:'تفعيل / إيقاف', voiceOff:'تفعيل / إيقاف', voiceBlocked:'⚠️ خدمة الصوت السوري غير متاحة حالياً', voiceTest:'▶ اختبار الصوت', dashboard:'↩ العودة للوحة',
             openHint:'اضغط لعرض التفاصيل ↗', search:'ابحث برقم الخدمة أو الزبون أو الجهاز…', refresh:'🔄 تحديث الآن', closeWindow:'✕ إغلاق النافذة',
             footerTitle:'يعطيكم العافية يا فريق!', footerText:'كل حالة تنتهي بشكل صحيح تزيد ثقة الزبون بخدمة القصر الذهبي.', footerSlogan:'معاً\nنحافظ على العمل مستمراً',
@@ -626,6 +645,8 @@
             partner_count:num(data.partner_count), zero_count:num(data.zero_count),
             collected_count:num(data.collected_count), partner_closed_count:num(data.partner_closed_count),
             urgent_count:num(data.urgent_count), delayed_count:num(data.delayed_count), special_count:num(data.special_count),
+            followup_overdue_count:num(data.followup_overdue_count), followup_due_today_count:num(data.followup_due_today_count),
+            followup_spare_parts_count:num(data.followup_spare_parts_count), followup_inquiry_count:num(data.followup_inquiry_count),
             remarks_list:Array.isArray(data.remarks_list) ? data.remarks_list.slice(0,100) : [],
             write_ready:Boolean(data.write_ready), read_source:safe(data.read_source,''),
             server_time:safe(data.server_time,''), loading:false, refreshing:true
@@ -658,6 +679,10 @@
             zero:{title:'📄 Zero Invoice Closed',description:'Sales cycles whose current-cycle total is exactly zero.',listKey:'zero_list'},
             collected:{title:'✅ Collected',description:'Closed by Ameen collection entry or confirmed from TV.',listKey:'collected_list'},
             partner_closed:{title:'🧾 Settled / Maintenance',description:'Partner cycles closed by partner settlement.',listKey:'partner_closed_list'},
+            followup_overdue:{title:'🔴 Overdue Follow-Ups',description:'Open follow-ups whose required follow-up date has passed.',listKey:'followup_overdue_list'},
+            followup_today:{title:'🟠 Due Today',description:'Follow-ups that require action today.',listKey:'followup_due_today_list'},
+            followup_spares:{title:'🟡 Spare Parts',description:'Open spare-part blockers affecting operations.',listKey:'followup_spare_parts_list'},
+            followup_inquiries:{title:'🔵 Inquiries',description:'Open customer and supplier inquiries.',listKey:'followup_inquiry_list'},
             remarks:{title:'📝 Workshop Remarks',description:'Live remarks from the remarks worksheet.',listKey:'remarks_list'}
         },
         ar: {
@@ -667,6 +692,10 @@
             zero:{title:'📄 فاتورة صفر — مغلق',description:'دورات المبيع التي مجموعها الحالي يساوي صفراً.',listKey:'zero_list'},
             collected:{title:'✅ تم الاستلام',description:'أغلقت بحركة قبض في الأمين أو بتأكيد الاستلام من شاشة المتابعة.',listKey:'collected_list'},
             partner_closed:{title:'🧾 تسوية / صيانة',description:'دورات الشركاء المغلقة بالتسوية.',listKey:'partner_closed_list'},
+            followup_overdue:{title:'🔴 متابعات متأخرة',description:'متابعات مفتوحة تجاوزت موعد المتابعة المطلوب.',listKey:'followup_overdue_list'},
+            followup_today:{title:'🟠 متابعة اليوم',description:'المتابعات التي تتطلب إجراء اليوم.',listKey:'followup_due_today_list'},
+            followup_spares:{title:'🟡 قطع غيار',description:'عوائق قطع الغيار المفتوحة التي تؤثر على العمل.',listKey:'followup_spare_parts_list'},
+            followup_inquiries:{title:'🔵 استفسارات',description:'استفسارات الزبائن والموردين المفتوحة.',listKey:'followup_inquiry_list'},
             remarks:{title:'📝 ملاحظات الورشة',description:'الملاحظات المفتوحة مباشرة من ورقة الملاحظات.',listKey:'remarks_list'}
         }
     };
@@ -714,6 +743,8 @@
         set('footerTitle', tr('footerTitle'));
         set('footerText', tr('footerText'));
         set('footerSlogan', tr('footerSlogan'));
+        set('label-followup-overdue', tr('followupOverdue')); set('label-followup-today', tr('followupToday'));
+        set('label-followup-spares', tr('followupSpares')); set('label-followup-inquiries', tr('followupInquiries'));
 
         const sel = document.getElementById('languageSelect');
         if (sel) sel.value = currentLanguage;
@@ -829,6 +860,10 @@
         if (urgent) urgent.textContent = num(data.urgent_count);
         if (delayed) delayed.textContent = num(data.delayed_count);
         if (remarks) remarks.textContent = (data.remarks_list || []).length;
+        const fuOverdue=document.getElementById('followup-count-overdue'); const fuToday=document.getElementById('followup-count-today');
+        const fuSpares=document.getElementById('followup-count-spares'); const fuInquiries=document.getElementById('followup-count-inquiries');
+        if(fuOverdue) fuOverdue.textContent=num(data.followup_overdue_count); if(fuToday) fuToday.textContent=num(data.followup_due_today_count);
+        if(fuSpares) fuSpares.textContent=num(data.followup_spare_parts_count); if(fuInquiries) fuInquiries.textContent=num(data.followup_inquiry_count);
     }
 
     function currentList() {
@@ -864,9 +899,30 @@
         container.querySelectorAll('.remark-close').forEach(btn => btn.addEventListener('click', () => closeRemark(Number(btn.dataset.row), btn)));
     }
 
+    function renderFollowupList() {
+        const list=currentList();
+        const q=document.getElementById('searchBox').value.trim().toLowerCase();
+        const filtered=list.filter(item=>!q||[item.followup_id,item.type,item.related_id,item.title,item.owner,item.waiting_on,item.next_action,item.priority,item.status].join(' ').toLowerCase().includes(q));
+        const overdue=filtered.filter(x=>x.timing==='overdue').length;
+        const urgent=filtered.filter(x=>x.priority==='Urgent').length;
+        document.getElementById('detailStats').innerHTML=`<div class="stat"><span>${esc(tr('total'))}</span><b>${filtered.length}</b></div><div class="stat"><span>${esc(tr('followupOverdue'))}</span><b>${overdue}</b></div><div class="stat"><span>${esc(tr('urgentStat'))}</span><b>${urgent}</b></div><div class="stat"><span>${esc(tr('followupToday'))}</span><b>${filtered.filter(x=>x.timing==='today').length}</b></div>`;
+        const container=document.getElementById('ticketList');
+        document.getElementById('ticketPanel').style.display='none';
+        if(!filtered.length){container.innerHTML=`<div class="empty">${esc(tr('noCases'))}</div>`;return;}
+        container.innerHTML=filtered.map(item=>`<div class="followup-row ${item.timing==='overdue'?'overdue':item.timing==='today'?'today':''}">
+          <div><small>ID</small><div class="ticket-id">${esc(item.followup_id)}</div><span class="badge">${esc(item.type)}</span></div>
+          <div><small>${esc(tr('related'))}</small><div class="value">${esc(item.related_id)}</div><div>${esc(item.priority)}</div></div>
+          <div><small>${esc(item.title)}</small><div class="value">${esc(item.next_action)}</div></div>
+          <div><small>${esc(tr('owner'))}</small><div class="value">${esc(item.owner)}</div><div>${esc(item.status)}</div></div>
+          <div class="followup-hide"><small>${esc(tr('waitingOn'))}</small><div class="value">${esc(item.waiting_on)}</div></div>
+          <div class="followup-hide"><small>${esc(tr('nextFollowup'))}</small><div class="value">${esc(item.next_followup)}</div>${item.timing==='overdue'?`<span class="badge danger">${num(item.days_overdue)} ${esc(tr('dayShort'))}</span>`:''}</div>
+        </div>`).join('');
+    }
+
     function renderTicketList() {
         if (!detailMode || !latestData) return;
         if (activeCategory === 'remarks') { renderRemarks(); return; }
+        if (activeCategory.startsWith('followup_')) { renderFollowupList(); return; }
         const list = currentList();
         renderDetailStats(list);
         const q = document.getElementById('searchBox').value.trim().toLowerCase();
@@ -1789,6 +1845,7 @@
     }
 
     document.querySelectorAll('.workflow-card').forEach(btn => btn.addEventListener('click', () => openCategory(btn.dataset.category)));
+    document.querySelectorAll('.followup-mini').forEach(btn => btn.addEventListener('click', () => openCategory(btn.dataset.category)));
     document.getElementById('remarksButton').addEventListener('click', () => openCategory('remarks'));
     document.getElementById('syncPill').addEventListener('click', retrySync);
     document.getElementById('voiceButton').addEventListener('click', () => { try { toggleTeamVoice(); } catch (_) {} });
