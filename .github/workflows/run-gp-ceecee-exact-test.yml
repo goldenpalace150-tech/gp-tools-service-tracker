@@ -1,4 +1,4 @@
-name: Run GP Levantine Voice
+name: Run GP Crisp Female Voice
 on:
   push:
     paths:
@@ -14,46 +14,40 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Apply Levantine dynamic voice
+      - name: Apply approved Crisp female catalog
         run: python scripts/apply_gp_ceecee_activation_v2.py
-      - name: Validate Python and TV JavaScript
+      - name: Validate TV JavaScript and catalog
         run: |
-          python -m py_compile flask_app.py
           python - <<'PY'
           from pathlib import Path
           import re
           html=Path('templates/tv.html').read_text(encoding='utf-8')
-          required=['GP_LEVANTINE_VOICE_V4','Enable / Disable','تفعيل / إيقاف','gpPlayDynamicLevantine','gpFetchServerVoiceTrack','gpNextStaffPerson','حريري','أبو غسان','حازم','أبو آدم']
+          required=['GP_CRISP_FEMALE_V6','GP_CRISP_REFERENCE_URL','GP_CRISP_STAFF','GP_CRISP_GENERAL','أبو عدنان','خبيطي','أبو نقطة','عمر','أبو آدم','حريري','أبو غسان','حازم','Enable / Disable','تفعيل / إيقاف']
           missing=[x for x in required if x not in html]
-          if missing: raise SystemExit('Missing TV markers: '+str(missing))
+          if missing: raise SystemExit('Missing Crisp markers: '+str(missing))
+          assert html.rfind('GP_CRISP_FEMALE_V6') > html.rfind('GP_LEVANTINE_VOICE_V4')
+          assert 'playTeamVoice(null,true)' in html
           script=re.findall(r'<script>(.*?)</script>',html,re.S)[-1]
           Path('/tmp/tv.js').write_text(script,encoding='utf-8')
-          flask=Path('flask_app.py').read_text(encoding='utf-8')
-          required_flask=['GP_LEVANTINE_VOICE_V4','ar-LB-LaylaNeural','GP_STAFF_AR','GP_AR_MANAGER_JOKES','final_rate = "-5%"','final_pitch = "-3Hz"']
-          missing=[x for x in required_flask if x not in flask]
-          if missing: raise SystemExit('Missing Flask markers: '+str(missing))
           PY
           node --check /tmp/tv.js
       - name: Validation pass 2
         run: |
-          python -m py_compile flask_app.py
           node --check /tmp/tv.js
           python - <<'PY'
           from pathlib import Path
-          src=Path('flask_app.py').read_text(encoding='utf-8')
           tv=Path('templates/tv.html').read_text(encoding='utf-8')
-          assert 'ar-LB-LaylaNeural' in src
-          assert 'GP_STAFF_AR = ["أبو عدنان", "خبيطي", "أبو نقطة", "عمر", "أبو آدم", "حريري", "أبو غسان", "حازم"]' in src
-          assert 'gpCommitStaffPerson' in tv
-          assert 'GP_CEECEE_ACTIVATION_CATALOG' in tv  # retained only as old reference; final override is Levantine dynamic
-          assert tv.rfind('GP_LEVANTINE_VOICE_V4') > tv.rfind('GP_CEECEE_ACTIVATION_V2')
-          print('Second validation pass OK')
+          assert tv.count("name:'أبو آدم'") >= 1
+          assert 'eea810e3-1059-412a-8b5d-6b78dab5fad7.mp3' in tv
+          assert '68422110-6207-49f1-bd77-2b7a4981452e.mp3' in tv
+          assert 'ab12e999-2047-4cf8-bb9e-0539054d7a05.mp3' in tv
+          print('Crisp female catalog validation OK')
           PY
-      - name: Commit verified voice update
+      - name: Commit verified TV voice update
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add flask_app.py templates/tv.html
+          git add templates/tv.html
           git diff --cached --quiet && exit 0
-          git commit -m "Use natural Levantine female voice with dynamic staff rotation"
+          git commit -m "Use approved Crisp female voice catalog on TV"
           git push
