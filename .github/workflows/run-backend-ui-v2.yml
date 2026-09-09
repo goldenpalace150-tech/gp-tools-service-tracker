@@ -19,16 +19,24 @@ jobs:
         run: python scripts/fix_followup_patch_target.py
       - name: Apply backend and TV update
         run: python scripts/apply_backend_ui_v2.py
+      - name: Capture patch mismatch
+        if: failure()
+        run: |
+          if [ -f PATCH_ERROR.txt ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add PATCH_ERROR.txt
+            git commit -m "Record follow-up patch mismatch" || true
+            git push || true
+          fi
       - name: Validate Python and workflow guardrails
         run: |
           python -m py_compile tools_tracker.py flask_app.py
           python - <<'PY'
           from pathlib import Path
-
           tools = Path('tools_tracker.py').read_text(encoding='utf-8')
           flask = Path('flask_app.py').read_text(encoding='utf-8')
           tv = Path('templates/tv.html').read_text(encoding='utf-8')
-
           core_required = [
               'GP_BACKEND_UI_V2', 'GP_BACKEND_UI_V3',
               'WF_WAITING', 'WF_IN_REPAIR', 'WF_WAIT_COLLECTION', 'WF_WAIT_PARTNER',
@@ -39,30 +47,16 @@ jobs:
           missing = [item for item in core_required if item not in tools]
           if missing:
               raise SystemExit('Core workflow symbol missing: ' + str(missing))
-
           if 'GP_FOLLOWUP_CENTER_V1' in tools:
-              followup_required = [
-                  '"FollowUp"', 'build_missing_operational_followups', 'normalize_followup_dataframe',
-                  "gp_nav_button('FollowUp'", "gp_render_module_header('FollowUp')", 'followup_df',
-              ]
+              followup_required = ['"FollowUp"', 'build_missing_operational_followups', 'normalize_followup_dataframe', "gp_nav_button('FollowUp'", "gp_render_module_header('FollowUp')", 'followup_df']
               missing = [item for item in followup_required if item not in tools]
-              if missing:
-                  raise SystemExit('Follow-up center marker missing: ' + str(missing))
-              flask_required = [
-                  'GP_FOLLOWUP_TV_API_V1', 'followup_open_count', 'get_tv_followups',
-                  'followup_overdue_list', 'followup_spare_parts_list',
-              ]
+              if missing: raise SystemExit('Follow-up center marker missing: ' + str(missing))
+              flask_required = ['GP_FOLLOWUP_TV_API_V1', 'followup_open_count', 'get_tv_followups', 'followup_overdue_list', 'followup_spare_parts_list']
               missing = [item for item in flask_required if item not in flask]
-              if missing:
-                  raise SystemExit('Follow-up TV API marker missing: ' + str(missing))
-              tv_required = [
-                  'GP_FOLLOWUP_TV_UI_V1', 'followup-count-overdue', 'followup-count-today',
-                  'followup-count-spares', 'followup-count-inquiries', 'renderFollowupList',
-              ]
+              if missing: raise SystemExit('Follow-up TV API marker missing: ' + str(missing))
+              tv_required = ['GP_FOLLOWUP_TV_UI_V1', 'followup-count-overdue', 'followup-count-today', 'followup-count-spares', 'followup-count-inquiries', 'renderFollowupList']
               missing = [item for item in tv_required if item not in tv]
-              if missing:
-                  raise SystemExit('Follow-up TV UI marker missing: ' + str(missing))
-
+              if missing: raise SystemExit('Follow-up TV UI marker missing: ' + str(missing))
           print('Python and workflow guardrails OK')
           PY
       - name: Validate TV JavaScript
@@ -70,11 +64,9 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import re
-
           html = Path('templates/tv.html').read_text(encoding='utf-8')
           scripts = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', html, flags=re.I | re.S)
-          if not scripts:
-              raise SystemExit('No inline TV JavaScript found')
+          if not scripts: raise SystemExit('No inline TV JavaScript found')
           for index, script in enumerate(scripts):
               Path(f'/tmp/gp_tv_{index}.js').write_text(script, encoding='utf-8')
           print(f'Prepared {len(scripts)} TV script block(s)')
