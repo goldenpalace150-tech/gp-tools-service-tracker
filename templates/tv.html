@@ -1888,6 +1888,8 @@
         const generation = ++gpManualAnnouncementGeneration;
         const lang = item.lang === 'en' ? 'en' : 'ar';
         const text = String(item.text || '').trim();
+        // GP_MANUAL_TV_VOICE_TOGGLE_V1
+        const voiceEnabled = item.voice_enabled !== false;
         if (!text) return;
 
         stopTeamVoiceAudio();
@@ -1906,11 +1908,24 @@
         if (textEl) textEl.textContent = text;
         if (meta) {
             const by = String(item.published_by || '').trim();
-            meta.textContent = by ? (lang === 'ar' ? `نُشر بواسطة: ${by}` : `Published by: ${by}`) : 'Golden Palace';
+            const source = by ? (lang === 'ar' ? `نُشر بواسطة: ${by}` : `Published by: ${by}`) : 'Golden Palace';
+            meta.textContent = voiceEnabled ? source : `${source} · ${lang === 'ar' ? '🔇 بدون صوت' : '🔇 Silent'}`;
         }
+        const wave = card ? card.querySelector('.gp-manual-announcement-wave') : null;
+        if (wave) wave.style.display = voiceEnabled ? 'flex' : 'none';
         if (overlay) overlay.classList.add('show');
-        setVoiceCaption(text, true);
 
+        if (!voiceEnabled) {
+            setVoiceCaption('', false);
+            setTimeout(() => {
+                if (generation !== gpManualAnnouncementGeneration) return;
+                teamVoicePlaying = false;
+                gpHideManualAnnouncement(generation);
+            }, 8000);
+            return;
+        }
+
+        setVoiceCaption(text, true);
         try {
             const voiceResponse = await fetch(apiUrl(`/api/followup-voice?lang=${encodeURIComponent(lang)}&text=${encodeURIComponent(text)}&t=${Date.now()}`), {cache:'no-store'});
             if (!voiceResponse.ok || generation !== gpManualAnnouncementGeneration) throw new Error(`Voice API ${voiceResponse.status}`);

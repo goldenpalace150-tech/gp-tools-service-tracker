@@ -359,6 +359,8 @@ def api_manual_announcement():
         "text": text,
         "lang": lang,
         "published_by": re.sub(r"\s+", " ", str(payload.get("published_by", ""))).strip()[:80],
+        # GP_MANUAL_TV_VOICE_TOGGLE_V1
+        "voice_enabled": payload.get("voice_enabled", True) is not False,
         "created_at": now,
         "expires_at": now + 600,
     }

@@ -33,7 +33,7 @@ GP_TV_BACKEND_URL = get_runtime_secret("GP_TV_BACKEND_URL") or "https://golden-p
 GP_TV_ANNOUNCEMENT_KEY = get_runtime_secret("GP_TV_ANNOUNCEMENT_KEY")
 
 
-def publish_manual_tv_announcement(text, language="auto", published_by=""):
+def publish_manual_tv_announcement(text, language="auto", published_by="", voice_enabled=True):
     message = re.sub(r"\s+", " ", str(text or "")).strip()
     if not message:
         raise ValueError("Announcement text is empty")
@@ -41,6 +41,7 @@ def publish_manual_tv_announcement(text, language="auto", published_by=""):
         "text": message[:700],
         "lang": str(language or "auto").strip().lower(),
         "published_by": str(published_by or "").strip(),
+        "voice_enabled": bool(voice_enabled),
     }
     headers = {"Accept": "application/json"}
     if GP_TV_ANNOUNCEMENT_KEY:
@@ -2507,6 +2508,12 @@ elif st.session_state['current_module'] == 'FollowUp':
                 ["auto", "ar", "en"],
                 format_func=lambda x: {"auto": "تلقائي / Auto", "ar": "العربية", "en": "English"}[x],
             )
+            # GP_MANUAL_TV_VOICE_TOGGLE_V1
+            manual_voice_enabled = st.checkbox(
+                "🔊 تشغيل التنبيه الصوتي (Enable voice notification)",
+                value=True,
+                help="عند إيقافه سيظهر الإعلان على التلفزيون فوراً بدون أي صوت.",
+            )
             manual_announcement_submit = st.form_submit_button("📡 نشر الآن على التلفزيون (Publish Now)", use_container_width=True)
         if manual_announcement_submit:
             if not str(manual_announcement_text or "").strip():
@@ -2518,6 +2525,7 @@ elif st.session_state['current_module'] == 'FollowUp':
                             manual_announcement_text,
                             language=lang_choice,
                             published_by=current_user,
+                            voice_enabled=manual_voice_enabled,
                         )
                     st.success(f"✅ تم نشر الإعلان إلى التلفزيون · {published.get('id', '')}")
                 except Exception as exc:
