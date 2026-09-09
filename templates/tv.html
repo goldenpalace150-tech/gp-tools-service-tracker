@@ -1535,6 +1535,20 @@
         try{teamVoiceEnabled=localStorage.getItem('gpFemaleVoiceEnabled')!=='0';}catch(_){teamVoiceEnabled=true;}
         updateVoiceButton();gpPrefetchDynamicLevantine();if(teamVoiceEnabled)scheduleNextTeamVoice(7000);
     }
+
+    // GP_LEVANTINE_TEST_V5
+    // Test Voice now uses the same dynamic Levantine voice and the same balanced staff rotation.
+    async function testTeamVoice(){
+        if(detailMode || teamVoicePlaying) return;
+        try{
+            const ok = await playTeamVoice(null, true);
+            if(ok) showToast(tr('voicePlaying'));
+            else showToast(tr('audioBlocked'), 7000);
+        }catch(_){
+            showToast(tr('audioBlocked'), 7000);
+        }
+    }
+
     async function confirmCollection(item, button) {
         const msg = currentLanguage === 'ar'
             ? `${tr('confirmPrefix')} ${item.service_id} ${tr('confirmSuffix')}\n${tr('closesCycle')} ${item.cycle_no}.`
