@@ -272,6 +272,23 @@ def api_voice_track():
         return jsonify({"ok": False, "error": "voice_generation_failed"}), 503
     return jsonify({"ok": True, "text": track["text"], "lang": lang, "tone": track["tone"], "category": track["category"], "person": track["person"], "voice": voice, "audio_urls": [f"/api/voice-audio/{body_token}.mp3", f"/api/voice-audio/{final_token}.mp3"]})
 
+# GP_FOLLOWUP_VOICE_V2
+@app.route("/api/followup-voice")
+def api_followup_voice():
+    lang = "en" if str(request.args.get("lang", "ar")).lower().startswith("en") else "ar"
+    text = re.sub(r"\s+", " ", str(request.args.get("text", ""))).strip()
+    if not text:
+        return jsonify({"ok": False, "error": "missing_text"}), 400
+    text = text[:500]
+    voice = GP_AR_VOICE if lang == "ar" else GP_EN_VOICE
+    try:
+        token, _ = gp_ensure_voice_file(text, voice, "-3%" if lang == "ar" else "-5%", "+1Hz")
+    except Exception as exc:
+        print("FollowUp voice generation error:", repr(exc))
+        return jsonify({"ok": False, "error": "voice_generation_failed"}), 503
+    return jsonify({"ok": True, "text": text, "lang": lang, "voice": voice, "audio_url": f"/api/voice-audio/{token}.mp3"})
+
+
 
 @app.route("/api/voice-audio/<token>.mp3")
 def api_voice_audio(token):
