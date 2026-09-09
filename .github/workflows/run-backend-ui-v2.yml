@@ -14,66 +14,95 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Apply backend UI V2
+      - name: Apply backend and TV update
         run: python scripts/apply_backend_ui_v2.py
-      - name: Validate Python and UI markers
+      - name: Validate Python and workflow guardrails
         run: |
-          python -m py_compile tools_tracker.py
+          python -m py_compile tools_tracker.py flask_app.py
           python - <<'PY'
           from pathlib import Path
-          src = Path('tools_tracker.py').read_text(encoding='utf-8')
-          required = [
-              'GP_BACKEND_UI_V2',
-              'gp_render_module_header',
-              'gp_nav_button',
-              'gp-side-brand',
-              'gp-user-card',
-              'gp-module-hero',
-              'gp-login-brand',
-              "gp_render_module_header('Workspace')",
-              "gp_render_module_header('Support')",
-              "gp_render_module_header('Stock')",
-              "gp_render_module_header('Logistics')",
-              "gp_render_module_header('Accounting')",
-              'gp_quick_support',
-              'gp_quick_stock',
-              'gp_quick_logistics',
-              'gp_quick_accounting',
-          ]
-          missing = [x for x in required if x not in src]
-          if missing:
-              raise SystemExit('Missing backend UI markers: ' + str(missing))
 
-          # Guardrails: core workflow symbols must still exist untouched.
-          workflow_required = [
+          tools = Path('tools_tracker.py').read_text(encoding='utf-8')
+          flask = Path('flask_app.py').read_text(encoding='utf-8')
+          tv = Path('templates/tv.html').read_text(encoding='utf-8')
+
+          core_required = [
+              'GP_BACKEND_UI_V2', 'GP_BACKEND_UI_V3',
               'WF_WAITING', 'WF_IN_REPAIR', 'WF_WAIT_COLLECTION', 'WF_WAIT_PARTNER',
               'WF_CLOSED_ZERO', 'WF_CLOSED_COLLECTED', 'WF_CLOSED_PARTNER', 'WF_CLOSED_TV',
-              'preserve_manual_closures', 'apply_workflow_columns', 'save_doctype', 'get_doctype'
+              'preserve_manual_closures', 'apply_workflow_columns', 'save_doctype', 'get_doctype',
+              'GSheetsConnection', 'APP_ADMIN_PASSWORD', 'APP_TECH_PASSWORD',
           ]
-          missing_workflow = [x for x in workflow_required if x not in src]
-          if missing_workflow:
-              raise SystemExit('Workflow symbol missing: ' + str(missing_workflow))
-          print('Backend UI V2 validation pass 1 OK')
+          missing = [item for item in core_required if item not in tools]
+          if missing:
+              raise SystemExit('Core workflow symbol missing: ' + str(missing))
+
+          if 'GP_FOLLOWUP_CENTER_V1' in tools:
+              followup_required = [
+                  '"FollowUp"', 'build_missing_operational_followups', 'normalize_followup_dataframe',
+                  "gp_nav_button('FollowUp'", "gp_render_module_header('FollowUp')", 'followup_df',
+              ]
+              missing = [item for item in followup_required if item not in tools]
+              if missing:
+                  raise SystemExit('Follow-up center marker missing: ' + str(missing))
+              flask_required = [
+                  'GP_FOLLOWUP_TV_API_V1', 'followup_open_count', 'get_tv_followups',
+                  'followup_overdue_list', 'followup_spare_parts_list',
+              ]
+              missing = [item for item in flask_required if item not in flask]
+              if missing:
+                  raise SystemExit('Follow-up TV API marker missing: ' + str(missing))
+              tv_required = [
+                  'GP_FOLLOWUP_TV_UI_V1', 'followup-count-overdue', 'followup-count-today',
+                  'followup-count-spares', 'followup-count-inquiries', 'renderFollowupList',
+              ]
+              missing = [item for item in tv_required if item not in tv]
+              if missing:
+                  raise SystemExit('Follow-up TV UI marker missing: ' + str(missing))
+
+          print('Python and workflow guardrails OK')
           PY
-      - name: Validation pass 2
+      - name: Validate TV JavaScript
         run: |
-          python -m py_compile tools_tracker.py
           python - <<'PY'
           from pathlib import Path
-          src = Path('tools_tracker.py').read_text(encoding='utf-8')
-          assert src.count('GP_BACKEND_UI_V2') == 1
-          assert "type='primary' if active else 'secondary'" in src
-          assert "st.session_state['current_module'] = module" in src
-          assert "st.session_state['logged_in_user'] = None" in src
-          assert 'APP_ADMIN_PASSWORD' in src and 'APP_TECH_PASSWORD' in src
-          assert 'GSheetsConnection' in src
-          print('Backend UI V2 validation pass 2 OK')
+          import re
+
+          html = Path('templates/tv.html').read_text(encoding='utf-8')
+          scripts = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', html, flags=re.I | re.S)
+          if not scripts:
+              raise SystemExit('No inline TV JavaScript found')
+          for index, script in enumerate(scripts):
+              Path(f'/tmp/gp_tv_{index}.js').write_text(script, encoding='utf-8')
+          print(f'Prepared {len(scripts)} TV script block(s)')
           PY
-      - name: Commit verified backend UI upgrade
+          for file in /tmp/gp_tv_*.js; do node --check "$file"; done
+      - name: Validation pass 2
+        run: |
+          python -m py_compile tools_tracker.py flask_app.py
+          python - <<'PY'
+          from pathlib import Path
+          tools = Path('tools_tracker.py').read_text(encoding='utf-8')
+          flask = Path('flask_app.py').read_text(encoding='utf-8')
+          tv = Path('templates/tv.html').read_text(encoding='utf-8')
+          assert tools.count('GP_BACKEND_UI_V2') == 1
+          assert tools.count('GP_BACKEND_UI_V3') == 1
+          assert "type='primary' if active else 'secondary'" in tools
+          assert "st.session_state['current_module'] = module" in tools
+          assert "st.session_state['logged_in_user'] = None" in tools
+          if 'GP_FOLLOWUP_CENTER_V1' in tools:
+              assert tools.count('GP_FOLLOWUP_CENTER_V1') == 1
+              assert flask.count('GP_FOLLOWUP_TV_API_V1') == 1
+              assert tv.count('GP_FOLLOWUP_TV_UI_V1') == 1
+              assert 'followup_due_today_count' in flask
+              assert "activeCategory.startsWith('followup_')" in tv
+          print('Validation pass 2 OK')
+          PY
+      - name: Commit verified application update
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tools_tracker.py
+          git add tools_tracker.py flask_app.py templates/tv.html
           git diff --cached --quiet && exit 0
-          git commit -m "Upgrade backend ERP interface"
+          git commit -m "Add unified follow-up center and TV queue"
           git push
