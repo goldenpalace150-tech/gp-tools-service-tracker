@@ -1,0 +1,41 @@
+name: Apply Golden Palace update
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.deploy_parts/**'
+permissions:
+  contents: write
+jobs:
+  apply-update:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Rebuild and verify sources
+        shell: bash
+        run: |
+          python - <<'PY'
+          import base64, gzip
+          from pathlib import Path
+          staging=Path('.deploy_parts')
+          for prefix,out in [('tools_tracker','tools_tracker.py'),('flask_app','flask_app.py'),('tv','templates/tv.html')]:
+              parts=sorted(staging.glob(prefix+'.*.b64'))
+              if not parts:
+                  raise SystemExit('missing '+prefix)
+              data=''.join(p.read_text(encoding='ascii').strip() for p in parts)
+              dest=Path(out); dest.parent.mkdir(parents=True,exist_ok=True)
+              dest.write_bytes(gzip.decompress(base64.b64decode(data)))
+          PY
+          python -m py_compile tools_tracker.py flask_app.py
+      - name: Commit synchronized update
+        shell: bash
+        run: |
+          git config user.name 'Golden Palace Update Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add tools_tracker.py flask_app.py templates/tv.html
+          git rm -r .deploy_parts .github/workflows/apply-golden-update.yml
+          git commit -m 'Apply Golden Palace performance and stock import update'
+          git push origin main
