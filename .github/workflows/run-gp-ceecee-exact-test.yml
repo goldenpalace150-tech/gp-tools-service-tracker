@@ -22,7 +22,7 @@ jobs:
           from pathlib import Path
           import re
           html=Path('templates/tv.html').read_text(encoding='utf-8')
-          required=['GP_CRISP_FEMALE_V6','GP_CRISP_REFERENCE_URL','GP_CRISP_STAFF','GP_CRISP_GENERAL','أبو عدنان','خبيطي','أبو نقطة','عمر','أبو آدم','حريري','أبو غسان','حازم','Enable / Disable','تفعيل / إيقاف']
+          required=['GP_CRISP_FEMALE_V6','GP_CRISP_REFERENCE_URL','GP_CRISP_STAFF','GP_CRISP_GENERAL','أبو عدنان','غبيطي','أبو نقطة','عمر','أبو آدم','حريري','أبو غسان','حازم','Enable / Disable','تفعيل / إيقاف']
           missing=[x for x in required if x not in html]
           if missing: raise SystemExit('Missing Crisp markers: '+str(missing))
           assert html.rfind('GP_CRISP_FEMALE_V6') > html.rfind('GP_LEVANTINE_VOICE_V4')
@@ -37,11 +37,12 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           tv=Path('templates/tv.html').read_text(encoding='utf-8')
-          assert tv.count("name:'أبو آدم'") >= 1
-          assert 'eea810e3-1059-412a-8b5d-6b78dab5fad7.mp3' in tv
-          assert '68422110-6207-49f1-bd77-2b7a4981452e.mp3' in tv
-          assert 'ab12e999-2047-4cf8-bb9e-0539054d7a05.mp3' in tv
-          print('Crisp female catalog validation OK')
+          assert "name:'غبيطي'" in tv
+          assert "name:'خبيطي'" not in tv
+          assert '6d20d63a-a250-4239-b5a7-073ce8952f1d.mp3' in tv
+          assert '6e7f4e37-7702-465a-8e2c-f84bed3c7195.mp3' in tv
+          assert '953aa18a-cab4-441e-a902-c4b57dde2873.mp3' in tv
+          print('غبيطي accountant Crisp validation OK')
           PY
       - name: Commit verified TV voice update
         run: |
