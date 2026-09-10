@@ -6,6 +6,7 @@ on:
     paths:
       - scripts/apply_fast_tv_command_announce_v3.py
       - scripts/apply_tv_real_motion_announce_v4.py
+      - scripts/fix_announce_v4_copy.py
       - .github/workflows/apply-fast-tv-command-announce-v3.yml
   workflow_dispatch:
 
@@ -28,9 +29,10 @@ jobs:
         run: |
           python scripts/apply_fast_tv_command_announce_v3.py
           python scripts/apply_tv_real_motion_announce_v4.py
+          python scripts/fix_announce_v4_copy.py
 
       - name: Validate Python
-        run: python -m py_compile tools_tracker.py flask_app.py scripts/apply_fast_tv_command_announce_v3.py scripts/apply_tv_real_motion_announce_v4.py
+        run: python -m py_compile tools_tracker.py flask_app.py scripts/apply_fast_tv_command_announce_v3.py scripts/apply_tv_real_motion_announce_v4.py scripts/fix_announce_v4_copy.py
 
       - name: Validate TV JavaScript
         run: |
@@ -50,10 +52,12 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           text = Path('templates/announce.html').read_text(encoding='utf-8')
-          required = ['GP_ANNOUNCE_V4','manual-announcement/status','published_sender','gpLoadingOverlay','5 ثوانٍ']
+          required = ['GP_ANNOUNCE_V4','GP_ANNOUNCE_V4_COPY_FIX','manual-announcement/status','published_sender','gpLoadingOverlay','5 ثوانٍ']
           missing = [item for item in required if item not in text]
           if missing:
               raise SystemExit('Announcement template missing: ' + ', '.join(missing))
+          if 'تم الاطلاعd' in text:
+              raise SystemExit('Bad acknowledgment copy remains')
           if text.count('<script>') != text.count('</script>'):
               raise SystemExit('Unbalanced announcement script tags')
           PY
@@ -67,7 +71,7 @@ jobs:
           grep -q 'gpPlayTvPoliceAlert' templates/tv.html
           grep -q 'id="fullscreenButton"' templates/tv.html
           grep -q 'direction:rtl' templates/tv.html
-          grep -q 'GP_ANNOUNCE_V4' templates/announce.html
+          grep -q 'GP_ANNOUNCE_V4_COPY_FIX' templates/announce.html
           git diff --check
 
       - name: Commit applied sources
@@ -79,5 +83,5 @@ jobs:
           git config user.name 'Golden Palace Update Bot'
           git config user.email 'actions@users.noreply.github.com'
           git add tools_tracker.py flask_app.py templates/tv.html templates/announce.html
-          git commit -m 'Fix TV RTL, fullscreen, police alert, and real motion voice'
+          git commit -m 'Finalize TV V4 and announcement acknowledgment copy'
           git push origin main
