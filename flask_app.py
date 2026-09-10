@@ -473,6 +473,13 @@ def gp_default_tv_control():
         # GP_HUMAN_ACK_AND_DELAYED_CONTROL_V1
         "delayed_voice_enabled": True,
         "data_revision": "",
+        # GP_TV_COMMAND_ACK_V2
+        "command_id": "",
+        "command_created_at": 0,
+        "last_applied_command_id": "",
+        "last_applied_at": 0,
+        "last_tv_seen_at": 0,
+        "last_tv_client": "",
         "updated_at": 0,
         "reason": "",
     }
@@ -492,6 +499,8 @@ def gp_read_tv_control():
     state["staff_voice_enabled"] = bool(state.get("staff_voice_enabled", True))
     state["delayed_voice_enabled"] = bool(state.get("delayed_voice_enabled", True))
     state["data_revision"] = str(state.get("data_revision", "") or "")
+    state["command_id"] = str(state.get("command_id", "") or "")
+    state["last_applied_command_id"] = str(state.get("last_applied_command_id", "") or "")
     return state
 
 
@@ -519,16 +528,49 @@ def api_tv_control():
         if not gp_manual_announcement_authorized():
             return jsonify({"ok": False, "error": "unauthorized"}), 403
         payload = request.get_json(silent=True) or {}
+        changed = False
         if "staff_voice_enabled" in payload:
             state["staff_voice_enabled"] = bool(payload.get("staff_voice_enabled"))
+            changed = True
         if "delayed_voice_enabled" in payload:
             state["delayed_voice_enabled"] = bool(payload.get("delayed_voice_enabled"))
-        if payload.get("refresh_now"):
-            # String form preserves nanosecond uniqueness in JavaScript.
-            state["data_revision"] = str(time.time_ns())
+            changed = True
+
+        refresh_now = bool(payload.get("refresh_now"))
+        if changed or refresh_now:
+            command_id = str(time.time_ns())
+            state["command_id"] = command_id
+            state["command_created_at"] = time.time()
+            # Every control command also carries an immediate data refresh revision.
+            state["data_revision"] = command_id
+
         state["updated_at"] = time.time()
         state["reason"] = re.sub(r"\s+", " ", str(payload.get("reason", ""))).strip()[:120]
         gp_write_tv_control(state)
+    response = jsonify({"ok": True, **state})
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return response
+
+
+@app.route("/api/tv-control/ack", methods=["POST", "OPTIONS"])
+def api_tv_control_ack():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    payload = request.get_json(silent=True) or {}
+    state = gp_read_tv_control()
+    now = time.time()
+    client = re.sub(r"[^A-Za-z0-9_-]", "", str(payload.get("client", "")))[:64]
+    command_id = str(payload.get("command_id", "") or "")
+
+    state["last_tv_seen_at"] = now
+    if client:
+        state["last_tv_client"] = client
+    if command_id and command_id == str(state.get("command_id", "") or ""):
+        state["last_applied_command_id"] = command_id
+        state["last_applied_at"] = now
+        state["tv_staff_voice_enabled"] = bool(payload.get("staff_voice_enabled", state.get("staff_voice_enabled", True)))
+        state["tv_delayed_voice_enabled"] = bool(payload.get("delayed_voice_enabled", state.get("delayed_voice_enabled", True)))
+    gp_write_tv_control(state)
     response = jsonify({"ok": True, **state})
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return response
@@ -1816,9 +1858,28 @@ def api_data():
         now = time.time()
 
         age = max(now - saved_at, 0) if saved_at else None
-        stale = (not cached) or force or (age is not None and age >= TV_CACHE_TTL_SECONDS)
-        if stale:
-            start_tv_refresh(force=force)
+        if force:
+            try:
+                fresh = build_tv_api_payload()
+                has_any_queue_data = any(fresh.get(key) for key in (
+                    "progress_list", "collection_list", "partner_list",
+                    "zero_list", "collected_list", "partner_closed_list",
+                ))
+                if has_any_queue_data or not cached:
+                    fresh["loading"] = False
+                    fresh["refreshing"] = False
+                    save_tv_cache(fresh)
+                    cached, saved_at = load_tv_cache()
+                    age = max(time.time() - saved_at, 0) if saved_at else None
+                else:
+                    start_tv_refresh(force=True)
+            except Exception as exc:
+                print("Forced TV refresh error:", repr(exc))
+                start_tv_refresh(force=True)
+        else:
+            stale = (not cached) or (age is not None and age >= TV_CACHE_TTL_SECONDS)
+            if stale:
+                start_tv_refresh(force=False)
 
         if cached:
             response = dict(cached)

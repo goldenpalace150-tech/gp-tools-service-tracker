@@ -2087,6 +2087,20 @@
     let gpRemoteStaffVoiceEnabled = null;
     // GP_DELAYED_VOICE_RUNTIME_V1
     let gpRemoteDelayedVoiceEnabled = true;
+    // GP_TV_COMMAND_ACK_RUNTIME_V2
+    let gpTvLastCommandId = '';
+    let gpTvLastHeartbeatAt = 0;
+    const GP_TV_CONTROL_CLIENT_KEY = 'gpTvControlClientV2';
+    const gpTvControlClient = (() => {
+        try {
+            let value = localStorage.getItem(GP_TV_CONTROL_CLIENT_KEY) || '';
+            if (!value) {
+                value = `tv-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`;
+                localStorage.setItem(GP_TV_CONTROL_CLIENT_KEY, value);
+            }
+            return value;
+        } catch (_) { return 'tv-browser'; }
+    })();
 
     function gpManualAnnouncementVisible() {
         const overlay = document.getElementById('manualAnnouncementOverlay');
@@ -2114,8 +2128,28 @@
         if (wasDisabled && !detailMode) scheduleNextTeamVoice(1800);
     }
 
+    async function gpSendTvControlAck(state) {
+        try {
+            await fetch(apiUrl('/api/tv-control/ack'), {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                cache: 'no-store',
+                keepalive: true,
+                body: JSON.stringify({
+                    command_id: String(state?.command_id || ''),
+                    client: gpTvControlClient,
+                    staff_voice_enabled: gpRemoteStaffVoiceEnabled !== false,
+                    delayed_voice_enabled: gpRemoteDelayedVoiceEnabled !== false
+                })
+            });
+            gpTvLastHeartbeatAt = Date.now();
+        } catch (_) {}
+    }
+
     async function gpPollTvControl() {
-        if (gpTvControlPollInFlight || document.hidden) return;
+        // Do not skip PC commands when the browser tab is backgrounded. Browsers
+        // may throttle timers, but the TV will still process the latest command.
+        if (gpTvControlPollInFlight) return;
         gpTvControlPollInFlight = true;
         try {
             const response = await fetch(apiUrl(`/api/tv-control?t=${Date.now()}`), {cache:'no-store'});
@@ -2126,17 +2160,28 @@
             gpApplyRemoteStaffVoice(state.staff_voice_enabled !== false);
             gpRemoteDelayedVoiceEnabled = state.delayed_voice_enabled !== false;
 
+            const commandId = String(state.command_id || '');
             const revision = String(state.data_revision || '');
-            if (gpTvControlRevision === null) {
+            const newCommand = Boolean(commandId && commandId !== gpTvLastCommandId);
+            const newRevision = Boolean(revision && revision !== gpTvControlRevision);
+
+            if (newRevision) {
                 gpTvControlRevision = revision;
-            } else if (revision && revision !== gpTvControlRevision) {
-                gpTvControlRevision = revision;
-                // Force bypass of the backend summary cache; remarks are refreshed in parallel.
-                refreshDashboard(true);
-                refreshRemarks();
+                // force=1 now waits for a fresh backend rebuild before returning.
+                await refreshDashboard(true);
+                await refreshRemarks();
+            }
+
+            if (newCommand) {
+                gpTvLastCommandId = commandId;
+                await gpSendTvControlAck(state);
+            } else if (Date.now() - gpTvLastHeartbeatAt >= 5000) {
+                // Heartbeat lets the backend distinguish a live TV from an
+                // accepted command sitting on the server while the TV is off.
+                await gpSendTvControlAck(state);
             }
         } catch (_) {
-            // 15-second dashboard polling remains the fallback if the control channel is unavailable.
+            // 15-second dashboard polling remains the fallback for data.
         } finally {
             gpTvControlPollInFlight = false;
         }
