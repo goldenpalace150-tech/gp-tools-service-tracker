@@ -4,9 +4,9 @@ on:
   push:
     branches: [main]
     paths:
-      - scripts/apply_fast_tv_command_announce_v3.py
       - scripts/apply_tv_real_motion_announce_v4.py
       - scripts/fix_announce_v4_copy.py
+      - scripts/remove_legacy_tv_v3_controls.py
       - .github/workflows/apply-fast-tv-command-announce-v3.yml
   workflow_dispatch:
 
@@ -25,14 +25,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply V3 base and V4 fixes
+      - name: Apply V4 fixes only
         run: |
-          python scripts/apply_fast_tv_command_announce_v3.py
           python scripts/apply_tv_real_motion_announce_v4.py
           python scripts/fix_announce_v4_copy.py
+          python scripts/remove_legacy_tv_v3_controls.py
 
       - name: Validate Python
-        run: python -m py_compile tools_tracker.py flask_app.py scripts/apply_fast_tv_command_announce_v3.py scripts/apply_tv_real_motion_announce_v4.py scripts/fix_announce_v4_copy.py
+        run: python -m py_compile tools_tracker.py flask_app.py scripts/apply_tv_real_motion_announce_v4.py scripts/fix_announce_v4_copy.py scripts/remove_legacy_tv_v3_controls.py
 
       - name: Validate TV JavaScript
         run: |
@@ -62,7 +62,7 @@ jobs:
               raise SystemExit('Unbalanced announcement script tags')
           PY
 
-      - name: Verify V4 behavior markers
+      - name: Verify V4 behavior and reject legacy UI
         run: |
           grep -q 'GP_ACK_MAX_5S_V4' tools_tracker.py
           grep -q 'GP_ANNOUNCE_AND_MOTION_V4' flask_app.py
@@ -70,8 +70,13 @@ jobs:
           grep -q 'navigator.mediaDevices.getUserMedia' templates/tv.html
           grep -q 'gpPlayTvPoliceAlert' templates/tv.html
           grep -q 'id="fullscreenButton"' templates/tv.html
+          grep -q 'id="motionVoiceButton"' templates/tv.html
           grep -q 'direction:rtl' templates/tv.html
           grep -q 'GP_ANNOUNCE_V4_COPY_FIX' templates/announce.html
+          ! grep -q 'GP_TV_LAYOUT_FULLSCREEN_MOVEMENT_V3' templates/tv.html
+          ! grep -q 'gpTvFloatingControls' templates/tv.html
+          ! grep -q 'gpFullscreenToggle' templates/tv.html
+          ! grep -q "pointerTimer=setTimeout(()=>speakFunnyInteraction" templates/tv.html
           git diff --check
 
       - name: Commit applied sources
@@ -83,5 +88,5 @@ jobs:
           git config user.name 'Golden Palace Update Bot'
           git config user.email 'actions@users.noreply.github.com'
           git add tools_tracker.py flask_app.py templates/tv.html templates/announce.html
-          git commit -m 'Finalize TV V4 and announcement acknowledgment copy'
+          git commit -m 'Remove legacy TV controls and keep V4 only'
           git push origin main
