@@ -8,6 +8,7 @@
   <title>Golden Palace · Live TV Announcement</title>
   <!-- GP_ANNOUNCE_BRAND_FAST_ACK_V3 -->
   <!-- GP_ANNOUNCE_V4 -->
+  <!-- GP_ANNOUNCE_V4_COPY_FIX -->
   <style>
     :root{--navy:#071a2d;--navy2:#0d2c49;--gold:#d5a62e;--gold2:#f1d16c;--ink:#172033;--muted:#64748b;--line:#dbe2ea;--bg:#eef2f7;--ok:#166534;--bad:#991b1b;--wait:#92400e}
     *{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:"Segoe UI",Tahoma,Arial,sans-serif;background:radial-gradient(circle at 10% 0%,#f7f9fc 0,#eef2f7 45%,#e8edf4 100%);color:var(--ink)}
@@ -57,7 +58,7 @@
       </form>
 
       {% if success and published_text %}<div class="last"><small>LAST SENT</small><div>{{ published_text }}</div></div>{% endif %}
-      <div class="privacy">“Sent” means the server accepted it. “وصل للتلفزيون” is technical delivery. “تم الاطلاعd” appears only after a person presses the button on the workshop TV.</div>
+      <div class="privacy">“Sent” means the server accepted it. “وصل للتلفزيون” is technical delivery. “تم الاطلاع” يظهر فقط بعد أن يضغط شخص زر التأكيد على شاشة الورشة.</div>
     </section>
   </main>
 
@@ -155,8 +156,8 @@
               box.classList.remove('fail');
               box.classList.add('seen');
               humanStep.classList.add('on');
-              humanStep.textContent = '✓ تم الاطلاعd';
-              title.textContent = '✅ تم تأكيد الاطلاع · تم الاطلاعd';
+              humanStep.textContent = '✓ تم الاطلاع';
+              title.textContent = '✅ تم تأكيد الاطلاع · تم الاطلاع';
               text.textContent = `تم ضغط زر الاطلاع على شاشة الورشة${fmt(acknowledged) ? ` الساعة ${fmt(acknowledged)}` : ''}.`;
               finished = true;
             }
