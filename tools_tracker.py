@@ -66,11 +66,17 @@ def gp_signal_tv_refresh(reason="backend_save"):
 
 
 # GP_TV_CONTROL_RELIABLE_V2
+# GP_FAST_COMMAND_PATH_V3
 
-def gp_apply_tv_control_and_wait(reason, **fields):
-    """Send one TV command, force fresh data, and wait briefly for TV ACK."""
+def gp_apply_tv_control_and_wait(reason, refresh_data=False, **fields):
+    """Send one lightweight TV command and wait briefly for the TV ACK.
+
+    Dashboard data is refreshed only when refresh_data=True. This keeps simple
+    voice/toggle commands independent from the heavier Ledger/remarks refresh.
+    """
     payload = dict(fields)
-    payload["refresh_now"] = True
+    if refresh_data:
+        payload["refresh_now"] = True
     payload["reason"] = str(reason or "backend_tv_control")[:120]
     sent = gp_tv_control_request("POST", **payload)
     command_id = str(sent.get("command_id", "") or "")
@@ -2607,12 +2613,12 @@ elif st.session_state['current_module'] == 'FollowUp':
                         status_word = "تم التشغيل" if staff_target else "تم الإيقاف"
                         st.session_state["_gp_tv_control_flash"] = (
                             "success",
-                            f"✅ {status_word} لصوت الموظفين، وتم تحديث البيانات، والتلفزيون أكد تنفيذ الأمر.",
+                            f"✅ {status_word} لصوت الموظفين، والتلفزيون أكد تنفيذ الأمر.",
                         )
                     else:
                         st.session_state["_gp_tv_control_flash"] = (
                             "warning",
-                            "⚠️ تم حفظ أمر صوت الموظفين وتحديث البيانات على الخادم، لكن التلفزيون لم يؤكد التنفيذ خلال 6 ثوانٍ.",
+                            "⚠️ تم حفظ أمر صوت الموظفين على الخادم، لكن التلفزيون لم يؤكد التنفيذ خلال 6 ثوانٍ.",
                         )
                     st.rerun()
                 except Exception as exc:
@@ -2635,12 +2641,12 @@ elif st.session_state['current_module'] == 'FollowUp':
                         status_word = "تم التشغيل" if delayed_target else "تم الإيقاف"
                         st.session_state["_gp_tv_control_flash"] = (
                             "success",
-                            f"✅ {status_word} لتنبيه التأخير، وتم تحديث البيانات، والتلفزيون أكد تنفيذ الأمر.",
+                            f"✅ {status_word} لتنبيه التأخير، والتلفزيون أكد تنفيذ الأمر.",
                         )
                     else:
                         st.session_state["_gp_tv_control_flash"] = (
                             "warning",
-                            "⚠️ تم حفظ أمر تنبيه التأخير وتحديث البيانات على الخادم، لكن التلفزيون لم يؤكد التنفيذ خلال 6 ثوانٍ.",
+                            "⚠️ تم حفظ أمر تنبيه التأخير على الخادم، لكن التلفزيون لم يؤكد التنفيذ خلال 6 ثوانٍ.",
                         )
                     st.rerun()
                 except Exception as exc:
@@ -2648,7 +2654,7 @@ elif st.session_state['current_module'] == 'FollowUp':
 
         if st.button("⚡ تحديث بيانات التلفزيون الآن", use_container_width=True, key="gp_push_tv_now_v2"):
             try:
-                _, confirmed = gp_apply_tv_control_and_wait("manual_backend_push")
+                _, confirmed = gp_apply_tv_control_and_wait("manual_backend_push", refresh_data=True)
                 if confirmed:
                     st.session_state["_gp_tv_control_flash"] = (
                         "success",
@@ -2663,7 +2669,7 @@ elif st.session_state['current_module'] == 'FollowUp':
             except Exception as exc:
                 st.error(f"❌ تعذر إرسال أمر تحديث البيانات: {exc}")
 
-        st.caption("كل زر ينفذ العملية ويطلب تحديث البيانات في نفس اللحظة. الأخضر يظهر فقط بعد أن يؤكد التلفزيون تنفيذ الأمر.")
+        st.caption("أوامر الصوت والتنبيه تُرسل بخفة من دون إعادة تحميل كل البيانات. زر تحديث البيانات وحده يعيد تحميل Ledger والملاحظات. الأخضر يظهر بعد تأكيد التلفزيون.")
 
     # GP_MANUAL_TV_ANNOUNCEMENT_UI_V1
     with st.expander("📣 إعلان مباشر إلى شاشة الورشة (Live TV Announcement)", expanded=False):

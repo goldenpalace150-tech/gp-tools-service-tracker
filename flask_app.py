@@ -519,6 +519,7 @@ def gp_write_tv_control(state):
                 pass
 
 
+# GP_FAST_COMMAND_PATH_V3
 @app.route("/api/tv-control", methods=["GET", "POST", "OPTIONS"])
 def api_tv_control():
     if request.method == "OPTIONS":
@@ -541,8 +542,10 @@ def api_tv_control():
             command_id = str(time.time_ns())
             state["command_id"] = command_id
             state["command_created_at"] = time.time()
-            # Every control command also carries an immediate data refresh revision.
-            state["data_revision"] = command_id
+            # Fast path: ordinary commands never trigger the heavy dashboard refresh.
+            # Only an explicit refresh request advances the data revision.
+            if refresh_now:
+                state["data_revision"] = command_id
 
         state["updated_at"] = time.time()
         state["reason"] = re.sub(r"\s+", " ", str(payload.get("reason", ""))).strip()[:120]
