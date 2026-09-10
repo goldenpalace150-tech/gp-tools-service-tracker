@@ -7,10 +7,9 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <title>Golden Palace · Live TV Announcement</title>
   <style>
-    :root{--navy:#071a2d;--navy2:#0d2c49;--gold:#d5a62e;--gold2:#f1d16c;--ink:#172033;--muted:#64748b;--line:#dbe2ea;--bg:#eef2f7;--ok:#166534;--bad:#991b1b}
+    :root{--navy:#071a2d;--navy2:#0d2c49;--gold:#d5a62e;--gold2:#f1d16c;--ink:#172033;--muted:#64748b;--line:#dbe2ea;--bg:#eef2f7;--ok:#166534;--bad:#991b1b;--wait:#92400e}
     *{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:"Segoe UI",Tahoma,Arial,sans-serif;background:radial-gradient(circle at 10% 0%,#f7f9fc 0,#eef2f7 45%,#e8edf4 100%);color:var(--ink)}
-    body{padding:clamp(14px,3vw,34px)}
-    .shell{width:min(760px,100%);margin:0 auto}
+    body{padding:clamp(14px,3vw,34px)}.shell{width:min(760px,100%);margin:0 auto}
     .brand{background:linear-gradient(145deg,var(--navy),var(--navy2));border-radius:26px;padding:24px clamp(20px,4vw,34px);color:#fff;box-shadow:0 18px 54px rgba(7,26,45,.22);border:1px solid rgba(213,166,46,.55)}
     .brand-line{display:flex;align-items:center;gap:14px}.mark{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid var(--gold2);color:var(--gold2);font-weight:950;letter-spacing:.05em;background:rgba(255,255,255,.04)}
     h1{margin:0;font-size:clamp(25px,5vw,38px);line-height:1.08}.brand p{margin:9px 0 0;color:#cbd8e5;line-height:1.5;font-weight:600}
@@ -20,69 +19,110 @@
     textarea,input,select{width:100%;border:1px solid #cbd5e1;border-radius:14px;background:#fff;color:var(--ink);padding:13px 14px;font:inherit;outline:none;transition:border .15s,box-shadow .15s}textarea{min-height:170px;resize:vertical;line-height:1.6;font-size:18px}textarea:focus,input:focus,select:focus{border-color:var(--gold);box-shadow:0 0 0 4px rgba(213,166,46,.14)}
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.voice-row{display:flex;align-items:center;justify-content:space-between;gap:14px;border:1px solid var(--line);border-radius:15px;padding:13px 14px;background:#f8fafc}.voice-row strong{display:block}.voice-row span{display:block;color:var(--muted);font-size:12px;margin-top:3px}.switch{width:auto;min-width:22px;min-height:22px;accent-color:var(--gold)}
     button{width:100%;border:0;border-radius:15px;background:linear-gradient(135deg,#b98712,var(--gold));color:#071a2d;font-weight:950;font-size:18px;padding:15px 18px;cursor:pointer;box-shadow:0 10px 24px rgba(213,166,46,.23)}button:hover{filter:brightness(1.04)}button:active{transform:translateY(1px)}
+    .delivery{margin:0 0 18px;border:1px solid #fed7aa;background:#fff7ed;border-radius:17px;padding:15px}.delivery.seen{border-color:#bbf7d0;background:#f0fdf4}.delivery.fail{border-color:#fecaca;background:#fef2f2}.delivery-title{font-weight:950;font-size:17px}.delivery-text{margin-top:6px;color:var(--wait);font-weight:800;line-height:1.5}.delivery.seen .delivery-text{color:var(--ok)}.delivery.fail .delivery-text{color:var(--bad)}.delivery-meta{margin-top:7px;color:var(--muted);font-size:12px;font-weight:700}
+    .steps{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.step{border-radius:999px;padding:5px 9px;font-size:11px;font-weight:900;border:1px solid #cbd5e1;color:#64748b;background:#fff}.step.on{border-color:#86efac;color:#166534;background:#dcfce7}.step.bad{border-color:#fecaca;color:#991b1b;background:#fff1f2}
     .privacy{margin-top:14px;text-align:center;color:var(--muted);font-size:12px;line-height:1.55}.last{margin-top:14px;border-top:1px solid var(--line);padding-top:14px}.last small{color:var(--muted);font-weight:700}.last div{margin-top:5px;font-weight:800;line-height:1.55;overflow-wrap:anywhere}
     @media(max-width:600px){body{padding:12px}.brand,.card{border-radius:20px}.grid{grid-template-columns:1fr}.brand-line{align-items:flex-start}.mark{width:46px;height:46px;flex:0 0 46px}textarea{min-height:150px}}
   </style>
 </head>
 <body>
   <main class="shell">
-    <section class="brand">
-      <div class="brand-line">
-        <div class="mark">GP</div>
-        <div>
-          <h1>Live TV Announcement</h1>
-          <p>إعلان مباشر إلى شاشة الورشة · Management-only publishing page</p>
-        </div>
-      </div>
-    </section>
+    <section class="brand"><div class="brand-line"><div class="mark">GP</div><div><h1>Live TV Announcement</h1><p>إعلان مباشر إلى شاشة الورشة · Management-only publishing page</p></div></div></section>
 
     <section class="card">
-      {% if success %}<div class="notice ok">✅ تم نشر الإعلان إلى شاشة التلفزيون بنجاح. · Announcement published successfully.</div>{% endif %}
+      {% if success %}
+      <!-- GP_ANNOUNCEMENT_DELIVERY_STATUS_UI_V1 -->
+      <div id="deliveryBox" class="delivery" data-announcement-id="{{ published_id or '' }}" data-voice-enabled="{{ '1' if published_voice_enabled else '0' }}">
+        <div id="deliveryTitle" class="delivery-title">📤 تم إرسال الإعلان إلى الخادم · Accepted by server</div>
+        <div id="deliveryText" class="delivery-text">بانتظار تأكيد شاشة التلفزيون... قد تكون الشاشة مطفأة أو غير متصلة.</div>
+        <div id="deliveryMeta" class="delivery-meta">{{ published_sender or 'Management' }}</div>
+        <div class="steps"><span id="stepServer" class="step on">✓ Server</span><span id="stepDisplay" class="step">TV display</span>{% if published_voice_enabled %}<span id="stepAudio" class="step">Voice</span>{% endif %}</div>
+      </div>
+      {% endif %}
       {% if error %}<div class="notice bad">{{ error }}</div>{% endif %}
 
       <form method="post" action="/announce" autocomplete="off">
-        <div class="field">
-          <label for="text">نص الإعلان · Announcement</label>
-          <textarea id="text" name="text" maxlength="700" required placeholder="اكتب الرسالة أو المهمة التي تريد إعلانها على شاشة الورشة...">{{ form_text or '' }}</textarea>
-          <span class="hint">يظهر على التلفزيون فوراً، ويمكن قراءته بنفس صوت الإعلان الحالي.</span>
-        </div>
-
+        <div class="field"><label for="text">نص الإعلان · Announcement</label><textarea id="text" name="text" maxlength="700" required placeholder="اكتب الرسالة أو المهمة التي تريد إعلانها على شاشة الورشة...">{{ form_text or '' }}</textarea><span class="hint">النص الظاهر يبقى كما كتبته. التشكيل المحسّن يُستخدم للصوت العربي فقط.</span></div>
         <div class="grid">
-          <div class="field">
-            <label for="lang">لغة الصوت · Voice language</label>
-            <select id="lang" name="lang">
-              <option value="auto" {% if form_lang == 'auto' or not form_lang %}selected{% endif %}>Auto · تلقائي</option>
-              <option value="ar" {% if form_lang == 'ar' %}selected{% endif %}>العربية</option>
-              <option value="en" {% if form_lang == 'en' %}selected{% endif %}>English</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="published_by">المرسل · Published by</label>
-            <input id="published_by" name="published_by" maxlength="80" value="{{ form_published_by or '' }}" placeholder="Management / Name">
-          </div>
+          <div class="field"><label for="lang">لغة الصوت · Voice language</label><select id="lang" name="lang"><option value="auto" {% if form_lang == 'auto' or not form_lang %}selected{% endif %}>Auto · تلقائي</option><option value="ar" {% if form_lang == 'ar' %}selected{% endif %}>العربية</option><option value="en" {% if form_lang == 'en' %}selected{% endif %}>English</option></select></div>
+          <div class="field"><label for="published_by">المرسل · Published by</label><input id="published_by" name="published_by" maxlength="80" value="{{ form_published_by or '' }}" placeholder="Management / Name"><span class="hint">سيظهر اسم المرسل على الشاشة ويُذكر في بداية الإعلان الصوتي.</span></div>
         </div>
-
-        <div class="field voice-row">
-          <div><strong>🔊 Voice notification</strong><span>تشغيل نفس صوت الإعلان المستخدم حالياً</span></div>
-          <input class="switch" type="checkbox" id="voice_enabled" name="voice_enabled" {% if form_voice_enabled is not sameas false %}checked{% endif %}>
-        </div>
-
-        {% if requires_code %}
-        <div class="field">
-          <label for="access_code">🔐 Management access code</label>
-          <input id="access_code" name="access_code" type="password" required autocomplete="current-password" placeholder="Access code">
-          <span class="hint">This page uses the same protected TV announcement key configured on the server.</span>
-        </div>
-        {% endif %}
-
+        <div class="field voice-row"><div><strong>🔊 Voice notification</strong><span>تشغيل نفس صوت الإعلان مع تحسين نطق العربية</span></div><input class="switch" type="checkbox" id="voice_enabled" name="voice_enabled" {% if form_voice_enabled is not sameas false %}checked{% endif %}></div>
+        {% if requires_code %}<div class="field"><label for="access_code">🔐 Management access code</label><input id="access_code" name="access_code" type="password" required autocomplete="current-password" placeholder="Access code"><span class="hint">This page uses the protected TV announcement key configured on the server.</span></div>{% endif %}
         <button type="submit">📣 Publish to TV Now</button>
       </form>
 
-      {% if success and published_text %}
-      <div class="last"><small>LAST PUBLISHED</small><div>{{ published_text }}</div></div>
-      {% endif %}
-      <div class="privacy">This page contains no maintenance, customer, stock, accounting, or operational records.</div>
+      {% if success and published_text %}<div class="last"><small>LAST SENT</small><div>{{ published_text }}</div></div>{% endif %}
+      <div class="privacy">“Sent” means the server accepted the announcement. “Observed on TV” appears only after an active TV browser reports that it displayed it.</div>
     </section>
   </main>
+
+  {% if success and published_id %}
+  <script>
+  (() => {
+    const id = {{ published_id|tojson }};
+    const voiceEnabled = {{ 'true' if published_voice_enabled else 'false' }};
+    const box = document.getElementById('deliveryBox');
+    const title = document.getElementById('deliveryTitle');
+    const text = document.getElementById('deliveryText');
+    const meta = document.getElementById('deliveryMeta');
+    const displayStep = document.getElementById('stepDisplay');
+    const audioStep = document.getElementById('stepAudio');
+    let attempts = 0;
+    let finished = false;
+
+    const fmt = (ts) => {
+      if (!ts) return '';
+      try { return new Date(Number(ts) * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'}); }
+      catch (_) { return ''; }
+    };
+
+    async function check() {
+      if (finished || !id) return;
+      attempts += 1;
+      try {
+        const r = await fetch(`/api/manual-announcement/status?id=${encodeURIComponent(id)}&t=${Date.now()}`, {cache:'no-store'});
+        if (r.ok) {
+          const payload = await r.json();
+          const s = payload && payload.status;
+          if (s) {
+            const displayed = Number(s.displayed_at || 0);
+            const started = Number(s.audio_started_at || 0);
+            const completed = Number(s.audio_finished_at || 0);
+            const failed = Number(s.audio_failed_at || 0);
+            if (displayed) {
+              box.classList.add('seen');
+              displayStep.classList.add('on');
+              title.textContent = '✅ تمت مشاهدة الإعلان على شاشة التلفزيون · Observed on TV';
+              text.textContent = `أكدت شاشة التلفزيون عرض الإعلان${fmt(displayed) ? ` الساعة ${fmt(displayed)}` : ''}.`;
+              if (voiceEnabled && started && audioStep) {
+                audioStep.classList.add('on');
+                audioStep.textContent = completed ? '✓ Voice finished' : '✓ Voice started';
+              }
+              if (voiceEnabled && failed && audioStep) {
+                audioStep.classList.remove('on');
+                audioStep.classList.add('bad');
+                audioStep.textContent = 'Voice failed';
+                text.textContent += ' ظهر الإعلان بصرياً لكن تشغيل الصوت لم يكتمل.';
+              }
+              meta.textContent = s.tv_client ? `TV acknowledgment: ${s.tv_client}` : 'TV acknowledgment received';
+              if (!voiceEnabled || completed || failed) finished = true;
+            }
+          }
+        }
+      } catch (_) {}
+
+      if (!finished && attempts >= 20) {
+        box.classList.add('fail');
+        title.textContent = '⚠️ لم يصل تأكيد من التلفزيون · No TV confirmation';
+        text.textContent = 'الخادم استلم الإعلان، لكن لم تؤكد أي شاشة عرضه خلال 20 ثانية. قد تكون شاشة الورشة مطفأة أو غير متصلة.';
+        finished = true;
+      }
+      if (!finished) setTimeout(check, 1000);
+    }
+    setTimeout(check, 500);
+  })();
+  </script>
+  {% endif %}
 </body>
 </html>
