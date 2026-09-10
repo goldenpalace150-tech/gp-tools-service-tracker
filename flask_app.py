@@ -338,7 +338,8 @@ def api_followup_voice():
     if is_live:
         text = gp_prepare_live_announcement_speech(raw_text[:700], sender, lang)
         rate = "-7%" if lang == "ar" else "-5%"
-        pitch = "0Hz" if lang == "ar" else "+1Hz"
+        # edge-tts 7.2+ requires an explicit sign even for zero pitch.
+        pitch = "+0Hz" if lang == "ar" else "+1Hz"
     else:
         text = raw_text[:500]
         rate = "-3%" if lang == "ar" else "-5%"
