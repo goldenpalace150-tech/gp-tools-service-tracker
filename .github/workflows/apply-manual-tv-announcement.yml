@@ -7,6 +7,8 @@ on:
       - scripts/apply_manual_tv_announcement.py
       - scripts/apply_manual_tv_voice_toggle.py
       - scripts/apply_tv_control_instant_push.py
+      - scripts/apply_management_announce_page.py
+      - templates/announce.html
       - .github/workflows/apply-manual-tv-announcement.yml
   workflow_dispatch:
 
@@ -26,6 +28,8 @@ jobs:
         run: python scripts/apply_manual_tv_voice_toggle.py
       - name: Apply TV control and instant push
         run: python scripts/apply_tv_control_instant_push.py
+      - name: Apply management announcement page
+        run: python scripts/apply_management_announce_page.py
       - name: Validate Python
         run: python -m py_compile tools_tracker.py flask_app.py
       - name: Validate TV inline JavaScript
@@ -40,6 +44,12 @@ jobs:
           Path('/tmp/tv-inline.js').write_text('\n'.join(scripts), encoding='utf-8')
           PY
           node --check /tmp/tv-inline.js
+      - name: Validate management page
+        run: |
+          test -s templates/announce.html
+          grep -q 'Live TV Announcement' templates/announce.html
+          grep -q 'GP_MANAGEMENT_ANNOUNCE_PAGE_V1' flask_app.py
+          grep -q '@app.route("/announce"' flask_app.py
       - name: Verify feature markers
         run: |
           grep -q 'GP_MANUAL_TV_ANNOUNCEMENT_V1' tools_tracker.py
@@ -53,12 +63,12 @@ jobs:
           grep -q 'GP_TV_CONTROL_AND_PUSH_V1' templates/tv.html
       - name: Commit applied files
         run: |
-          if git diff --quiet -- tools_tracker.py flask_app.py templates/tv.html; then
+          if git diff --quiet -- tools_tracker.py flask_app.py templates/tv.html templates/announce.html; then
             echo 'No app changes required.'
             exit 0
           fi
           git config user.name 'Golden Palace Update Bot'
           git config user.email 'actions@users.noreply.github.com'
-          git add tools_tracker.py flask_app.py templates/tv.html
-          git commit -m 'Add global staff voice control and instant TV refresh'
+          git add tools_tracker.py flask_app.py templates/tv.html templates/announce.html
+          git commit -m 'Add standalone management announcement page'
           git push
