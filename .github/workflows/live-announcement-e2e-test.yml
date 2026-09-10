@@ -1,0 +1,60 @@
+name: Live Announcement E2E Test
+
+on:
+  push:
+    branches: [qa-live-announcement-test-20260910]
+    paths:
+      - .github/workflows/live-announcement-e2e-test.yml
+
+permissions:
+  contents: read
+
+jobs:
+  live-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish Arabic test announcement with voice ON
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://golden-palace-service-tracker.onrender.com'
+          RESPONSE=$(curl -fsS -X POST "$BASE/api/manual-announcement" \
+            -H 'Content-Type: application/json' \
+            --data '{"text":"اختبار نظام الإعلان المباشر. يرجى تجاهل هذه الرسالة، هذا اختبار فقط. شكراً.","lang":"ar","published_by":"أبو آدم","voice_enabled":true}')
+          echo "Publish response: $RESPONSE"
+          ANN_ID=$(printf '%s' "$RESPONSE" | jq -r '.id // empty')
+          test -n "$ANN_ID"
+          echo "ANN_ID=$ANN_ID" >> "$GITHUB_ENV"
+          echo "Published announcement id: $ANN_ID"
+
+      - name: Wait for real TV display and voice acknowledgement
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://golden-palace-service-tracker.onrender.com'
+          LAST=''
+          for i in $(seq 1 90); do
+            sleep 1
+            LAST=$(curl -fsS "$BASE/api/manual-announcement/status?id=$ANN_ID")
+            echo "[$i] $LAST"
+            FOUND=$(printf '%s' "$LAST" | jq -r '.found // false')
+            if [ "$FOUND" != 'true' ]; then
+              continue
+            fi
+            DISPLAYED=$(printf '%s' "$LAST" | jq -r '.status.displayed_at // 0')
+            STARTED=$(printf '%s' "$LAST" | jq -r '.status.audio_started_at // 0')
+            FINISHED=$(printf '%s' "$LAST" | jq -r '.status.audio_finished_at // 0')
+            FAILED=$(printf '%s' "$LAST" | jq -r '.status.audio_failed_at // 0')
+            CLIENT=$(printf '%s' "$LAST" | jq -r '.status.tv_client // ""')
+            if awk "BEGIN {exit !($FAILED > 0)}"; then
+              echo "FAIL: TV displayed the announcement but voice failed. TV client: $CLIENT"
+              exit 1
+            fi
+            if awk "BEGIN {exit !($DISPLAYED > 0 && $STARTED > 0 && $FINISHED > 0)}"; then
+              echo "PASS: server accepted -> TV displayed -> audio started -> audio finished. TV client: $CLIENT"
+              exit 0
+            fi
+          done
+          echo "FAIL: Full TV acknowledgement was not completed within 90 seconds."
+          echo "Last status: $LAST"
+          exit 1
