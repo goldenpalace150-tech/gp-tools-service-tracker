@@ -62,6 +62,40 @@ jobs:
               raise SystemExit('Unbalanced announcement script tags')
           PY
 
+      # GP_LIVE_ANNOUNCEMENT_VOICE_SMOKE_V1
+      # This checks the real deployed server TTS path without publishing anything to the TV.
+      # It is diagnostic only so a temporary external TTS outage does not block a source fix.
+      - name: Live announcement voice smoke test
+        continue-on-error: true
+        run: |
+          set -e
+          BASE='https://golden-palace-service-tracker.onrender.com'
+          HTTP_CODE=$(curl -sS --retry 2 --retry-delay 2 --max-time 45 -G \
+            -o /tmp/gp-live-voice.json -w '%{http_code}' \
+            "$BASE/api/followup-voice" \
+            --data-urlencode 'live=1' \
+            --data-urlencode 'lang=ar' \
+            --data-urlencode 'text=اختبار إعلان صوتي من القصر الذهبي' \
+            --data-urlencode 'sender=Management')
+          echo "VOICE_API_HTTP=$HTTP_CODE"
+          cat /tmp/gp-live-voice.json
+          echo
+          test "$HTTP_CODE" = '200'
+          AUDIO_PATH=$(python - <<'PY'
+          import json
+          data=json.load(open('/tmp/gp-live-voice.json', encoding='utf-8'))
+          print(data.get('audio_url',''))
+          PY
+          )
+          test -n "$AUDIO_PATH"
+          AUDIO_HTTP=$(curl -sS --retry 2 --retry-delay 1 --max-time 30 \
+            -o /tmp/gp-live-voice.mp3 -w '%{http_code}' "$BASE$AUDIO_PATH")
+          AUDIO_BYTES=$(wc -c < /tmp/gp-live-voice.mp3)
+          echo "VOICE_AUDIO_HTTP=$AUDIO_HTTP"
+          echo "VOICE_AUDIO_BYTES=$AUDIO_BYTES"
+          test "$AUDIO_HTTP" = '200'
+          test "$AUDIO_BYTES" -gt 1000
+
       - name: Verify V4 behavior and reject legacy UI
         run: |
           grep -q 'GP_ACK_MAX_5S_V4' tools_tracker.py
@@ -73,6 +107,7 @@ jobs:
           grep -q 'id="motionVoiceButton"' templates/tv.html
           grep -q 'direction:rtl' templates/tv.html
           grep -q 'GP_ANNOUNCE_V4_COPY_FIX' templates/announce.html
+          grep -q 'GP_ANNOUNCEMENT_SPOKEN_MESSAGE_V6' templates/tv.html
           ! grep -q 'GP_TV_LAYOUT_FULLSCREEN_MOVEMENT_V3' templates/tv.html
           ! grep -q 'gpTvFloatingControls' templates/tv.html
           ! grep -q 'gpFullscreenToggle' templates/tv.html
