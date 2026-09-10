@@ -1988,6 +1988,66 @@
         }
     }
 
+
+    // GP_TV_CONTROL_AND_PUSH_V1
+    const GP_TV_CONTROL_POLL_MS = 1000;
+    let gpTvControlPollInFlight = false;
+    let gpTvControlRevision = null;
+    let gpRemoteStaffVoiceEnabled = null;
+
+    function gpManualAnnouncementVisible() {
+        const overlay = document.getElementById('manualAnnouncementOverlay');
+        return Boolean(overlay && overlay.classList.contains('show'));
+    }
+
+    function gpApplyRemoteStaffVoice(enabled) {
+        enabled = enabled !== false;
+        const priorRemote = gpRemoteStaffVoiceEnabled;
+        gpRemoteStaffVoiceEnabled = enabled;
+
+        if (!enabled) {
+            clearTimeout(teamVoiceTimer);
+            teamVoiceTimer = null;
+            teamVoiceEnabled = false;
+            // Do not cut off a manually published announcement just because random voices are disabled.
+            if (!gpManualAnnouncementVisible()) stopTeamVoiceAudio();
+            updateVoiceButton();
+            return;
+        }
+
+        const wasDisabled = !teamVoiceEnabled || priorRemote === false;
+        teamVoiceEnabled = true;
+        updateVoiceButton();
+        if (wasDisabled && !detailMode) scheduleNextTeamVoice(1800);
+    }
+
+    async function gpPollTvControl() {
+        if (gpTvControlPollInFlight || document.hidden) return;
+        gpTvControlPollInFlight = true;
+        try {
+            const response = await fetch(apiUrl(`/api/tv-control?t=${Date.now()}`), {cache:'no-store'});
+            if (!response.ok) return;
+            const state = await response.json();
+            if (!state || !state.ok) return;
+
+            gpApplyRemoteStaffVoice(state.staff_voice_enabled !== false);
+
+            const revision = String(state.data_revision || '');
+            if (gpTvControlRevision === null) {
+                gpTvControlRevision = revision;
+            } else if (revision && revision !== gpTvControlRevision) {
+                gpTvControlRevision = revision;
+                // Force bypass of the backend summary cache; remarks are refreshed in parallel.
+                refreshDashboard(true);
+                refreshRemarks();
+            }
+        } catch (_) {
+            // 15-second dashboard polling remains the fallback if the control channel is unavailable.
+        } finally {
+            gpTvControlPollInFlight = false;
+        }
+    }
+
     async function refreshDashboard(force=false) {
         if (refreshInFlight) {
             if (force) foregroundRefreshPending = true;
@@ -2081,6 +2141,8 @@
     setTimeout(() => { try { initialiseTeamVoice(); } catch (_) {} }, 800);
     setTimeout(gpPollManualAnnouncement, 500);
     setInterval(gpPollManualAnnouncement, GP_MANUAL_ANNOUNCEMENT_POLL_MS);
+    setTimeout(gpPollTvControl, 250);
+    setInterval(gpPollTvControl, GP_TV_CONTROL_POLL_MS);
     setInterval(() => refreshDashboard(false), 15000);
     setInterval(refreshRemarks, 60000);
 })();

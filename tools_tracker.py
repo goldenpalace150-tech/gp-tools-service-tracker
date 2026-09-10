@@ -33,6 +33,36 @@ GP_TV_BACKEND_URL = get_runtime_secret("GP_TV_BACKEND_URL") or "https://golden-p
 GP_TV_ANNOUNCEMENT_KEY = get_runtime_secret("GP_TV_ANNOUNCEMENT_KEY")
 
 
+
+# GP_TV_CONTROL_AND_PUSH_V1
+
+def gp_tv_control_request(method="GET", **fields):
+    headers = {"Accept": "application/json"}
+    if GP_TV_ANNOUNCEMENT_KEY:
+        headers["X-GP-Announcement-Key"] = GP_TV_ANNOUNCEMENT_KEY
+    url = f"{GP_TV_BACKEND_URL.rstrip('/')}/api/tv-control"
+    if str(method).upper() == "POST":
+        response = requests.post(url, json=fields, headers=headers, timeout=(3, 6))
+    else:
+        response = requests.get(url, headers=headers, timeout=(3, 6))
+    response.raise_for_status()
+    data = response.json()
+    if not data.get("ok"):
+        raise RuntimeError(data.get("error") or "TV control request failed")
+    return data
+
+
+def gp_signal_tv_refresh(reason="backend_save"):
+    """Tell every open TV to force-refresh immediately. Never block a successful save."""
+    try:
+        return gp_tv_control_request(
+            "POST",
+            refresh_now=True,
+            reason=str(reason or "backend_save")[:120],
+        )
+    except Exception:
+        return None
+
 def publish_manual_tv_announcement(text, language="auto", published_by="", voice_enabled=True):
     message = re.sub(r"\s+", " ", str(text or "")).strip()
     if not message:
@@ -1616,6 +1646,8 @@ def save_doctype(doctype_name, df):
             st.cache_data.clear()
         except Exception:
             pass
+        # Any successful backend write tells the TV to reload immediately.
+        gp_signal_tv_refresh(f"{doctype_name}_saved")
 
 
 def _canonical_stock_header(value):
@@ -2493,6 +2525,42 @@ elif st.session_state['current_module'] == 'Support':
 # ==========================================
 elif st.session_state['current_module'] == 'FollowUp':
     gp_render_module_header('FollowUp')
+
+    # GP_TV_CONTROL_AND_PUSH_UI_V1
+    with st.expander("📺 تحكم شاشة الورشة (TV Control)", expanded=False):
+        try:
+            gp_tv_state = gp_tv_control_request("GET")
+            gp_staff_voice_current = bool(gp_tv_state.get("staff_voice_enabled", True))
+        except Exception:
+            gp_tv_state = {"ok": False}
+            gp_staff_voice_current = True
+
+        gp_staff_voice_choice = st.toggle(
+            "🔊 الإعلانات العشوائية للموظفين (Random staff voice announcements)",
+            value=gp_staff_voice_current,
+            help="هذا المفتاح يتحكم بالصوت العشوائي الدوري للموظفين على شاشة التلفزيون، ولا يلغي خيار الصوت الخاص بالإعلان اليدوي.",
+            key="gp_staff_random_voice_backend_toggle",
+        )
+        c_tv_voice, c_tv_push = st.columns(2)
+        with c_tv_voice:
+            if st.button("✅ تطبيق الصوت فوراً على التلفزيون", use_container_width=True, key="gp_apply_staff_voice_tv"):
+                try:
+                    gp_tv_control_request(
+                        "POST",
+                        staff_voice_enabled=bool(gp_staff_voice_choice),
+                        reason="backend_staff_voice_change",
+                    )
+                    st.success("✅ تم تحديث صوت الموظفين على التلفزيون فوراً.")
+                except Exception as exc:
+                    st.error(f"❌ تعذر تحديث إعداد الصوت: {exc}")
+        with c_tv_push:
+            if st.button("⚡ دفع أحدث البيانات إلى التلفزيون الآن", use_container_width=True, key="gp_push_tv_now"):
+                try:
+                    gp_tv_control_request("POST", refresh_now=True, reason="manual_backend_push")
+                    st.success("✅ تم إرسال أمر تحديث فوري إلى التلفزيون.")
+                except Exception as exc:
+                    st.error(f"❌ تعذر إرسال أمر التحديث: {exc}")
+        st.caption("أي حفظ جديد داخل النظام يرسل أمر تحديث للتلفزيون تلقائياً أيضاً. التحديث الدوري كل 15 ثانية يبقى كنسخة احتياطية فقط.")
 
     # GP_MANUAL_TV_ANNOUNCEMENT_UI_V1
     with st.expander("📣 إعلان مباشر إلى شاشة الورشة (Live TV Announcement)", expanded=False):

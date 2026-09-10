@@ -340,6 +340,74 @@ def gp_manual_announcement_authorized():
     return request.headers.get("X-GP-Announcement-Key", "").strip() == GP_TV_ANNOUNCEMENT_KEY
 
 
+
+# GP_TV_CONTROL_AND_PUSH_V1
+GP_TV_CONTROL_FILE = os.path.join(tempfile.gettempdir(), "gp_tv_control_v1.json")
+GP_TV_CONTROL_LOCK = threading.RLock()
+
+
+def gp_default_tv_control():
+    return {
+        "staff_voice_enabled": True,
+        "data_revision": "",
+        "updated_at": 0,
+        "reason": "",
+    }
+
+
+def gp_read_tv_control():
+    state = gp_default_tv_control()
+    try:
+        with GP_TV_CONTROL_LOCK:
+            if os.path.exists(GP_TV_CONTROL_FILE):
+                with open(GP_TV_CONTROL_FILE, "r", encoding="utf-8") as handle:
+                    saved = json.load(handle)
+                if isinstance(saved, dict):
+                    state.update(saved)
+    except Exception as exc:
+        print("TV control read error:", repr(exc))
+    state["staff_voice_enabled"] = bool(state.get("staff_voice_enabled", True))
+    state["data_revision"] = str(state.get("data_revision", "") or "")
+    return state
+
+
+def gp_write_tv_control(state):
+    temp_path = f"{GP_TV_CONTROL_FILE}.{os.getpid()}.tmp"
+    with GP_TV_CONTROL_LOCK:
+        try:
+            with open(temp_path, "w", encoding="utf-8") as handle:
+                json.dump(state, handle, ensure_ascii=False)
+            os.replace(temp_path, GP_TV_CONTROL_FILE)
+        finally:
+            try:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except Exception:
+                pass
+
+
+@app.route("/api/tv-control", methods=["GET", "POST", "OPTIONS"])
+def api_tv_control():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    state = gp_read_tv_control()
+    if request.method == "POST":
+        if not gp_manual_announcement_authorized():
+            return jsonify({"ok": False, "error": "unauthorized"}), 403
+        payload = request.get_json(silent=True) or {}
+        if "staff_voice_enabled" in payload:
+            state["staff_voice_enabled"] = bool(payload.get("staff_voice_enabled"))
+        if payload.get("refresh_now"):
+            # String form preserves nanosecond uniqueness in JavaScript.
+            state["data_revision"] = str(time.time_ns())
+        state["updated_at"] = time.time()
+        state["reason"] = re.sub(r"\s+", " ", str(payload.get("reason", ""))).strip()[:120]
+        gp_write_tv_control(state)
+    response = jsonify({"ok": True, **state})
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return response
+
+
 @app.route("/api/manual-announcement", methods=["POST", "OPTIONS"])
 def api_manual_announcement():
     if request.method == "OPTIONS":
