@@ -272,17 +272,77 @@ def api_voice_track():
         return jsonify({"ok": False, "error": "voice_generation_failed"}), 503
     return jsonify({"ok": True, "text": track["text"], "lang": lang, "tone": track["tone"], "category": track["category"], "person": track["person"], "voice": voice, "audio_urls": [f"/api/voice-audio/{body_token}.mp3", f"/api/voice-audio/{final_token}.mp3"]})
 
+# GP_ANNOUNCEMENT_DELIVERY_ACK_V1
+GP_LIVE_AR_TASHKEEL = [
+    ("أبو عدنان", "أَبُو عَدْنان"),
+    ("أبو آدم", "أَبُو آدَم"),
+    ("أبو نقطة", "أَبُو نُقْطَة"),
+    ("أبو غسان", "أَبُو غَسّان"),
+    ("عمر", "عُمَر"),
+    ("حازم", "حازِم"),
+    ("حريري", "حَريري"),
+    ("الإدارة", "الإِدارَة"),
+    ("إعلان", "إِعْلان"),
+    ("الرجاء", "الرَّجاء"),
+    ("يرجى", "يُرْجى"),
+    ("إنهاء", "إِنْهاء"),
+    ("الصيانة", "الصِّيانَة"),
+    ("الجهاز", "الجِهاز"),
+    ("الأجهزة", "الأَجْهِزَة"),
+    ("الفحص", "الفَحْص"),
+    ("فحص", "فَحْص"),
+    ("الساعة", "السّاعَة"),
+    ("اليوم", "اليَوْم"),
+    ("بكرا", "بُكْرا"),
+    ("غدا", "غَدًا"),
+    ("غداً", "غَدًا"),
+    ("قبل", "قَبْل"),
+    ("بعد", "بَعْد"),
+    ("شكرا", "شُكْرًا"),
+    ("شكراً", "شُكْرًا"),
+]
+
+
+def gp_live_arabic_tashkeel(text):
+    value = str(text or "")
+    # Targeted vocalisation improves the Lebanese/Syrian neural voice without
+    # rewriting management's visible message or risking aggressive full diacritisation.
+    for plain, vocalized in sorted(GP_LIVE_AR_TASHKEEL, key=lambda item: len(item[0]), reverse=True):
+        pattern = rf"(?<![\\u0621-\\u064A]){re.escape(plain)}(?![\\u0621-\\u064A])"
+        value = re.sub(pattern, vocalized, value)
+    return value
+
+
+def gp_prepare_live_announcement_speech(text, sender, lang):
+    message = re.sub(r"\\s+", " ", str(text or "")).strip()
+    sender = re.sub(r"\\s+", " ", str(sender or "")).strip()[:80]
+    if lang == "ar":
+        prefix = f"إِعْلان مِنْ {sender}." if sender else "إِعْلان مِنَ الإِدارَة."
+        return gp_live_arabic_tashkeel(f"{prefix} {message}")[:850]
+    prefix = f"Announcement from {sender}." if sender else "Management announcement."
+    return f"{prefix} {message}"[:850]
+
+
 # GP_FOLLOWUP_VOICE_V2
 @app.route("/api/followup-voice")
 def api_followup_voice():
     lang = "en" if str(request.args.get("lang", "ar")).lower().startswith("en") else "ar"
-    text = re.sub(r"\s+", " ", str(request.args.get("text", ""))).strip()
-    if not text:
+    raw_text = re.sub(r"\s+", " ", str(request.args.get("text", ""))).strip()
+    if not raw_text:
         return jsonify({"ok": False, "error": "missing_text"}), 400
-    text = text[:500]
+    is_live = str(request.args.get("live", "0")).strip() == "1"
+    sender = re.sub(r"\s+", " ", str(request.args.get("sender", ""))).strip()[:80]
+    if is_live:
+        text = gp_prepare_live_announcement_speech(raw_text[:700], sender, lang)
+        rate = "-7%" if lang == "ar" else "-5%"
+        pitch = "0Hz" if lang == "ar" else "+1Hz"
+    else:
+        text = raw_text[:500]
+        rate = "-3%" if lang == "ar" else "-5%"
+        pitch = "+1Hz"
     voice = GP_AR_VOICE if lang == "ar" else GP_EN_VOICE
     try:
-        token, _ = gp_ensure_voice_file(text, voice, "-3%" if lang == "ar" else "-5%", "+1Hz")
+        token, _ = gp_ensure_voice_file(text, voice, rate, pitch)
     except Exception as exc:
         print("FollowUp voice generation error:", repr(exc))
         return jsonify({"ok": False, "error": "voice_generation_failed"}), 503
@@ -295,6 +355,66 @@ def api_followup_voice():
 GP_MANUAL_ANNOUNCEMENT_FILE = os.path.join(tempfile.gettempdir(), "gp_manual_tv_announcement_v1.json")
 GP_MANUAL_ANNOUNCEMENT_LOCK = threading.RLock()
 GP_TV_ANNOUNCEMENT_KEY = os.environ.get("GP_TV_ANNOUNCEMENT_KEY", "").strip()
+
+# Per-announcement delivery receipts are separate from the latest-message mailbox,
+# so a sender can still see whether their own announcement reached the TV.
+GP_MANUAL_DELIVERY_DIR = os.path.join(tempfile.gettempdir(), "gp_manual_delivery_v1")
+os.makedirs(GP_MANUAL_DELIVERY_DIR, exist_ok=True)
+
+
+def gp_manual_delivery_path(announcement_id):
+    safe_id = str(announcement_id or "").strip()
+    token = hashlib.sha256(safe_id.encode("utf-8")).hexdigest()
+    return os.path.join(GP_MANUAL_DELIVERY_DIR, f"{token}.json")
+
+
+def gp_write_manual_delivery_status(status):
+    announcement_id = str(status.get("id", "") or "").strip()
+    if not announcement_id:
+        return
+    path = gp_manual_delivery_path(announcement_id)
+    temp_path = f"{path}.{os.getpid()}.tmp"
+    with open(temp_path, "w", encoding="utf-8") as handle:
+        json.dump(status, handle, ensure_ascii=False)
+    os.replace(temp_path, path)
+
+
+def gp_read_manual_delivery_status(announcement_id):
+    announcement_id = str(announcement_id or "").strip()
+    if not announcement_id:
+        return None
+    try:
+        path = gp_manual_delivery_path(announcement_id)
+        if not os.path.exists(path):
+            return None
+        with open(path, "r", encoding="utf-8") as handle:
+            status = json.load(handle)
+        if str(status.get("id", "")) != announcement_id:
+            return None
+        # Keep receipts useful for one day; Render restarts may clear /tmp earlier.
+        if time.time() - float(status.get("server_accepted_at", 0) or 0) > 86400:
+            return None
+        return status
+    except Exception as exc:
+        print("Manual announcement delivery read error:", repr(exc))
+        return None
+
+
+def gp_init_manual_delivery_status(announcement):
+    now = time.time()
+    status = {
+        "id": str(announcement.get("id", "")),
+        "server_accepted_at": float(announcement.get("created_at", now) or now),
+        "displayed_at": 0,
+        "audio_started_at": 0,
+        "audio_finished_at": 0,
+        "audio_failed_at": 0,
+        "last_tv_ack_at": 0,
+        "voice_enabled": bool(announcement.get("voice_enabled", True)),
+        "published_by": str(announcement.get("published_by", "") or "")[:80],
+    }
+    gp_write_manual_delivery_status(status)
+    return status
 
 
 def gp_detect_announcement_language(text, requested="auto"):
@@ -422,6 +542,9 @@ def management_announce_page():
         "form_published_by": "",
         "form_voice_enabled": True,
         "published_text": "",
+        "published_id": "",
+        "published_voice_enabled": False,
+        "published_sender": "",
     }
 
     if request.method == "POST":
@@ -460,10 +583,14 @@ def management_announce_page():
             "expires_at": now + 600,
         }
         gp_write_manual_announcement(announcement)
+        gp_init_manual_delivery_status(announcement)
         context.update({
             "success": True,
             "form_text": "",
             "published_text": message,
+            "published_id": announcement_id,
+            "published_voice_enabled": voice_enabled,
+            "published_sender": published_by,
         })
 
     response = app.make_response(render_template("announce.html", **context))
@@ -497,8 +624,57 @@ def api_manual_announcement():
         "expires_at": now + 600,
     }
     gp_write_manual_announcement(announcement)
+    gp_init_manual_delivery_status(announcement)
     response = jsonify({"ok": True, **announcement})
     response.headers["Cache-Control"] = "no-store, max-age=0"
+    return response
+
+
+
+@app.route("/api/manual-announcement/status")
+def api_manual_announcement_status():
+    announcement_id = str(request.args.get("id", "") or "").strip()
+    if not announcement_id:
+        return jsonify({"ok": False, "error": "missing_id"}), 400
+    status = gp_read_manual_delivery_status(announcement_id)
+    response = jsonify({"ok": True, "found": bool(status), "status": status})
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return response
+
+
+@app.route("/api/manual-announcement/ack", methods=["POST", "OPTIONS"])
+def api_manual_announcement_ack():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    payload = request.get_json(silent=True) or {}
+    announcement_id = str(payload.get("id", "") or "").strip()
+    event = str(payload.get("event", "") or "").strip().lower()
+    if not announcement_id or event not in {"displayed", "audio_started", "audio_finished", "audio_failed"}:
+        return jsonify({"ok": False, "error": "invalid_ack"}), 400
+
+    status = gp_read_manual_delivery_status(announcement_id)
+    if status is None:
+        current = gp_read_manual_announcement()
+        if not current or str(current.get("id", "")) != announcement_id:
+            return jsonify({"ok": False, "error": "unknown_announcement"}), 404
+        status = gp_init_manual_delivery_status(current)
+
+    now = time.time()
+    key = {
+        "displayed": "displayed_at",
+        "audio_started": "audio_started_at",
+        "audio_finished": "audio_finished_at",
+        "audio_failed": "audio_failed_at",
+    }[event]
+    if not float(status.get(key, 0) or 0):
+        status[key] = now
+    if event in {"audio_started", "audio_finished", "audio_failed"} and not float(status.get("displayed_at", 0) or 0):
+        status["displayed_at"] = now
+    status["last_tv_ack_at"] = now
+    status["tv_client"] = re.sub(r"[^A-Za-z0-9_-]", "", str(payload.get("client", "")))[:64]
+    gp_write_manual_delivery_status(status)
+    response = jsonify({"ok": True, "status": status})
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return response
 
 

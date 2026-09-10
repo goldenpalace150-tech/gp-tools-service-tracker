@@ -1883,11 +1883,36 @@
         if (overlay) overlay.classList.remove('show');
     }
 
+    // GP_ANNOUNCEMENT_DELIVERY_ACK_V1
+    const GP_TV_ACK_CLIENT_KEY = 'gpTvAckClientV1';
+    let gpTvAckClient = (() => {
+        try {
+            let value = localStorage.getItem(GP_TV_ACK_CLIENT_KEY) || '';
+            if (!value) {
+                value = `tv-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`;
+                localStorage.setItem(GP_TV_ACK_CLIENT_KEY, value);
+            }
+            return value;
+        } catch (_) { return 'tv-browser'; }
+    })();
+
+    function gpAckManualAnnouncement(item, event) {
+        if (!item || !item.id || !event) return;
+        fetch(apiUrl('/api/manual-announcement/ack'), {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            cache: 'no-store',
+            keepalive: true,
+            body: JSON.stringify({id:String(item.id), event:String(event), client:gpTvAckClient})
+        }).catch(() => {});
+    }
+
     async function gpPlayManualAnnouncement(item) {
-        if (!item || detailMode) return;
+        if (!item || detailMode || document.hidden) return;
         const generation = ++gpManualAnnouncementGeneration;
         const lang = item.lang === 'en' ? 'en' : 'ar';
         const text = String(item.text || '').trim();
+        const sender = String(item.published_by || '').trim();
         // GP_MANUAL_TV_VOICE_TOGGLE_V1
         const voiceEnabled = item.voice_enabled !== false;
         if (!text) return;
@@ -1904,16 +1929,19 @@
             card.dir = lang === 'ar' ? 'rtl' : 'ltr';
             card.style.textAlign = 'center';
         }
-        if (label) label.textContent = lang === 'ar' ? '📣 إعلان مباشر من الإدارة' : '📣 LIVE MANAGEMENT ANNOUNCEMENT';
+        if (label) label.textContent = lang === 'ar'
+            ? (sender ? `📣 إعلان من ${sender}` : '📣 إعلان مباشر من الإدارة')
+            : (sender ? `📣 ANNOUNCEMENT FROM ${sender}` : '📣 LIVE MANAGEMENT ANNOUNCEMENT');
         if (textEl) textEl.textContent = text;
         if (meta) {
-            const by = String(item.published_by || '').trim();
-            const source = by ? (lang === 'ar' ? `نُشر بواسطة: ${by}` : `Published by: ${by}`) : 'Golden Palace';
+            const source = sender ? (lang === 'ar' ? `المرسل: ${sender}` : `Sender: ${sender}`) : 'Golden Palace';
             meta.textContent = voiceEnabled ? source : `${source} · ${lang === 'ar' ? '🔇 بدون صوت' : '🔇 Silent'}`;
         }
         const wave = card ? card.querySelector('.gp-manual-announcement-wave') : null;
         if (wave) wave.style.display = voiceEnabled ? 'flex' : 'none';
         if (overlay) overlay.classList.add('show');
+        // This is the first trustworthy delivery point: the TV page is visible and the overlay is on screen.
+        gpAckManualAnnouncement(item, 'displayed');
 
         if (!voiceEnabled) {
             setVoiceCaption('', false);
@@ -1927,7 +1955,7 @@
 
         setVoiceCaption(text, true);
         try {
-            const voiceResponse = await fetch(apiUrl(`/api/followup-voice?lang=${encodeURIComponent(lang)}&text=${encodeURIComponent(text)}&t=${Date.now()}`), {cache:'no-store'});
+            const voiceResponse = await fetch(apiUrl(`/api/followup-voice?live=1&lang=${encodeURIComponent(lang)}&sender=${encodeURIComponent(sender)}&text=${encodeURIComponent(text)}&t=${Date.now()}`), {cache:'no-store'});
             if (!voiceResponse.ok || generation !== gpManualAnnouncementGeneration) throw new Error(`Voice API ${voiceResponse.status}`);
             const track = await voiceResponse.json();
             if (!track || !track.ok || !track.audio_url || generation !== gpManualAnnouncementGeneration) throw new Error('Voice track unavailable');
@@ -1941,21 +1969,24 @@
             teamVoicePlaying = true;
             setVoiceCaption(text, true);
 
-            const finish = () => {
+            const finish = (eventName) => {
                 if (generation !== gpManualAnnouncementGeneration) return;
+                if (eventName) gpAckManualAnnouncement(item, eventName);
                 if (teamVoiceAudio === audio) teamVoiceAudio = null;
                 teamVoicePlaying = false;
                 setVoiceCaption('', false);
                 setTimeout(() => gpHideManualAnnouncement(generation), 1600);
             };
-            audio.addEventListener('ended', finish, {once:true});
-            audio.addEventListener('error', finish, {once:true});
+            audio.addEventListener('playing', () => gpAckManualAnnouncement(item, 'audio_started'), {once:true});
+            audio.addEventListener('ended', () => finish('audio_finished'), {once:true});
+            audio.addEventListener('error', () => finish('audio_failed'), {once:true});
             const promise = audio.play();
             if (promise && typeof promise.catch === 'function') {
                 promise.catch(() => {
                     if (generation !== gpManualAnnouncementGeneration) return;
                     teamVoicePlaying = false;
                     setVoiceCaption('', false);
+                    gpAckManualAnnouncement(item, 'audio_failed');
                     showToast(tr('audioBlocked'), 7000);
                     setTimeout(() => gpHideManualAnnouncement(generation), 9000);
                 });
@@ -1964,6 +1995,7 @@
             if (generation !== gpManualAnnouncementGeneration) return;
             teamVoicePlaying = false;
             setVoiceCaption('', false);
+            gpAckManualAnnouncement(item, 'audio_failed');
             console.warn('Manual TV announcement voice failed:', err);
             setTimeout(() => gpHideManualAnnouncement(generation), 10000);
         }
