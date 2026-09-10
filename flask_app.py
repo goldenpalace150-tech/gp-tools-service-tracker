@@ -7,6 +7,7 @@ import asyncio
 import random
 import tempfile
 import threading
+import fcntl
 from io import StringIO
 from datetime import datetime
 
@@ -363,6 +364,8 @@ GP_TV_ANNOUNCEMENT_KEY = os.environ.get("GP_TV_ANNOUNCEMENT_KEY", "").strip()
 GP_MANUAL_DELIVERY_DIR = os.path.join(tempfile.gettempdir(), "gp_manual_delivery_v1")
 os.makedirs(GP_MANUAL_DELIVERY_DIR, exist_ok=True)
 
+# GP_MANUAL_ANNOUNCEMENT_ACK_RELIABILITY_V5
+
 
 def gp_manual_delivery_path(announcement_id):
     safe_id = str(announcement_id or "").strip()
@@ -375,10 +378,36 @@ def gp_write_manual_delivery_status(status):
     if not announcement_id:
         return
     path = gp_manual_delivery_path(announcement_id)
-    temp_path = f"{path}.{os.getpid()}.tmp"
-    with open(temp_path, "w", encoding="utf-8") as handle:
-        json.dump(status, handle, ensure_ascii=False)
-    os.replace(temp_path, path)
+    temp_path = f"{path}.{os.getpid()}.{threading.get_ident()}.{time.time_ns()}.tmp"
+    try:
+        with open(temp_path, "w", encoding="utf-8") as handle:
+            json.dump(status, handle, ensure_ascii=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+    finally:
+        try:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        except Exception:
+            pass
+
+
+def gp_lock_manual_delivery_status(announcement_id):
+    """Serialize one announcement ACK across Gunicorn processes and threads."""
+    lock_path = gp_manual_delivery_path(announcement_id) + ".lock"
+    handle = open(lock_path, "a+", encoding="utf-8")
+    fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+    return handle
+
+
+def gp_unlock_manual_delivery_status(handle):
+    if handle is None:
+        return
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    finally:
+        handle.close()
 
 
 def gp_read_manual_delivery_status(announcement_id):
@@ -676,8 +705,8 @@ def api_manual_announcement():
         "created_at": now,
         "expires_at": now + 600,
     }
-    gp_write_manual_announcement(announcement)
     gp_init_manual_delivery_status(announcement)
+    gp_write_manual_announcement(announcement)
     response = jsonify({"ok": True, **announcement})
     response.headers["Cache-Control"] = "no-store, max-age=0"
     return response
@@ -705,28 +734,32 @@ def api_manual_announcement_ack():
     if not announcement_id or event not in {"displayed", "human_acknowledged", "audio_started", "audio_finished", "audio_failed"}:
         return jsonify({"ok": False, "error": "invalid_ack"}), 400
 
-    status = gp_read_manual_delivery_status(announcement_id)
-    if status is None:
-        current = gp_read_manual_announcement()
-        if not current or str(current.get("id", "")) != announcement_id:
-            return jsonify({"ok": False, "error": "unknown_announcement"}), 404
-        status = gp_init_manual_delivery_status(current)
+    delivery_lock = gp_lock_manual_delivery_status(announcement_id)
+    try:
+        status = gp_read_manual_delivery_status(announcement_id)
+        if status is None:
+            current = gp_read_manual_announcement()
+            if not current or str(current.get("id", "")) != announcement_id:
+                return jsonify({"ok": False, "error": "unknown_announcement"}), 404
+            status = gp_init_manual_delivery_status(current)
 
-    now = time.time()
-    key = {
-        "displayed": "displayed_at",
-        "human_acknowledged": "human_acknowledged_at",
-        "audio_started": "audio_started_at",
-        "audio_finished": "audio_finished_at",
-        "audio_failed": "audio_failed_at",
-    }[event]
-    if not float(status.get(key, 0) or 0):
-        status[key] = now
-    if event in {"human_acknowledged", "audio_started", "audio_finished", "audio_failed"} and not float(status.get("displayed_at", 0) or 0):
-        status["displayed_at"] = now
-    status["last_tv_ack_at"] = now
-    status["tv_client"] = re.sub(r"[^A-Za-z0-9_-]", "", str(payload.get("client", "")))[:64]
-    gp_write_manual_delivery_status(status)
+        now = time.time()
+        key = {
+            "displayed": "displayed_at",
+            "human_acknowledged": "human_acknowledged_at",
+            "audio_started": "audio_started_at",
+            "audio_finished": "audio_finished_at",
+            "audio_failed": "audio_failed_at",
+        }[event]
+        if not float(status.get(key, 0) or 0):
+            status[key] = now
+        if event in {"human_acknowledged", "audio_started", "audio_finished", "audio_failed"} and not float(status.get("displayed_at", 0) or 0):
+            status["displayed_at"] = now
+        status["last_tv_ack_at"] = now
+        status["tv_client"] = re.sub(r"[^A-Za-z0-9_-]", "", str(payload.get("client", "")))[:64]
+        gp_write_manual_delivery_status(status)
+    finally:
+        gp_unlock_manual_delivery_status(delivery_lock)
     response = jsonify({"ok": True, "status": status})
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return response

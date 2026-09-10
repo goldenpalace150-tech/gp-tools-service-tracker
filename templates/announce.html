@@ -9,6 +9,7 @@
   <!-- GP_ANNOUNCE_BRAND_FAST_ACK_V3 -->
   <!-- GP_ANNOUNCE_V4 -->
   <!-- GP_ANNOUNCE_V4_COPY_FIX -->
+  <!-- GP_ANNOUNCE_DELIVERY_RELIABILITY_V5 -->
   <style>
     :root{--navy:#071a2d;--navy2:#0d2c49;--gold:#d5a62e;--gold2:#f1d16c;--ink:#172033;--muted:#64748b;--line:#dbe2ea;--bg:#eef2f7;--ok:#166534;--bad:#991b1b;--wait:#92400e}
     *{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:"Segoe UI",Tahoma,Arial,sans-serif;background:radial-gradient(circle at 10% 0%,#f7f9fc 0,#eef2f7 45%,#e8edf4 100%);color:var(--ink)}
@@ -109,6 +110,8 @@
     let attempts = 0;
     let finished = false;
     let policePlayed = false;
+    let technicalWarningShown = false;
+    const statusStartedAt = Date.now();
 
     const fmt = (ts) => {
       if (!ts) return '';
@@ -131,6 +134,8 @@
             const completed = Number(s.audio_finished_at || 0);
             const failed = Number(s.audio_failed_at || 0);
             if (displayed) {
+              box.classList.remove('fail');
+              technicalWarningShown = false;
               displayStep.classList.add('on');
               if (!policePlayed) {
                 policePlayed = true;
@@ -165,18 +170,18 @@
         }
       } catch (_) {}
 
-      if (!finished && attempts >= 180) {
-        if (displayStep && displayStep.classList.contains('on')) {
-          title.textContent = '⚠️ وصل للتلفزيون ولم يتم تأكيد الاطلاع';
-          text.textContent = 'التلفزيون عرض الإعلان، لكن لم يضغط أحد زر تم الاطلاع خلال 5 ثوانٍ.';
-        } else {
-          box.classList.add('fail');
-          title.textContent = '⚠️ لم يصل تأكيد من التلفزيون · No TV confirmation';
-          text.textContent = 'الخادم استلم الإعلان، لكن لم تؤكد أي شاشة عرضه خلال 5 ثوانٍ. قد تكون شاشة الورشة مطفأة أو غير متصلة.';
-        }
-        finished = true;
+      const tvDisplayed = Boolean(displayStep && displayStep.classList.contains('on'));
+      const elapsedMs = Date.now() - statusStartedAt;
+      if (!finished && !technicalWarningShown && !tvDisplayed && elapsedMs >= 5000) {
+        box.classList.add('fail');
+        title.textContent = '⚠️ لم يصل تأكيد من التلفزيون خلال 5 ثوانٍ · No TV confirmation';
+        text.textContent = 'الخادم استلم الإعلان، لكن لم تؤكد أي شاشة عرضه خلال 5 ثوانٍ. قد تكون شاشة الورشة مطفأة أو غير متصلة. سأستمر بمحاولة التحقق.';
+        technicalWarningShown = true;
       }
-      if (!finished) setTimeout(check, 250);
+      // The announcement itself expires after ten minutes. Until then a late TV
+      // delivery can recover the warning and a real human acknowledgment can arrive.
+      if (!finished && elapsedMs >= 600000) finished = true;
+      if (!finished) setTimeout(check, tvDisplayed ? 1000 : 250);
     }
     setTimeout(check, 200);
   })();
