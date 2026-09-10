@@ -1,17 +1,19 @@
-name: Apply Fast TV Command and Announcement V3
+name: Apply Fast TV Command and Announcement V4
 
 on:
   push:
     branches: [main]
     paths:
       - scripts/apply_fast_tv_command_announce_v3.py
+      - scripts/apply_tv_real_motion_announce_v4.py
+      - .github/workflows/apply-fast-tv-command-announce-v3.yml
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: gp-fast-tv-command-announce-v3
+  group: gp-fast-tv-command-announce-v4
   cancel-in-progress: false
 
 jobs:
@@ -22,11 +24,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply update
-        run: python scripts/apply_fast_tv_command_announce_v3.py
+      - name: Apply V3 base and V4 fixes
+        run: |
+          python scripts/apply_fast_tv_command_announce_v3.py
+          python scripts/apply_tv_real_motion_announce_v4.py
 
       - name: Validate Python
-        run: python -m py_compile tools_tracker.py flask_app.py scripts/apply_fast_tv_command_announce_v3.py
+        run: python -m py_compile tools_tracker.py flask_app.py scripts/apply_fast_tv_command_announce_v3.py scripts/apply_tv_real_motion_announce_v4.py
 
       - name: Validate TV JavaScript
         run: |
@@ -46,13 +50,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           text = Path('templates/announce.html').read_text(encoding='utf-8')
-          required = [
-              'GP_ANNOUNCE_BRAND_FAST_ACK_V3',
-              'manual-announcement/status',
-              'published_sender',
-              'gpLoadingOverlay',
-              'playPoliceAlert',
-          ]
+          required = ['GP_ANNOUNCE_V4','manual-announcement/status','published_sender','gpLoadingOverlay','5 ثوانٍ']
           missing = [item for item in required if item not in text]
           if missing:
               raise SystemExit('Announcement template missing: ' + ', '.join(missing))
@@ -60,12 +58,16 @@ jobs:
               raise SystemExit('Unbalanced announcement script tags')
           PY
 
-      - name: Verify update markers
+      - name: Verify V4 behavior markers
         run: |
-          grep -q 'GP_FAST_COMMAND_PATH_V3' tools_tracker.py
-          grep -q 'GP_FAST_COMMAND_PATH_V3' flask_app.py
-          grep -q 'GP_TV_LAYOUT_FULLSCREEN_MOVEMENT_V3' templates/tv.html
-          grep -q 'GP_ANNOUNCE_BRAND_FAST_ACK_V3' templates/announce.html
+          grep -q 'GP_ACK_MAX_5S_V4' tools_tracker.py
+          grep -q 'GP_ANNOUNCE_AND_MOTION_V4' flask_app.py
+          grep -q 'GP_TV_REAL_MOTION_V4' templates/tv.html
+          grep -q 'navigator.mediaDevices.getUserMedia' templates/tv.html
+          grep -q 'gpPlayTvPoliceAlert' templates/tv.html
+          grep -q 'id="fullscreenButton"' templates/tv.html
+          grep -q 'direction:rtl' templates/tv.html
+          grep -q 'GP_ANNOUNCE_V4' templates/announce.html
           git diff --check
 
       - name: Commit applied sources
@@ -77,5 +79,5 @@ jobs:
           git config user.name 'Golden Palace Update Bot'
           git config user.email 'actions@users.noreply.github.com'
           git add tools_tracker.py flask_app.py templates/tv.html templates/announce.html
-          git commit -m 'Speed TV commands and polish live announcements'
+          git commit -m 'Fix TV RTL, fullscreen, police alert, and real motion voice'
           git push origin main
