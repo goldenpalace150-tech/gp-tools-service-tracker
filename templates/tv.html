@@ -10,7 +10,8 @@
     <link rel="manifest" href="/manifest.webmanifest">
     <!-- GP_AMANY_KIOSK_2026_09_08 -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <title>Service Workshop Tracker - Golden Palace</title>
+    <title>GP Workshop TV</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23071a2d'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='28' font-family='Arial' font-weight='700' fill='%23f0bd08'%3EGP%3C/text%3E%3C/svg%3E">
     <style>
         :root {
             --bg: #f3f5f8;
@@ -501,7 +502,41 @@
       .gp-manual-announcement-meta{margin-top:24px;color:#a9bdd0;font-size:clamp(13px,1vw,18px);font-weight:750}
       .gp-manual-announcement-wave{display:flex;justify-content:center;align-items:flex-end;gap:7px;height:42px;margin-top:22px}
       .gp-manual-announcement-wave span{display:block;width:7px;border-radius:8px;background:#d5a62e;animation:gp-manual-wave .8s ease-in-out infinite alternate}.gp-manual-announcement-wave span:nth-child(1){height:14px}.gp-manual-announcement-wave span:nth-child(2){height:28px;animation-delay:.12s}.gp-manual-announcement-wave span:nth-child(3){height:40px;animation-delay:.24s}.gp-manual-announcement-wave span:nth-child(4){height:24px;animation-delay:.36s}.gp-manual-announcement-wave span:nth-child(5){height:34px;animation-delay:.48s}
+      /* GP_HUMAN_ACK_BUTTON_V1 */
+      .gp-manual-ack{margin:26px auto 0;min-width:min(620px,82vw);border:2px solid #86efac;border-radius:18px;background:linear-gradient(135deg,#22c55e,#15803d);color:#fff;padding:16px 24px;font-size:clamp(20px,1.7vw,30px);font-weight:950;box-shadow:0 12px 30px rgba(21,128,61,.32);cursor:pointer}
+      .gp-manual-ack:hover{filter:brightness(1.06)}.gp-manual-ack:disabled{cursor:default;opacity:.88}.gp-manual-ack.done{background:#166534;border-color:#bbf7d0}
       @keyframes gp-manual-wave{from{transform:scaleY(.45);opacity:.55}to{transform:scaleY(1);opacity:1}}
+    </style>
+
+    <!-- GP_PC_COLOR_PARITY_AND_TAB_FIX_V1 -->
+    <style id="gp-pc-color-parity-v1">
+      /* Keep the TV palette identical to the approved PC dashboard screenshot. */
+      body.main-view-body{background:#f3f5f8 !important;color:#172033 !important}
+      body.main-view-body .workflow-card{border:1px solid rgba(255,255,255,.18) !important;color:#fff !important;overflow:hidden !important}
+      body.main-view-body .workflow-card.progress{background:linear-gradient(135deg,#087be7 0%,#0751ad 100%) !important}
+      body.main-view-body .workflow-card.collection{background:linear-gradient(135deg,#ff7a10 0%,#dc4b00 100%) !important}
+      body.main-view-body .workflow-card.partner{background:linear-gradient(135deg,#6b2be5 0%,#3c1199 100%) !important}
+      body.main-view-body .workflow-card.zero{background:linear-gradient(135deg,#1db74c 0%,#087e2c 100%) !important}
+      body.main-view-body .workflow-card.collected{background:linear-gradient(135deg,#10a9b4 0%,#087985 100%) !important}
+      body.main-view-body .workflow-card.partner_closed{background:linear-gradient(135deg,#f0bd08 0%,#c78b00 100%) !important}
+      body.main-view-body .workflow-card .count,
+      body.main-view-body .workflow-card h2,
+      body.main-view-body .workflow-card .icon{color:#fff !important}
+      body.main-view-body .workflow-card p,
+      body.main-view-body .workflow-card .open-hint{color:rgba(255,255,255,.92) !important}
+      /* Reserve a fixed corner for the icon so long translated titles never sit on it. */
+      body.main-view-body .workflow-card .icon{position:absolute !important;top:15px !important;right:18px !important;left:auto !important;line-height:1 !important;z-index:2 !important;pointer-events:none}
+      body.lang-ar.main-view-body .workflow-card .icon{right:18px !important;left:auto !important}
+      body.main-view-body .workflow-card h2{max-width:calc(100% - 72px) !important;overflow-wrap:anywhere !important;line-height:1.15 !important}
+      body.lang-ar.main-view-body .workflow-card h2{margin-right:0 !important;margin-left:auto !important}
+      body.main-view-body .top-actions .action-btn,
+      body.main-view-body .top-actions .pill,
+      body.main-view-body .top-actions .language-select,
+      body.main-view-body .top-actions .status-chip{display:inline-flex !important;align-items:center !important;justify-content:center !important;gap:7px !important;white-space:nowrap !important;line-height:1.15 !important}
+      @media(max-width:1350px){
+        body.main-view-body .workflow-card .icon{font-size:40px !important;top:12px !important;right:14px !important}
+        body.main-view-body .workflow-card h2{max-width:calc(100% - 58px) !important;font-size:clamp(20px,1.9vw,30px) !important}
+      }
     </style>
 </head>
 <body>
@@ -626,6 +661,7 @@
     <div id="manualAnnouncementText" class="gp-manual-announcement-text"></div>
     <div id="manualAnnouncementMeta" class="gp-manual-announcement-meta"></div>
     <div class="gp-manual-announcement-wave" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+    <button id="manualAnnouncementAck" class="gp-manual-ack" type="button">✅ تم الاطلاع · Seen / Acknowledge</button>
   </div>
 </div>
 
@@ -908,7 +944,7 @@
     function gpFuMeta(c){const ar=currentLanguage==='ar',m={followup_overdue:{css:'overdue',label:ar?'🔴 متابعة متأخرة':'🔴 Overdue Follow-Up',spoken:ar?'متابعة متأخرة':'overdue follow-up'},followup_today:{css:'today',label:ar?'🟠 متابعة اليوم':'🟠 Due Today',spoken:ar?'متابعة مطلوبة اليوم':'follow-up due today'},followup_spares:{css:'spares',label:ar?'🟡 قطع غيار':'🟡 Spare Parts',spoken:ar?'متابعة قطع غيار':'spare parts follow-up'},followup_inquiries:{css:'inquiries',label:ar?'🔵 استفسار':'🔵 Inquiry',spoken:ar?'متابعة استفسار':'inquiry follow-up'}};return m[c]||m.followup_inquiries}
     function gpBuildFuSlides(data){const defs=[['followup_overdue','followup_overdue_list'],['followup_today','followup_due_today_list'],['followup_spares','followup_spare_parts_list'],['followup_inquiries','followup_inquiry_list']],out=[],seen=new Set();for(const [cat,key] of defs){for(const item of (Array.isArray(data?.[key])?data[key]:[])){const id=String(item.followup_id||`${item.related_id||''}|${item.title||''}|${item.next_followup||''}`);if(!id||seen.has(id))continue;seen.add(id);out.push({...item,_gpCategory:cat,_gpKey:id})}}return out}
     function gpFuSpeech(item,meta){const ar=currentLanguage==='ar',p=[meta.spoken],title=gpFuVal(item.title,''),action=gpFuVal(item.next_action,''),owner=gpFuVal(item.owner,''),waiting=gpFuVal(item.waiting_on,''),due=gpFuVal(item.next_followup,''),related=gpFuVal(item.related_id,''),days=Number(item.days_overdue||0);if(title)p.push(title);if(ar){if(action)p.push(`الخطوة الجاية: ${action}`);if(owner)p.push(`المسؤول: ${owner}`);if(waiting)p.push(`بانتظار: ${waiting}`);if(days>0)p.push(`متأخرة ${days} يوم`);else if(due)p.push(`موعد المتابعة: ${due}`);if(related)p.push(`الحالة المرتبطة: ${related}`)}else{if(action)p.push(`Next action: ${action}`);if(owner)p.push(`Owner: ${owner}`);if(waiting)p.push(`Waiting on: ${waiting}`);if(days>0)p.push(`${days} days overdue`);else if(due)p.push(`Next follow-up: ${due}`);if(related)p.push(`Related case: ${related}`)}return p.join('. ').replace(/\s+/g,' ').slice(0,430)}
-    async function gpAnnounceFu(item,meta){if(!item||detailMode||!teamVoiceEnabled||document.hidden||teamVoicePlaying)return;const text=gpFuSpeech(item,meta),key=`${currentLanguage}|${item._gpKey}|${item.next_action||''}|${item.waiting_on||''}`;if(key===gpFollowupLastAnnouncement&&Date.now()-gpFollowupLastAnnouncementAt<120000)return;try{const r=await fetch(apiUrl(`/api/followup-voice?lang=${encodeURIComponent(currentLanguage)}&text=${encodeURIComponent(text)}`),{cache:'no-store'});if(!r.ok||teamVoicePlaying||document.hidden)return;const t=await r.json();if(!t.ok||!t.audio_url)return;stopTeamVoiceAudio();const a=new Audio(apiUrl(t.audio_url));a.preload='auto';a.volume=TEAM_VOICE_VOLUME;teamVoiceAudio=a;teamVoicePlaying=true;gpFollowupLastAnnouncement=key;gpFollowupLastAnnouncementAt=Date.now();setVoiceCaption(text,true);await new Promise((ok,bad)=>{a.addEventListener('ended',ok,{once:true});a.addEventListener('error',bad,{once:true});a.play().catch(bad)});teamVoiceAudio=null;teamVoicePlaying=false;setVoiceCaption('',false)}catch(_){teamVoiceAudio=null;teamVoicePlaying=false;setVoiceCaption('',false)}}
+    async function gpAnnounceFu(item,meta){if(!item||detailMode||document.hidden||teamVoicePlaying)return;const isDelayed=item._gpCategory==='followup_overdue';if(isDelayed?!gpRemoteDelayedVoiceEnabled:!teamVoiceEnabled)return;const text=gpFuSpeech(item,meta),key=`${currentLanguage}|${item._gpKey}|${item.next_action||''}|${item.waiting_on||''}`;if(key===gpFollowupLastAnnouncement&&Date.now()-gpFollowupLastAnnouncementAt<120000)return;try{const r=await fetch(apiUrl(`/api/followup-voice?lang=${encodeURIComponent(currentLanguage)}&text=${encodeURIComponent(text)}`),{cache:'no-store'});if(!r.ok||teamVoicePlaying||document.hidden)return;const t=await r.json();if(!t.ok||!t.audio_url)return;stopTeamVoiceAudio();const a=new Audio(apiUrl(t.audio_url));a.preload='auto';a.volume=TEAM_VOICE_VOLUME;teamVoiceAudio=a;teamVoicePlaying=true;gpFollowupLastAnnouncement=key;gpFollowupLastAnnouncementAt=Date.now();setVoiceCaption(text,true);await new Promise((ok,bad)=>{a.addEventListener('ended',ok,{once:true});a.addEventListener('error',bad,{once:true});a.play().catch(bad)});teamVoiceAudio=null;teamVoicePlaying=false;setVoiceCaption('',false)}catch(_){teamVoiceAudio=null;teamVoicePlaying=false;setVoiceCaption('',false)}}
     function gpFuProgress(){const b=document.getElementById('followupSlideProgress');if(!b)return;b.style.animation='none';void b.offsetWidth;b.style.animation=''}
     function renderFollowupSlide(announce=false){const s=document.getElementById('followupStation'),btn=document.getElementById('followupSlide');if(!s||!btn)return;const ar=currentLanguage==='ar';document.getElementById('followupStationTitle').textContent=ar?'📌 محطة المتابعة':'📌 Follow-Up Station';document.getElementById('followupOwnerLabel').textContent=ar?'المسؤول':'Owner';document.getElementById('followupWaitingLabel').textContent=ar?'بانتظار':'Waiting on';document.getElementById('followupDueLabel').textContent=ar?'المتابعة القادمة':'Next follow-up';document.getElementById('followupRelatedLabel').textContent=ar?'الحالة المرتبطة':'Related ID';if(!gpFollowupSlides.length){s.className='followup-station empty';btn.dataset.category='';document.getElementById('followupSlideCategory').textContent=ar?'✅ لا يوجد متابعات':'✅ Follow-Up Clear';document.getElementById('followupSlidePosition').textContent='';document.getElementById('followupSlideTitle').textContent=ar?'لا يوجد حالات متابعة معلّقة':'No follow-up cases waiting';document.getElementById('followupSlideBrief').textContent=ar?'أي حالة جديدة رح تظهر هون تلقائياً.':'New follow-up cases will appear here automatically.';['followupSlideOwner','followupSlideWaiting','followupSlideDue','followupSlideRelated'].forEach(id=>document.getElementById(id).textContent='—');gpFuProgress();return}if(gpFollowupSlideIndex>=gpFollowupSlides.length)gpFollowupSlideIndex=0;const x=gpFollowupSlides[gpFollowupSlideIndex],m=gpFuMeta(x._gpCategory);s.className=`followup-station cat-${m.css}`;btn.dataset.category=x._gpCategory;document.getElementById('followupSlideCategory').textContent=m.label;document.getElementById('followupSlidePosition').textContent=`${gpFollowupSlideIndex+1} / ${gpFollowupSlides.length}`;document.getElementById('followupSlideTitle').textContent=gpFuVal(x.title,gpFuVal(x.related_id,gpFuVal(x.followup_id,ar?'حالة متابعة':'Follow-Up Case')));document.getElementById('followupSlideBrief').textContent=gpFuVal(x.next_action,gpFuVal(x.waiting_on,ar?'لا توجد خطوة تالية مسجلة':'No next action recorded'));document.getElementById('followupSlideOwner').textContent=gpFuVal(x.owner);document.getElementById('followupSlideWaiting').textContent=gpFuVal(x.waiting_on);document.getElementById('followupSlideDue').textContent=x.timing==='overdue'&&Number(x.days_overdue||0)>0?(ar?`متأخرة ${Number(x.days_overdue)} يوم`:`${Number(x.days_overdue)} days overdue`):gpFuVal(x.next_followup);document.getElementById('followupSlideRelated').textContent=gpFuVal(x.related_id,gpFuVal(x.followup_id));gpFuProgress();if(announce)setTimeout(()=>gpAnnounceFu(x,m),350)}
     function updateFollowupSlideshow(data){const old=gpFollowupSlides[gpFollowupSlideIndex]?._gpKey;gpFollowupSlides=gpBuildFuSlides(data);if(old){const i=gpFollowupSlides.findIndex(x=>x._gpKey===old);gpFollowupSlideIndex=i>=0?i:0}else if(gpFollowupSlideIndex>=gpFollowupSlides.length)gpFollowupSlideIndex=0;renderFollowupSlide(false);if(!gpFollowupSlideTimer){setTimeout(()=>renderFollowupSlide(true),900);gpFollowupSlideTimer=setInterval(()=>{if(detailMode||document.hidden||!gpFollowupSlides.length)return;gpFollowupSlideIndex=(gpFollowupSlideIndex+1)%gpFollowupSlides.length;renderFollowupSlide(true)},GP_FOLLOWUP_SLIDE_MS)}}
@@ -1872,6 +1908,11 @@
 
     // GP_MANUAL_TV_ANNOUNCEMENT_RUNTIME_V1
     const GP_MANUAL_ANNOUNCEMENT_POLL_MS = 1000;
+
+    // GP_LIVE_CRISP_VOICE_V1
+    // Exact same approved Crisp voice family used by staff encouragement clips.
+    const GP_LIVE_CRISP_ALERT_AR = 'https://storage.googleapis.com/adm--audio-playback--7d--public/mcp-preview/3c4c9622-dca4-4698-9861-5c931dbbddd0.mp3';
+    const GP_LIVE_CRISP_ALERT_EN = 'https://storage.googleapis.com/adm--audio-playback--7d--public/mcp-preview/2ac78b6a-b049-4ef0-9839-fb4915f82db1.mp3';
     const GP_MANUAL_ANNOUNCEMENT_STORAGE_KEY = 'gpManualAnnouncementLastIdV1';
     let gpManualAnnouncementLastId = (() => { try { return localStorage.getItem(GP_MANUAL_ANNOUNCEMENT_STORAGE_KEY) || ''; } catch (_) { return ''; } })();
     let gpManualAnnouncementPollInFlight = false;
@@ -1896,15 +1937,18 @@
         } catch (_) { return 'tv-browser'; }
     })();
 
-    function gpAckManualAnnouncement(item, event) {
-        if (!item || !item.id || !event) return;
-        fetch(apiUrl('/api/manual-announcement/ack'), {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            cache: 'no-store',
-            keepalive: true,
-            body: JSON.stringify({id:String(item.id), event:String(event), client:gpTvAckClient})
-        }).catch(() => {});
+    async function gpAckManualAnnouncement(item, event) {
+        if (!item || !item.id || !event) return false;
+        try {
+            const response = await fetch(apiUrl('/api/manual-announcement/ack'), {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                cache: 'no-store',
+                keepalive: true,
+                body: JSON.stringify({id:String(item.id), event:String(event), client:gpTvAckClient})
+            });
+            return response.ok;
+        } catch (_) { return false; }
     }
 
     async function gpPlayManualAnnouncement(item) {
@@ -1925,6 +1969,25 @@
         const label = document.getElementById('manualAnnouncementLabel');
         const textEl = document.getElementById('manualAnnouncementText');
         const meta = document.getElementById('manualAnnouncementMeta');
+        const ackBtn = document.getElementById('manualAnnouncementAck');
+        if (ackBtn) {
+            ackBtn.disabled = false;
+            ackBtn.classList.remove('done');
+            ackBtn.textContent = lang === 'ar' ? '✅ تم الاطلاع · Seen / Acknowledge' : '✅ Seen / Acknowledge';
+            ackBtn.onclick = async () => {
+                ackBtn.disabled = true;
+                ackBtn.textContent = lang === 'ar' ? 'جاري إرسال التأكيد...' : 'Sending acknowledgment...';
+                const ok = await gpAckManualAnnouncement(item, 'human_acknowledged');
+                if (!ok) {
+                    ackBtn.disabled = false;
+                    ackBtn.textContent = lang === 'ar' ? '⚠️ تعذر التأكيد · اضغط مرة أخرى' : '⚠️ Could not confirm · Try again';
+                    return;
+                }
+                ackBtn.classList.add('done');
+                ackBtn.textContent = lang === 'ar' ? '✅ تم تأكيد الاطلاع' : '✅ Acknowledged';
+                setTimeout(() => gpHideManualAnnouncement(generation), 1400);
+            };
+        }
         if (card) {
             card.dir = lang === 'ar' ? 'rtl' : 'ltr';
             card.style.textAlign = 'center';
@@ -1949,20 +2012,16 @@
                 if (generation !== gpManualAnnouncementGeneration) return;
                 teamVoicePlaying = false;
                 gpHideManualAnnouncement(generation);
-            }, 8000);
+            }, 30000);
             return;
         }
 
         setVoiceCaption(text, true);
         try {
-            const voiceResponse = await fetch(apiUrl(`/api/followup-voice?live=1&lang=${encodeURIComponent(lang)}&sender=${encodeURIComponent(sender)}&text=${encodeURIComponent(text)}&t=${Date.now()}`), {cache:'no-store'});
-            if (!voiceResponse.ok || generation !== gpManualAnnouncementGeneration) throw new Error(`Voice API ${voiceResponse.status}`);
-            const track = await voiceResponse.json();
-            if (!track || !track.ok || !track.audio_url || generation !== gpManualAnnouncementGeneration) throw new Error('Voice track unavailable');
-
             stopTeamVoiceAudio();
             if (generation !== gpManualAnnouncementGeneration) return;
-            const audio = new Audio(apiUrl(track.audio_url));
+            const crispUrl = lang === 'ar' ? GP_LIVE_CRISP_ALERT_AR : GP_LIVE_CRISP_ALERT_EN;
+            const audio = new Audio(crispUrl);
             audio.preload = 'auto';
             audio.volume = TEAM_VOICE_VOLUME;
             teamVoiceAudio = audio;
@@ -1975,7 +2034,7 @@
                 if (teamVoiceAudio === audio) teamVoiceAudio = null;
                 teamVoicePlaying = false;
                 setVoiceCaption('', false);
-                setTimeout(() => gpHideManualAnnouncement(generation), 1600);
+                setTimeout(() => gpHideManualAnnouncement(generation), 30000);
             };
             audio.addEventListener('playing', () => gpAckManualAnnouncement(item, 'audio_started'), {once:true});
             audio.addEventListener('ended', () => finish('audio_finished'), {once:true});
@@ -1988,7 +2047,7 @@
                     setVoiceCaption('', false);
                     gpAckManualAnnouncement(item, 'audio_failed');
                     showToast(tr('audioBlocked'), 7000);
-                    setTimeout(() => gpHideManualAnnouncement(generation), 9000);
+                    setTimeout(() => gpHideManualAnnouncement(generation), 30000);
                 });
             }
         } catch (err) {
@@ -1997,7 +2056,7 @@
             setVoiceCaption('', false);
             gpAckManualAnnouncement(item, 'audio_failed');
             console.warn('Manual TV announcement voice failed:', err);
-            setTimeout(() => gpHideManualAnnouncement(generation), 10000);
+            setTimeout(() => gpHideManualAnnouncement(generation), 30000);
         }
     }
 
@@ -2026,6 +2085,8 @@
     let gpTvControlPollInFlight = false;
     let gpTvControlRevision = null;
     let gpRemoteStaffVoiceEnabled = null;
+    // GP_DELAYED_VOICE_RUNTIME_V1
+    let gpRemoteDelayedVoiceEnabled = true;
 
     function gpManualAnnouncementVisible() {
         const overlay = document.getElementById('manualAnnouncementOverlay');
@@ -2063,6 +2124,7 @@
             if (!state || !state.ok) return;
 
             gpApplyRemoteStaffVoice(state.staff_voice_enabled !== false);
+            gpRemoteDelayedVoiceEnabled = state.delayed_voice_enabled !== false;
 
             const revision = String(state.data_revision || '');
             if (gpTvControlRevision === null) {

@@ -2531,36 +2531,57 @@ elif st.session_state['current_module'] == 'FollowUp':
         try:
             gp_tv_state = gp_tv_control_request("GET")
             gp_staff_voice_current = bool(gp_tv_state.get("staff_voice_enabled", True))
+            gp_delayed_voice_current = bool(gp_tv_state.get("delayed_voice_enabled", True))
         except Exception:
             gp_tv_state = {"ok": False}
             gp_staff_voice_current = True
+            gp_delayed_voice_current = True
 
+        # GP_DELAYED_VOICE_CONTROL_V1
         gp_staff_voice_choice = st.toggle(
-            "🔊 الإعلانات العشوائية للموظفين (Random staff voice announcements)",
+            "🔊 الإعلانات العشوائية للموظفين (Random staff encouragement voice)",
             value=gp_staff_voice_current,
-            help="هذا المفتاح يتحكم بالصوت العشوائي الدوري للموظفين على شاشة التلفزيون، ولا يلغي خيار الصوت الخاص بالإعلان اليدوي.",
+            help="يشغّل أو يوقف رسائل التشجيع العشوائية للموظفين فقط.",
             key="gp_staff_random_voice_backend_toggle",
         )
-        c_tv_voice, c_tv_push = st.columns(2)
-        with c_tv_voice:
-            if st.button("✅ تطبيق الصوت فوراً على التلفزيون", use_container_width=True, key="gp_apply_staff_voice_tv"):
+        gp_delayed_voice_choice = st.toggle(
+            "⏰ تنبيه الحالات المتأخرة (Delayed follow-up announcement)",
+            value=gp_delayed_voice_current,
+            help="مستقل عن صوت تشجيع الموظفين. عند إيقافه تبقى الحالة المتأخرة ظاهرة على الشاشة بدون إعلان صوتي.",
+            key="gp_delayed_voice_backend_toggle",
+        )
+
+        c_staff_voice, c_delayed_voice = st.columns(2)
+        with c_staff_voice:
+            if st.button("✅ تطبيق صوت الموظفين", use_container_width=True, key="gp_apply_staff_voice_tv"):
                 try:
                     gp_tv_control_request(
                         "POST",
                         staff_voice_enabled=bool(gp_staff_voice_choice),
                         reason="backend_staff_voice_change",
                     )
-                    st.success("✅ تم تحديث صوت الموظفين على التلفزيون فوراً.")
+                    st.success("✅ تم تحديث صوت تشجيع الموظفين فوراً.")
                 except Exception as exc:
-                    st.error(f"❌ تعذر تحديث إعداد الصوت: {exc}")
-        with c_tv_push:
-            if st.button("⚡ دفع أحدث البيانات إلى التلفزيون الآن", use_container_width=True, key="gp_push_tv_now"):
+                    st.error(f"❌ تعذر تحديث صوت الموظفين: {exc}")
+        with c_delayed_voice:
+            if st.button("✅ تطبيق تنبيه التأخير", use_container_width=True, key="gp_apply_delayed_voice_tv"):
                 try:
-                    gp_tv_control_request("POST", refresh_now=True, reason="manual_backend_push")
-                    st.success("✅ تم إرسال أمر تحديث فوري إلى التلفزيون.")
+                    gp_tv_control_request(
+                        "POST",
+                        delayed_voice_enabled=bool(gp_delayed_voice_choice),
+                        reason="backend_delayed_voice_change",
+                    )
+                    st.success("✅ تم تحديث تنبيه الحالات المتأخرة فوراً.")
                 except Exception as exc:
-                    st.error(f"❌ تعذر إرسال أمر التحديث: {exc}")
-        st.caption("أي حفظ جديد داخل النظام يرسل أمر تحديث للتلفزيون تلقائياً أيضاً. التحديث الدوري كل 15 ثانية يبقى كنسخة احتياطية فقط.")
+                    st.error(f"❌ تعذر تحديث تنبيه التأخير: {exc}")
+
+        if st.button("⚡ دفع أحدث البيانات إلى التلفزيون الآن", use_container_width=True, key="gp_push_tv_now"):
+            try:
+                gp_tv_control_request("POST", refresh_now=True, reason="manual_backend_push")
+                st.success("✅ تم إرسال أمر تحديث فوري إلى التلفزيون.")
+            except Exception as exc:
+                st.error(f"❌ تعذر إرسال أمر التحديث: {exc}")
+        st.caption("صوت الموظفين وتنبيه الحالات المتأخرة أصبحا مستقلين. أي حفظ جديد يرسل أيضاً أمر تحديث فوري للتلفزيون.")
 
     # GP_MANUAL_TV_ANNOUNCEMENT_UI_V1
     with st.expander("📣 إعلان مباشر إلى شاشة الورشة (Live TV Announcement)", expanded=False):

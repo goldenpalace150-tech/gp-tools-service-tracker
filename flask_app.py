@@ -406,6 +406,7 @@ def gp_init_manual_delivery_status(announcement):
         "id": str(announcement.get("id", "")),
         "server_accepted_at": float(announcement.get("created_at", now) or now),
         "displayed_at": 0,
+        "human_acknowledged_at": 0,
         "audio_started_at": 0,
         "audio_finished_at": 0,
         "audio_failed_at": 0,
@@ -469,6 +470,8 @@ GP_TV_CONTROL_LOCK = threading.RLock()
 def gp_default_tv_control():
     return {
         "staff_voice_enabled": True,
+        # GP_HUMAN_ACK_AND_DELAYED_CONTROL_V1
+        "delayed_voice_enabled": True,
         "data_revision": "",
         "updated_at": 0,
         "reason": "",
@@ -487,6 +490,7 @@ def gp_read_tv_control():
     except Exception as exc:
         print("TV control read error:", repr(exc))
     state["staff_voice_enabled"] = bool(state.get("staff_voice_enabled", True))
+    state["delayed_voice_enabled"] = bool(state.get("delayed_voice_enabled", True))
     state["data_revision"] = str(state.get("data_revision", "") or "")
     return state
 
@@ -517,6 +521,8 @@ def api_tv_control():
         payload = request.get_json(silent=True) or {}
         if "staff_voice_enabled" in payload:
             state["staff_voice_enabled"] = bool(payload.get("staff_voice_enabled"))
+        if "delayed_voice_enabled" in payload:
+            state["delayed_voice_enabled"] = bool(payload.get("delayed_voice_enabled"))
         if payload.get("refresh_now"):
             # String form preserves nanosecond uniqueness in JavaScript.
             state["data_revision"] = str(time.time_ns())
@@ -649,7 +655,7 @@ def api_manual_announcement_ack():
     payload = request.get_json(silent=True) or {}
     announcement_id = str(payload.get("id", "") or "").strip()
     event = str(payload.get("event", "") or "").strip().lower()
-    if not announcement_id or event not in {"displayed", "audio_started", "audio_finished", "audio_failed"}:
+    if not announcement_id or event not in {"displayed", "human_acknowledged", "audio_started", "audio_finished", "audio_failed"}:
         return jsonify({"ok": False, "error": "invalid_ack"}), 400
 
     status = gp_read_manual_delivery_status(announcement_id)
@@ -662,13 +668,14 @@ def api_manual_announcement_ack():
     now = time.time()
     key = {
         "displayed": "displayed_at",
+        "human_acknowledged": "human_acknowledged_at",
         "audio_started": "audio_started_at",
         "audio_finished": "audio_finished_at",
         "audio_failed": "audio_failed_at",
     }[event]
     if not float(status.get(key, 0) or 0):
         status[key] = now
-    if event in {"audio_started", "audio_finished", "audio_failed"} and not float(status.get("displayed_at", 0) or 0):
+    if event in {"human_acknowledged", "audio_started", "audio_finished", "audio_failed"} and not float(status.get("displayed_at", 0) or 0):
         status["displayed_at"] = now
     status["last_tv_ack_at"] = now
     status["tv_client"] = re.sub(r"[^A-Za-z0-9_-]", "", str(payload.get("client", "")))[:64]

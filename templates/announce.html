@@ -36,7 +36,7 @@
         <div id="deliveryTitle" class="delivery-title">📤 تم إرسال الإعلان إلى الخادم · Accepted by server</div>
         <div id="deliveryText" class="delivery-text">بانتظار تأكيد شاشة التلفزيون... قد تكون الشاشة مطفأة أو غير متصلة.</div>
         <div id="deliveryMeta" class="delivery-meta">{{ published_sender or 'Management' }}</div>
-        <div class="steps"><span id="stepServer" class="step on">✓ Server</span><span id="stepDisplay" class="step">TV display</span>{% if published_voice_enabled %}<span id="stepAudio" class="step">Voice</span>{% endif %}</div>
+        <div class="steps"><span id="stepServer" class="step on">✓ Server</span><span id="stepDisplay" class="step">TV received</span>{% if published_voice_enabled %}<span id="stepAudio" class="step">Voice alert</span>{% endif %}<span id="stepHuman" class="step">Seen / Acknowledge</span></div>
       </div>
       {% endif %}
       {% if error %}<div class="notice bad">{{ error }}</div>{% endif %}
@@ -53,7 +53,7 @@
       </form>
 
       {% if success and published_text %}<div class="last"><small>LAST SENT</small><div>{{ published_text }}</div></div>{% endif %}
-      <div class="privacy">“Sent” means the server accepted the announcement. “Observed on TV” appears only after an active TV browser reports that it displayed it.</div>
+      <div class="privacy">“Sent” means the server accepted it. “TV received” is technical delivery. “Seen / Acknowledged” appears only after a person presses the button on the workshop TV.</div>
     </section>
   </main>
 
@@ -68,6 +68,8 @@
     const meta = document.getElementById('deliveryMeta');
     const displayStep = document.getElementById('stepDisplay');
     const audioStep = document.getElementById('stepAudio');
+    const humanStep = document.getElementById('stepHuman');
+    // GP_HUMAN_ACK_STATUS_UI_V1
     let attempts = 0;
     let finished = false;
 
@@ -87,35 +89,48 @@
           const s = payload && payload.status;
           if (s) {
             const displayed = Number(s.displayed_at || 0);
+            const acknowledged = Number(s.human_acknowledged_at || 0);
             const started = Number(s.audio_started_at || 0);
             const completed = Number(s.audio_finished_at || 0);
             const failed = Number(s.audio_failed_at || 0);
             if (displayed) {
-              box.classList.add('seen');
               displayStep.classList.add('on');
-              title.textContent = '✅ تمت مشاهدة الإعلان على شاشة التلفزيون · Observed on TV';
-              text.textContent = `أكدت شاشة التلفزيون عرض الإعلان${fmt(displayed) ? ` الساعة ${fmt(displayed)}` : ''}.`;
+              title.textContent = '📺 وصل الإعلان إلى شاشة التلفزيون · Delivered to TV';
+              text.textContent = `الشاشة استلمت وعرضت الإعلان${fmt(displayed) ? ` الساعة ${fmt(displayed)}` : ''}. بانتظار ضغط الموظف على زر تم الاطلاع.`;
               if (voiceEnabled && started && audioStep) {
                 audioStep.classList.add('on');
-                audioStep.textContent = completed ? '✓ Voice finished' : '✓ Voice started';
+                audioStep.textContent = completed ? '✓ Voice alert finished' : '✓ Voice alert started';
               }
               if (voiceEnabled && failed && audioStep) {
                 audioStep.classList.remove('on');
                 audioStep.classList.add('bad');
-                audioStep.textContent = 'Voice failed';
-                text.textContent += ' ظهر الإعلان بصرياً لكن تشغيل الصوت لم يكتمل.';
+                audioStep.textContent = 'Voice alert failed';
+                text.textContent += ' وصل الإعلان بصرياً لكن التنبيه الصوتي لم يكتمل.';
               }
-              meta.textContent = s.tv_client ? `TV acknowledgment: ${s.tv_client}` : 'TV acknowledgment received';
-              if (!voiceEnabled || completed || failed) finished = true;
+              meta.textContent = s.tv_client ? `TV: ${s.tv_client}` : 'TV delivery confirmed';
+            }
+            if (acknowledged) {
+              box.classList.remove('fail');
+              box.classList.add('seen');
+              humanStep.classList.add('on');
+              humanStep.textContent = '✓ Seen / Acknowledged';
+              title.textContent = '✅ تم تأكيد الاطلاع · Seen / Acknowledged';
+              text.textContent = `تم ضغط زر الاطلاع على شاشة الورشة${fmt(acknowledged) ? ` الساعة ${fmt(acknowledged)}` : ''}.`;
+              finished = true;
             }
           }
         }
       } catch (_) {}
 
-      if (!finished && attempts >= 20) {
-        box.classList.add('fail');
-        title.textContent = '⚠️ لم يصل تأكيد من التلفزيون · No TV confirmation';
-        text.textContent = 'الخادم استلم الإعلان، لكن لم تؤكد أي شاشة عرضه خلال 20 ثانية. قد تكون شاشة الورشة مطفأة أو غير متصلة.';
+      if (!finished && attempts >= 45) {
+        if (displayStep && displayStep.classList.contains('on')) {
+          title.textContent = '⚠️ وصل للتلفزيون ولم يتم تأكيد الاطلاع';
+          text.textContent = 'التلفزيون عرض الإعلان، لكن لم يضغط أحد زر Seen / Acknowledge خلال 45 ثانية.';
+        } else {
+          box.classList.add('fail');
+          title.textContent = '⚠️ لم يصل تأكيد من التلفزيون · No TV confirmation';
+          text.textContent = 'الخادم استلم الإعلان، لكن لم تؤكد أي شاشة عرضه خلال 45 ثانية. قد تكون شاشة الورشة مطفأة أو غير متصلة.';
+        }
         finished = true;
       }
       if (!finished) setTimeout(check, 1000);
