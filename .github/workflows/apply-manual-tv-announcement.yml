@@ -10,6 +10,7 @@ on:
       - scripts/apply_management_announce_page.py
       - scripts/apply_announcement_delivery_ack.py
       - scripts/apply_tv_human_ack_color_voice_v1.py
+      - scripts/apply_tv_control_reliable_v2.py
       - templates/announce.html
       - .github/workflows/apply-manual-tv-announcement.yml
   workflow_dispatch:
@@ -36,6 +37,8 @@ jobs:
         run: python scripts/apply_announcement_delivery_ack.py
       - name: Apply human acknowledgement, color parity, and delayed voice control
         run: python scripts/apply_tv_human_ack_color_voice_v1.py
+      - name: Apply reliable one-click TV control and acknowledgments
+        run: python scripts/apply_tv_control_reliable_v2.py
       - name: Validate Python
         run: python -m py_compile tools_tracker.py flask_app.py
       - name: Validate TV inline JavaScript
@@ -72,14 +75,18 @@ jobs:
           grep -q 'GP_DELAYED_VOICE_CONTROL_V1' tools_tracker.py
           grep -q 'GP_DELAYED_VOICE_RUNTIME_V1' templates/tv.html
           grep -q 'GP_PC_COLOR_PARITY_AND_TAB_FIX_V1' templates/tv.html
+          grep -q 'GP_TV_CONTROL_RELIABLE_V2' tools_tracker.py
+          grep -q 'GP_TV_COMMAND_ACK_V2' flask_app.py
+          grep -q 'GP_TV_COMMAND_ACK_RUNTIME_V2' templates/tv.html
+          grep -q 'golden-palace-service-tracker.onrender.com/tv?lang=ar' GP-TV-Fullscreen.cmd
       - name: Commit applied files
         run: |
-          if git diff --quiet -- tools_tracker.py flask_app.py templates/tv.html templates/announce.html; then
+          if git diff --quiet -- tools_tracker.py flask_app.py templates/tv.html templates/announce.html GP-TV-Fullscreen.cmd; then
             echo 'No app changes required.'
             exit 0
           fi
           git config user.name 'Golden Palace Update Bot'
           git config user.email 'actions@users.noreply.github.com'
-          git add tools_tracker.py flask_app.py templates/tv.html templates/announce.html
-          git commit -m 'Add human TV acknowledgment and dashboard parity'
+          git add tools_tracker.py flask_app.py templates/tv.html templates/announce.html GP-TV-Fullscreen.cmd
+          git commit -m 'Make TV controls one-click and acknowledgment driven'
           git push
