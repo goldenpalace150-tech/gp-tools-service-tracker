@@ -538,6 +538,22 @@
         body.main-view-body .workflow-card h2{max-width:calc(100% - 58px) !important;font-size:clamp(20px,1.9vw,30px) !important}
       }
     </style>
+
+    <!-- GP_TV_REAL_MOTION_V4 -->
+    <style id="gp-tv-real-motion-v4">
+      /* Arabic means right-to-left card placement too: first workflow starts at the right. */
+      body.lang-ar.main-view-body .dashboard-grid{direction:rtl!important}
+      body.lang-ar.main-view-body .workflow-card{direction:rtl!important;text-align:right!important;padding-top:54px!important}
+      body.lang-ar.main-view-body .workflow-card .icon{top:13px!important;right:18px!important;left:auto!important}
+      body.lang-ar.main-view-body .workflow-card .open-hint{top:15px!important;left:18px!important;right:auto!important;text-align:left!important}
+      body.lang-ar.main-view-body .workflow-card .count{width:100%!important;text-align:center!important;margin:3px 0 5px!important}
+      body.lang-ar.main-view-body .workflow-card h2{width:100%!important;max-width:100%!important;text-align:center!important;margin:0!important;line-height:1.15!important}
+      body.lang-ar.main-view-body .workflow-card p{width:100%!important;text-align:center!important;margin-left:auto!important;margin-right:auto!important}
+      #fullscreenButton,#motionVoiceButton{flex:0 0 auto!important;white-space:nowrap!important}
+      #motionVoiceButton.on{background:#0a2d29!important;border-color:#1f755a!important;color:#baf7cf!important}
+      #motionVoiceButton.error{background:#381720!important;border-color:#7f1d2d!important;color:#fecaca!important}
+      #gpMotionVideo,#gpMotionCanvas{position:fixed!important;width:1px!important;height:1px!important;opacity:.001!important;pointer-events:none!important;left:-20px!important;bottom:-20px!important}
+    </style>
 </head>
 <body>
 <div class="page">
@@ -560,6 +576,8 @@
             </select>
             <button id="voiceButton" class="action-btn voice-btn off" type="button">Enable / Disable</button>
             <button id="voiceTestButton" class="action-btn" type="button">▶ Test voice</button>
+            <button id="motionVoiceButton" class="action-btn" type="button" title="Real camera movement detection">🎥 حركة</button>
+            <button id="fullscreenButton" class="action-btn" type="button" title="Fullscreen">⛶ ملء الشاشة</button>
             <button id="mainButton" class="action-btn" type="button" style="display:none">↩ Dashboard</button>
             <div class="clock-box"><div id="clockDate" class="date"></div><div id="clockTime" class="time"></div></div>
         </div>
@@ -1907,7 +1925,7 @@
 
 
     // GP_MANUAL_TV_ANNOUNCEMENT_RUNTIME_V1
-    const GP_MANUAL_ANNOUNCEMENT_POLL_MS = 1000;
+    const GP_MANUAL_ANNOUNCEMENT_POLL_MS = 500;
 
     // GP_LIVE_CRISP_VOICE_V1
     // Exact same approved Crisp voice family used by staff encouragement clips.
@@ -2003,6 +2021,7 @@
         const wave = card ? card.querySelector('.gp-manual-announcement-wave') : null;
         if (wave) wave.style.display = voiceEnabled ? 'flex' : 'none';
         if (overlay) overlay.classList.add('show');
+        try { window.gpPlayTvPoliceAlert?.(); } catch (_) {}
         // This is the first trustworthy delivery point: the TV page is visible and the overlay is on screen.
         gpAckManualAnnouncement(item, 'displayed');
 
@@ -2287,117 +2306,144 @@
 })();
 </script>
 
-    <!-- GP_TV_LAYOUT_FULLSCREEN_MOVEMENT_V3 -->
-    <style id="gp-tv-layout-fullscreen-movement-v3">
-      body.lang-ar.main-view-body .workflow-card{
-        padding-top:clamp(46px,4.2vw,62px)!important;
-      }
-      body.lang-ar.main-view-body .workflow-card .icon{
-        top:12px!important;right:16px!important;left:auto!important;
-      }
-      body.lang-ar.main-view-body .workflow-card h2{
-        max-width:100%!important;width:100%!important;margin:0!important;
-        text-align:center!important;line-height:1.18!important;
-        overflow-wrap:anywhere!important;
-      }
-      body.lang-ar.main-view-body .workflow-card .count{
-        text-align:center!important;
-      }
-      .gp-tv-floating-controls{
-        position:fixed;right:14px;bottom:14px;z-index:95;display:flex;gap:8px;
-        align-items:center;direction:ltr;
-      }
-      .gp-tv-float-btn{
-        border:1px solid rgba(213,166,46,.72);background:#071a2d;color:#fff;
-        min-height:42px;padding:9px 13px;border-radius:999px;font-weight:850;
-        box-shadow:0 8px 24px rgba(7,26,45,.24);font-size:13px;
-      }
-      .gp-tv-float-btn.on{background:#14532d;border-color:#86efac}
-      .gp-tv-float-btn:hover{filter:brightness(1.08)}
-      @media(max-width:800px){.gp-tv-floating-controls{right:8px;bottom:8px}.gp-tv-float-btn{padding:8px 10px;font-size:12px}}
-    </style>
-    <div class="gp-tv-floating-controls" id="gpTvFloatingControls">
-      <button type="button" class="gp-tv-float-btn" id="gpFullscreenToggle">⛶ Fullscreen</button>
-      <button type="button" class="gp-tv-float-btn" id="gpMovementVoiceToggle">😄 حركة ON</button>
-    </div>
+
+    <!-- GP_TV_REAL_MOTION_RUNTIME_V4 -->
+    <video id="gpMotionVideo" playsinline muted></video><canvas id="gpMotionCanvas" width="96" height="54"></canvas>
     <script>
     (() => {
       const detail = new URLSearchParams(location.search).get('view') === 'details';
-      const fsBtn = document.getElementById('gpFullscreenToggle');
-      const moveBtn = document.getElementById('gpMovementVoiceToggle');
-      const controls = document.getElementById('gpTvFloatingControls');
-      if (detail && controls) controls.style.display = 'none';
+      const fsButton = document.getElementById('fullscreenButton');
+      const motionButton = document.getElementById('motionVoiceButton');
+      const motionVideo = document.getElementById('gpMotionVideo');
+      const motionCanvas = document.getElementById('gpMotionCanvas');
+      const MOTION_KEY = 'gpRealCameraMotionVoiceV4';
+      let motionEnabled = false;
+      let motionStream = null;
+      let motionTimer = null;
+      let priorFrame = null;
+      let lastMotionVoice = 0;
+      let motionVoiceBusy = false;
+      const motionPhrases = [
+        'شو هالحركة يا شباب؟ الشاشة عم تراقب أكتر من المدير اليوم!',
+        'مين مرق من هون؟ يعطيك العافية، بس لا تنسى تحدّث الحالة.',
+        'أهلا بالحركة! طالما عم نتحرك، خلّونا نحرك الحالات المتأخرة معنا.',
+        'شايفينكم يا أبطال. حركة حلوة، بدنا معها تحديث أحلى.',
+        'يا سلام عالنشاط! الجهاز اللي ناطر صيانة صار متحمس أكتر منّا.'
+      ];
 
-      function updateFullscreenButton(){
-        if(!fsBtn) return;
-        fsBtn.textContent = document.fullscreenElement ? '⤢ Exit fullscreen' : '⛶ Fullscreen';
+      function setFullscreenLabel(){
+        if(!fsButton) return;
+        const ar = document.body.classList.contains('lang-ar');
+        fsButton.textContent = document.fullscreenElement ? (ar ? '⤢ خروج' : '⤢ Exit') : (ar ? '⛶ ملء الشاشة' : '⛶ Fullscreen');
       }
-      async function toggleFullscreen(event){
-        if(event){event.preventDefault();event.stopPropagation();}
+      async function toggleFullscreen(e){
+        e?.preventDefault(); e?.stopPropagation();
         try{
           if(document.fullscreenElement) await document.exitFullscreen();
           else await document.documentElement.requestFullscreen({navigationUI:'hide'});
         }catch(_){}
-        updateFullscreenButton();
+        setFullscreenLabel();
       }
-      if(fsBtn) fsBtn.addEventListener('click', toggleFullscreen);
-      document.addEventListener('fullscreenchange', updateFullscreenButton);
-      updateFullscreenButton();
+      fsButton?.addEventListener('click', toggleFullscreen);
+      document.addEventListener('fullscreenchange', setFullscreenLabel);
+      setFullscreenLabel();
 
-      const STORAGE_KEY='gpMovementFunnyVoiceV1';
-      let enabled=true;
-      try{enabled=localStorage.getItem(STORAGE_KEY)!=='0'}catch(_){}
-      let lastPlayed=0;
-      let playing=false;
-      const COOLDOWN_MS=25000;
-      const phrases=[
-        'لا تِلْعَب بالنار، بتحرق أصابيعك.',
-        'هَدّي اللعب يا بطل، وخَلّي الشغل يمشي.',
-        'الشاشة للشغل مو للعب يا غالي.',
-        'انتبه يا نجم، كل حركة محسوبة.',
-        'يا زلمة، خلّي البركة بالشغل مو بالمشاوير عالشاشة.'
-      ];
-      function updateMoveButton(){
-        if(!moveBtn) return;
-        moveBtn.textContent=enabled?'😄 حركة ON':'😴 حركة OFF';
-        moveBtn.classList.toggle('on',enabled);
+      function setMotionButton(state, error=false){
+        if(!motionButton) return;
+        motionButton.classList.toggle('on', !!state && !error);
+        motionButton.classList.toggle('error', !!error);
+        const ar = document.body.classList.contains('lang-ar');
+        motionButton.textContent = error ? (ar ? '🎥 الكاميرا غير متاحة' : '🎥 Camera unavailable') :
+          state ? (ar ? '🎥 الحركة ON' : '🎥 Motion ON') : (ar ? '🎥 الحركة OFF' : '🎥 Motion OFF');
       }
-      if(moveBtn){
-        moveBtn.addEventListener('click',(event)=>{
-          event.preventDefault();event.stopPropagation();
-          enabled=!enabled;
-          try{localStorage.setItem(STORAGE_KEY,enabled?'1':'0')}catch(_){}
-          updateMoveButton();
-        });
-      }
-      updateMoveButton();
 
-      async function speakFunnyInteraction(event){
-        if(detail || !enabled || document.hidden || playing) return;
-        if(event && event.target && event.target.closest && event.target.closest('#gpTvFloatingControls')) return;
-        const now=Date.now();
-        if(now-lastPlayed<COOLDOWN_MS) return;
-        lastPlayed=now;
-        playing=true;
-        const phrase=phrases[Math.floor(Math.random()*phrases.length)];
+      async function speakMotionPhrase(){
+        const now = Date.now();
+        if(motionVoiceBusy || now-lastMotionVoice < 30000 || detail || document.hidden) return;
+        motionVoiceBusy = true; lastMotionVoice = now;
+        const phrase = motionPhrases[Math.floor(Math.random()*motionPhrases.length)];
         try{
-          const response=await fetch(`/api/followup-voice?lang=ar&text=${encodeURIComponent(phrase)}&t=${Date.now()}`,{cache:'no-store'});
-          if(!response.ok) throw new Error('voice');
-          const data=await response.json();
-          if(!data || !data.ok || !data.audio_url) throw new Error('voice');
-          const audio=new Audio(data.audio_url);
-          audio.volume=1.0;
+          const r = await fetch(apiUrl(`/api/followup-voice?lang=ar&text=${encodeURIComponent(phrase)}&t=${Date.now()}`), {cache:'no-store'});
+          if(!r.ok) throw new Error('voice');
+          const data = await r.json();
+          if(!data?.ok || !data.audio_url) throw new Error('voice');
+          const audio = new Audio(apiUrl(data.audio_url));
+          audio.volume = 1;
           await audio.play();
-          await new Promise(resolve=>{audio.onended=resolve;audio.onerror=resolve;setTimeout(resolve,9000)});
+          await new Promise(resolve => { audio.onended=resolve; audio.onerror=resolve; setTimeout(resolve,10000); });
         }catch(_){}
-        finally{playing=false;}
+        finally{motionVoiceBusy=false;}
       }
-      let pointerTimer=0;
-      document.addEventListener('pointermove',(event)=>{
-        clearTimeout(pointerTimer);
-        pointerTimer=setTimeout(()=>speakFunnyInteraction(event),350);
-      },{passive:true});
-      ['pointerdown','touchstart','keydown'].forEach(name=>document.addEventListener(name,speakFunnyInteraction,{passive:true}));
+
+      function inspectMotionFrame(){
+        if(!motionEnabled || !motionVideo || motionVideo.readyState < 2) return;
+        const ctx = motionCanvas.getContext('2d', {willReadFrequently:true});
+        ctx.drawImage(motionVideo,0,0,96,54);
+        const frame = ctx.getImageData(0,0,96,54).data;
+        if(priorFrame){
+          let changed=0, samples=0;
+          for(let i=0;i<frame.length;i+=16){
+            const d=Math.abs(frame[i]-priorFrame[i])+Math.abs(frame[i+1]-priorFrame[i+1])+Math.abs(frame[i+2]-priorFrame[i+2]);
+            if(d>70) changed++;
+            samples++;
+          }
+          if(samples && changed/samples > 0.045) speakMotionPhrase();
+        }
+        priorFrame = new Uint8ClampedArray(frame);
+      }
+
+      function stopMotion(){
+        motionEnabled=false; priorFrame=null;
+        if(motionTimer){clearInterval(motionTimer);motionTimer=null;}
+        if(motionStream){motionStream.getTracks().forEach(t=>t.stop());motionStream=null;}
+        try{localStorage.setItem(MOTION_KEY,'0')}catch(_){}
+        setMotionButton(false);
+      }
+      async function startMotion(){
+        if(detail) return;
+        if(!navigator.mediaDevices?.getUserMedia){setMotionButton(false,true);return;}
+        try{
+          motionStream = await navigator.mediaDevices.getUserMedia({video:{width:{ideal:320},height:{ideal:180},frameRate:{ideal:8,max:12}},audio:false});
+          motionVideo.srcObject=motionStream;
+          await motionVideo.play();
+          motionEnabled=true; priorFrame=null;
+          try{localStorage.setItem(MOTION_KEY,'1')}catch(_){}
+          setMotionButton(true);
+          motionTimer=setInterval(inspectMotionFrame,700);
+        }catch(_){motionEnabled=false;setMotionButton(false,true);}
+      }
+      motionButton?.addEventListener('click', async e => {
+        e.preventDefault();e.stopPropagation();
+        if(motionEnabled) stopMotion(); else await startMotion();
+      });
+      setMotionButton(false);
+      try{if(localStorage.getItem(MOTION_KEY)==='1') setTimeout(startMotion,1200)}catch(_){}
+
+      // Keep toolbar labels correct after language changes.
+      document.getElementById('languageSelect')?.addEventListener('change',()=>setTimeout(()=>{setFullscreenLabel();setMotionButton(motionEnabled,false)},0));
+
+      // Police-style attention sound belongs on the TV when a new management announcement appears.
+      window.gpPlayTvPoliceAlert = function(){
+        try{
+          const AudioCtx=window.AudioContext||window.webkitAudioContext;
+          if(!AudioCtx) return;
+          const ctx=new AudioCtx();
+          ctx.resume?.();
+          const gain=ctx.createGain(); gain.connect(ctx.destination);
+          gain.gain.setValueAtTime(.0001,ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(.22,ctx.currentTime+.03);
+          gain.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+1.55);
+          const osc=ctx.createOscillator(); osc.type='square'; osc.connect(gain);
+          osc.frequency.setValueAtTime(650,ctx.currentTime);
+          osc.frequency.linearRampToValueAtTime(1050,ctx.currentTime+.28);
+          osc.frequency.linearRampToValueAtTime(650,ctx.currentTime+.56);
+          osc.frequency.linearRampToValueAtTime(1050,ctx.currentTime+.84);
+          osc.frequency.linearRampToValueAtTime(650,ctx.currentTime+1.12);
+          osc.frequency.linearRampToValueAtTime(1050,ctx.currentTime+1.4);
+          osc.start();osc.stop(ctx.currentTime+1.58);
+          setTimeout(()=>ctx.close?.(),1900);
+        }catch(_){}
+      };
     })();
     </script>
 </body>

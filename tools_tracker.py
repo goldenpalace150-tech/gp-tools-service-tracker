@@ -83,7 +83,8 @@ def gp_apply_tv_control_and_wait(reason, refresh_data=False, **fields):
     if not command_id:
         return sent, False
 
-    deadline = time.time() + 6.0
+    # GP_ACK_MAX_5S_V4
+    deadline = time.time() + 5.0
     latest = sent
     while time.time() < deadline:
         time.sleep(0.5)
@@ -2618,7 +2619,7 @@ elif st.session_state['current_module'] == 'FollowUp':
                     else:
                         st.session_state["_gp_tv_control_flash"] = (
                             "warning",
-                            "⚠️ تم حفظ أمر صوت الموظفين على الخادم، لكن التلفزيون لم يؤكد التنفيذ خلال 6 ثوانٍ.",
+                            "⚠️ تم حفظ أمر صوت الموظفين على الخادم، لكن التلفزيون لم يؤكد التنفيذ خلال 5 ثوانٍ.",
                         )
                     st.rerun()
                 except Exception as exc:
@@ -2646,7 +2647,7 @@ elif st.session_state['current_module'] == 'FollowUp':
                     else:
                         st.session_state["_gp_tv_control_flash"] = (
                             "warning",
-                            "⚠️ تم حفظ أمر تنبيه التأخير على الخادم، لكن التلفزيون لم يؤكد التنفيذ خلال 6 ثوانٍ.",
+                            "⚠️ تم حفظ أمر تنبيه التأخير على الخادم، لكن التلفزيون لم يؤكد التنفيذ خلال 5 ثوانٍ.",
                         )
                     st.rerun()
                 except Exception as exc:
@@ -2663,7 +2664,7 @@ elif st.session_state['current_module'] == 'FollowUp':
                 else:
                     st.session_state["_gp_tv_control_flash"] = (
                         "warning",
-                        "⚠️ تم طلب تحديث البيانات من الخادم، لكن التلفزيون لم يؤكد التنفيذ خلال 6 ثوانٍ.",
+                        "⚠️ تم طلب تحديث البيانات من الخادم، لكن التلفزيون لم يؤكد التنفيذ خلال 5 ثوانٍ.",
                     )
                 st.rerun()
             except Exception as exc:

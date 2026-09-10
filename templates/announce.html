@@ -7,6 +7,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <title>Golden Palace · Live TV Announcement</title>
   <!-- GP_ANNOUNCE_BRAND_FAST_ACK_V3 -->
+  <!-- GP_ANNOUNCE_V4 -->
   <style>
     :root{--navy:#071a2d;--navy2:#0d2c49;--gold:#d5a62e;--gold2:#f1d16c;--ink:#172033;--muted:#64748b;--line:#dbe2ea;--bg:#eef2f7;--ok:#166534;--bad:#991b1b;--wait:#92400e}
     *{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:"Segoe UI",Tahoma,Arial,sans-serif;background:radial-gradient(circle at 10% 0%,#f7f9fc 0,#eef2f7 45%,#e8edf4 100%);color:var(--ink)}
@@ -30,16 +31,16 @@
 <body>
   <div id="gpLoadingOverlay" class="gp-loading-overlay" aria-live="polite"><div class="gp-loading-card"><div class="gp-loading-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-label="Golden Palace"><rect width="512" height="512" rx="96" fill="#071a2d"/><circle cx="256" cy="256" r="178" fill="none" stroke="#d5a62e" stroke-width="24"/><text x="256" y="290" font-family="Arial,sans-serif" font-size="142" font-weight="700" text-anchor="middle" fill="#f4bd2d">GP</text></svg></div><strong>Golden Palace</strong><div class="gp-loading-ring"></div><div>جارٍ إرسال الإعلان إلى شاشة الورشة…<br><small>Sending command to TV…</small></div></div></div>
   <main class="shell">
-    <section class="brand"><div class="brand-line"><div class="mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-label="Golden Palace"><rect width="512" height="512" rx="96" fill="#071a2d"/><circle cx="256" cy="256" r="178" fill="none" stroke="#d5a62e" stroke-width="24"/><text x="256" y="290" font-family="Arial,sans-serif" font-size="142" font-weight="700" text-anchor="middle" fill="#f4bd2d">GP</text></svg></div><div><h1>Golden Palace · Live TV Announcement</h1><p>إعلان مباشر إلى شاشة الورشة · Management-only publishing page</p></div></div></section>
+    <section class="brand"><div class="brand-line"><div class="mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-label="Golden Palace"><rect width="512" height="512" rx="96" fill="#071a2d"/><circle cx="256" cy="256" r="178" fill="none" stroke="#d5a62e" stroke-width="24"/><text x="256" y="290" font-family="Arial,sans-serif" font-size="142" font-weight="700" text-anchor="middle" fill="#f4bd2d">GP</text></svg></div><div><h1>Golden Palace · Live TV Announcement</h1><p>إعلان مباشر إلى شاشة الورشة · صفحة الإدارة لإرسال إعلان مباشر ومؤكد إلى شاشة الورشة</p></div></div></section>
 
     <section class="card">
       {% if success %}
       <!-- GP_ANNOUNCEMENT_DELIVERY_STATUS_UI_V1 -->
       <div id="deliveryBox" class="delivery" data-announcement-id="{{ published_id or '' }}" data-voice-enabled="{{ '1' if published_voice_enabled else '0' }}">
-        <div id="deliveryTitle" class="delivery-title">📤 تم إرسال الإعلان إلى الخادم · Accepted by server</div>
-        <div id="deliveryText" class="delivery-text">بانتظار تأكيد شاشة التلفزيون... قد تكون الشاشة مطفأة أو غير متصلة.</div>
+        <div id="deliveryTitle" class="delivery-title">📤 تم إرسال الإعلان إلى الخادم · تم الاستلام من الخادم</div>
+        <div id="deliveryText" class="delivery-text">بانتظار وصول الإعلان إلى شاشة الورشة — التأكيد التقني مستهدف خلال 5 ثوانٍ كحد أقصى.</div>
         <div id="deliveryMeta" class="delivery-meta">{{ published_sender or 'Management' }}</div>
-        <div class="steps"><span id="stepServer" class="step on">✓ Server</span><span id="stepDisplay" class="step">TV received</span>{% if published_voice_enabled %}<span id="stepAudio" class="step">Voice alert</span>{% endif %}<span id="stepHuman" class="step">Seen / Acknowledge</span></div>
+        <div class="steps"><span id="stepServer" class="step on">✓ Server</span><span id="stepDisplay" class="step">وصل للتلفزيون</span>{% if published_voice_enabled %}<span id="stepAudio" class="step">التنبيه الصوتي</span>{% endif %}<span id="stepHuman" class="step">تم الاطلاع</span></div>
       </div>
       {% endif %}
       {% if error %}<div class="notice bad">{{ error }}</div>{% endif %}
@@ -52,11 +53,11 @@
         </div>
         <div class="field voice-row"><div><strong>🔊 Voice notification</strong><span>تشغيل نفس صوت الإعلان مع تحسين نطق العربية</span></div><input class="switch" type="checkbox" id="voice_enabled" name="voice_enabled" {% if form_voice_enabled is not sameas false %}checked{% endif %}></div>
         {% if requires_code %}<div class="field"><label for="access_code">🔐 Management access code</label><input id="access_code" name="access_code" type="password" required autocomplete="current-password" placeholder="Access code"><span class="hint">This page uses the protected TV announcement key configured on the server.</span></div>{% endif %}
-        <button type="submit">📣 Publish to TV Now</button>
+        <button type="submit">📣 إرسال الآن إلى شاشة الورشة</button>
       </form>
 
       {% if success and published_text %}<div class="last"><small>LAST SENT</small><div>{{ published_text }}</div></div>{% endif %}
-      <div class="privacy">“Sent” means the server accepted it. “TV received” is technical delivery. “Seen / Acknowledged” appears only after a person presses the button on the workshop TV.</div>
+      <div class="privacy">“Sent” means the server accepted it. “وصل للتلفزيون” is technical delivery. “تم الاطلاعd” appears only after a person presses the button on the workshop TV.</div>
     </section>
   </main>
 
@@ -140,12 +141,12 @@
               text.textContent = `الشاشة استلمت وعرضت الإعلان${fmt(displayed) ? ` الساعة ${fmt(displayed)}` : ''}. بانتظار ضغط الموظف على زر تم الاطلاع.`;
               if (voiceEnabled && started && audioStep) {
                 audioStep.classList.add('on');
-                audioStep.textContent = completed ? '✓ Voice alert finished' : '✓ Voice alert started';
+                audioStep.textContent = completed ? '✓ التنبيه الصوتي finished' : '✓ التنبيه الصوتي started';
               }
               if (voiceEnabled && failed && audioStep) {
                 audioStep.classList.remove('on');
                 audioStep.classList.add('bad');
-                audioStep.textContent = 'Voice alert failed';
+                audioStep.textContent = 'التنبيه الصوتي failed';
                 text.textContent += ' وصل الإعلان بصرياً لكن التنبيه الصوتي لم يكتمل.';
               }
               meta.textContent = s.tv_client ? `TV: ${s.tv_client}` : 'TV delivery confirmed';
@@ -154,8 +155,8 @@
               box.classList.remove('fail');
               box.classList.add('seen');
               humanStep.classList.add('on');
-              humanStep.textContent = '✓ Seen / Acknowledged';
-              title.textContent = '✅ تم تأكيد الاطلاع · Seen / Acknowledged';
+              humanStep.textContent = '✓ تم الاطلاعd';
+              title.textContent = '✅ تم تأكيد الاطلاع · تم الاطلاعd';
               text.textContent = `تم ضغط زر الاطلاع على شاشة الورشة${fmt(acknowledged) ? ` الساعة ${fmt(acknowledged)}` : ''}.`;
               finished = true;
             }
@@ -166,11 +167,11 @@
       if (!finished && attempts >= 180) {
         if (displayStep && displayStep.classList.contains('on')) {
           title.textContent = '⚠️ وصل للتلفزيون ولم يتم تأكيد الاطلاع';
-          text.textContent = 'التلفزيون عرض الإعلان، لكن لم يضغط أحد زر Seen / Acknowledge خلال 45 ثانية.';
+          text.textContent = 'التلفزيون عرض الإعلان، لكن لم يضغط أحد زر تم الاطلاع خلال 5 ثوانٍ.';
         } else {
           box.classList.add('fail');
           title.textContent = '⚠️ لم يصل تأكيد من التلفزيون · No TV confirmation';
-          text.textContent = 'الخادم استلم الإعلان، لكن لم تؤكد أي شاشة عرضه خلال 45 ثانية. قد تكون شاشة الورشة مطفأة أو غير متصلة.';
+          text.textContent = 'الخادم استلم الإعلان، لكن لم تؤكد أي شاشة عرضه خلال 5 ثوانٍ. قد تكون شاشة الورشة مطفأة أو غير متصلة.';
         }
         finished = true;
       }
