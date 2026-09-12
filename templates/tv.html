@@ -1936,10 +1936,32 @@
     let gpManualAnnouncementPollInFlight = false;
     let gpManualAnnouncementGeneration = 0;
 
+    // GP_ANNOUNCEMENT_SERIAL_QUEUE_V1
+    // Never let an older unexpired announcement come back and replace a newer one.
+    // Announcement IDs begin with Date.now(), so the timestamp is stable across reloads.
+    const GP_MANUAL_ANNOUNCEMENT_TS_KEY = 'gpManualAnnouncementLastTsV1';
+    let gpManualAnnouncementLastTs = (() => {
+        try {
+            const saved = Number(localStorage.getItem(GP_MANUAL_ANNOUNCEMENT_TS_KEY) || 0);
+            if (saved > 0) return saved;
+            const match = String(gpManualAnnouncementLastId || '').match(/^(\d{10,})-/);
+            return match ? Number(match[1]) : 0;
+        } catch (_) { return 0; }
+    })();
+    let gpManualAnnouncementActive = false;
+
+    function gpManualAnnouncementEpoch(item) {
+        const created = Number(item && item.created_at);
+        if (created > 0) return created * 1000;
+        const match = String((item && item.id) || '').match(/^(\d{10,})-/);
+        return match ? Number(match[1]) : 0;
+    }
+
     function gpHideManualAnnouncement(generation) {
         if (generation != null && generation !== gpManualAnnouncementGeneration) return;
         const overlay = document.getElementById('manualAnnouncementOverlay');
         if (overlay) overlay.classList.remove('show');
+        gpManualAnnouncementActive = false;
     }
 
     // GP_ANNOUNCEMENT_DELIVERY_ACK_V1
@@ -1978,6 +2000,8 @@
         // GP_MANUAL_TV_VOICE_TOGGLE_V1
         const voiceEnabled = item.voice_enabled !== false;
         if (!text) return;
+        if (gpManualAnnouncementActive) return;
+        gpManualAnnouncementActive = true;
 
         stopTeamVoiceAudio();
         teamVoicePlaying = true;
@@ -2001,6 +2025,11 @@
                     ackBtn.textContent = lang === 'ar' ? '⚠️ تعذر التأكيد · اضغط مرة أخرى' : '⚠️ Could not confirm · Try again';
                     return;
                 }
+                // A human acknowledgement closes this announcement cleanly before
+                // the next one is allowed to start, so voices can never overlap.
+                stopTeamVoiceAudio();
+                teamVoicePlaying = false;
+                setVoiceCaption('', false);
                 ackBtn.classList.add('done');
                 ackBtn.textContent = lang === 'ar' ? '✅ تم تأكيد الاطلاع' : '✅ Acknowledged';
                 setTimeout(() => gpHideManualAnnouncement(generation), 1400);
@@ -2090,7 +2119,9 @@
     }
 
     async function gpPollManualAnnouncement() {
-        if (detailMode || gpManualAnnouncementPollInFlight || document.hidden) return;
+        // Keep one announcement on screen until it is acknowledged or its own
+        // display/audio lifecycle finishes. Do not replace it every 500 ms.
+        if (detailMode || gpManualAnnouncementPollInFlight || document.hidden || gpManualAnnouncementActive) return;
         gpManualAnnouncementPollInFlight = true;
         try {
             const response = await fetch(apiUrl(`/api/manual-announcement/latest?after=${encodeURIComponent(gpManualAnnouncementLastId)}&t=${Date.now()}`), {cache:'no-store'});
@@ -2098,8 +2129,17 @@
             const payload = await response.json();
             const item = payload && payload.announcement;
             if (!item || !item.id || String(item.id) === gpManualAnnouncementLastId) return;
+            const itemTs = gpManualAnnouncementEpoch(item);
+            // The backend keeps announcements alive for several minutes. Its current
+            // latest?after= contract can return an older row after a newer row. Ignore
+            // anything at or behind the newest timestamp this TV has already shown.
+            if (itemTs && itemTs <= gpManualAnnouncementLastTs) return;
             gpManualAnnouncementLastId = String(item.id);
-            try { localStorage.setItem(GP_MANUAL_ANNOUNCEMENT_STORAGE_KEY, gpManualAnnouncementLastId); } catch (_) {}
+            if (itemTs) gpManualAnnouncementLastTs = itemTs;
+            try {
+                localStorage.setItem(GP_MANUAL_ANNOUNCEMENT_STORAGE_KEY, gpManualAnnouncementLastId);
+                if (itemTs) localStorage.setItem(GP_MANUAL_ANNOUNCEMENT_TS_KEY, String(itemTs));
+            } catch (_) {}
             gpPlayManualAnnouncement(item);
         } catch (_) {
             // Manual announcements are independent from dashboard refresh.
