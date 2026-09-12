@@ -2570,110 +2570,17 @@ elif st.session_state['current_module'] == 'Support':
 elif st.session_state['current_module'] == 'FollowUp':
     gp_render_module_header('FollowUp')
 
-    # GP_TV_CONTROL_AND_PUSH_UI_V1
+    # GP_TV_CONTROL_AND_PUSH_UI_V8
+    # AppDeploy rejects direct server-to-server calls from the Streamlit host with 403.
+    # Keep the control UI inside AppDeploy so @appdeploy/client can use the supported
+    # same-origin transport, then embed that compact page here.
     with st.expander("📺 تحكم شاشة الورشة (TV Control)", expanded=False):
-        try:
-            gp_tv_state = gp_tv_control_request("GET")
-            gp_staff_voice_current = bool(gp_tv_state.get("staff_voice_enabled", True))
-            gp_delayed_voice_current = bool(gp_tv_state.get("delayed_voice_enabled", True))
-        except Exception:
-            gp_tv_state = {"ok": False}
-            gp_staff_voice_current = True
-            gp_delayed_voice_current = True
-
-        # GP_DELAYED_VOICE_CONTROL_V1
-        # GP_TV_CONTROL_RELIABLE_V2
-        flash = st.session_state.pop("_gp_tv_control_flash", None)
-        if flash:
-            level, message = flash
-            if level == "success":
-                st.success(message)
-            elif level == "warning":
-                st.warning(message)
-            else:
-                st.error(message)
-
-        if gp_tv_online(gp_tv_state):
-            age = max(0, int(time.time() - float(gp_tv_state.get("last_tv_seen_at", 0) or 0)))
-            st.success(f"🟢 التلفزيون متصل · آخر استجابة منذ {age} ثانية")
-        else:
-            st.warning("🔴 لا توجد استجابة حديثة من التلفزيون. الأمر سيُحفظ، لكن النجاح لن يُعتبر مؤكداً حتى يرد التلفزيون.")
-
-        c_staff_voice, c_delayed_voice = st.columns(2)
-        with c_staff_voice:
-            staff_target = not gp_staff_voice_current
-            staff_label = (
-                "🔴 إيقاف صوت تشجيع الموظفين + تحديث TV الآن"
-                if gp_staff_voice_current
-                else "🟢 تشغيل صوت تشجيع الموظفين + تحديث TV الآن"
-            )
-            if st.button(staff_label, use_container_width=True, key="gp_oneclick_staff_voice_tv"):
-                try:
-                    state, confirmed = gp_apply_tv_control_and_wait(
-                        "backend_staff_voice_toggle",
-                        staff_voice_enabled=staff_target,
-                    )
-                    if confirmed:
-                        status_word = "تم التشغيل" if staff_target else "تم الإيقاف"
-                        st.session_state["_gp_tv_control_flash"] = (
-                            "success",
-                            f"✅ {status_word} لصوت الموظفين، والتلفزيون أكد تنفيذ الأمر.",
-                        )
-                    else:
-                        st.session_state["_gp_tv_control_flash"] = (
-                            "warning",
-                            "⚠️ تم حفظ أمر صوت الموظفين على الخادم، لكن التلفزيون لم يؤكد التنفيذ خلال 5 ثوانٍ.",
-                        )
-                    st.rerun()
-                except Exception as exc:
-                    st.error(f"❌ تعذر إرسال أمر صوت الموظفين: {exc}")
-
-        with c_delayed_voice:
-            delayed_target = not gp_delayed_voice_current
-            delayed_label = (
-                "🔴 إيقاف تنبيه الحالات المتأخرة + تحديث TV الآن"
-                if gp_delayed_voice_current
-                else "🟢 تشغيل تنبيه الحالات المتأخرة + تحديث TV الآن"
-            )
-            if st.button(delayed_label, use_container_width=True, key="gp_oneclick_delayed_voice_tv"):
-                try:
-                    state, confirmed = gp_apply_tv_control_and_wait(
-                        "backend_delayed_voice_toggle",
-                        delayed_voice_enabled=delayed_target,
-                    )
-                    if confirmed:
-                        status_word = "تم التشغيل" if delayed_target else "تم الإيقاف"
-                        st.session_state["_gp_tv_control_flash"] = (
-                            "success",
-                            f"✅ {status_word} لتنبيه التأخير، والتلفزيون أكد تنفيذ الأمر.",
-                        )
-                    else:
-                        st.session_state["_gp_tv_control_flash"] = (
-                            "warning",
-                            "⚠️ تم حفظ أمر تنبيه التأخير على الخادم، لكن التلفزيون لم يؤكد التنفيذ خلال 5 ثوانٍ.",
-                        )
-                    st.rerun()
-                except Exception as exc:
-                    st.error(f"❌ تعذر إرسال أمر تنبيه التأخير: {exc}")
-
-        if st.button("⚡ تحديث بيانات التلفزيون الآن", use_container_width=True, key="gp_push_tv_now_v2"):
-            try:
-                _, confirmed = gp_apply_tv_control_and_wait("manual_backend_push", refresh_data=True)
-                if confirmed:
-                    st.session_state["_gp_tv_control_flash"] = (
-                        "success",
-                        "✅ تم دفع أحدث البيانات والتلفزيون أكد تنفيذ التحديث.",
-                    )
-                else:
-                    st.session_state["_gp_tv_control_flash"] = (
-                        "warning",
-                        "⚠️ تم طلب تحديث البيانات من الخادم، لكن التلفزيون لم يؤكد التنفيذ خلال 5 ثوانٍ.",
-                    )
-                st.rerun()
-            except Exception as exc:
-                st.error(f"❌ تعذر إرسال أمر تحديث البيانات: {exc}")
-
-        st.caption("أوامر الصوت والتنبيه تُرسل بخفة من دون إعادة تحميل كل البيانات. زر تحديث البيانات وحده يعيد تحميل Ledger والملاحظات. الأخضر يظهر بعد تأكيد التلفزيون.")
+        st.components.v1.iframe(
+            "https://gp.18-232-7-146.sslip.io/control.html",
+            height=410,
+            scrolling=False,
+        )
+        st.caption("التحكم يعمل مباشرة عبر AppDeploy لتفادي خطأ 403، ويعرض تأكيد التلفزيون داخل نفس اللوحة.")
 
     # GP_MANUAL_TV_ANNOUNCEMENT_UI_V1
     with st.expander("📣 إعلان مباشر إلى شاشة الورشة (Live TV Announcement)", expanded=False):
