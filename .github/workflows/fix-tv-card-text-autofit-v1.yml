@@ -1,0 +1,58 @@
+name: Fix TV card text auto-fit v1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/fix_tv_card_text_autofit_v1.py'
+      - '.github/workflows/fix-tv-card-text-autofit-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply TV card auto-fit patch
+        run: python scripts/fix_tv_card_text_autofit_v1.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate inline TV JavaScript
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re, subprocess, sys
+          text=Path('templates/tv.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', text, flags=re.S|re.I)
+          for i, code in enumerate(scripts,1):
+              p=Path(f'/tmp/tv-autofit-{i}.js')
+              p.write_text(code, encoding='utf-8')
+              r=subprocess.run(['node','--check',str(p)], text=True, capture_output=True)
+              if r.returncode:
+                  print(r.stdout)
+                  print(r.stderr, file=sys.stderr)
+                  raise SystemExit(r.returncode)
+          print(f'Validated {len(scripts)} inline script(s)')
+          PY
+      - name: Verify marker
+        run: grep -q 'GP_TV_CARD_TEXT_AUTOFIT_V1' templates/tv.html
+      - name: Commit generated TV style fix
+        shell: bash
+        run: |
+          if git diff --quiet -- templates/tv.html; then
+            echo 'No TV changes needed'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add templates/tv.html
+          git commit -m 'Auto-fit TV workflow card text'
+          git push origin main
