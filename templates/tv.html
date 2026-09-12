@@ -7,7 +7,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="manifest" href="./manifest.webmanifest">
     <!-- GP_AMANY_KIOSK_2026_09_08 -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>GP Workshop TV</title>
@@ -693,9 +693,9 @@
     let currentLanguage = (params.get('lang') || (() => { try { return localStorage.getItem('gpDashboardLanguage'); } catch (_) { return null; } })() || 'en').toLowerCase();
     if (!['en','ar'].includes(currentLanguage)) currentLanguage = 'en';
 
-    const GP_BACKEND_ORIGIN = 'https://golden-palace-service-tracker.onrender.com';
+    const GP_BACKEND_ORIGIN = 'https://cqpmcqypwzlunskeeoml.supabase.co/functions/v1/gp-api';
     const API_BASE = window.location.hostname === 'golden-palace-service-tracker.onrender.com' ? '' : GP_BACKEND_ORIGIN;
-    const apiUrl = path => `${API_BASE}${path}`;
+    const apiUrl = path => /^(?:https?:|data:|blob:)/i.test(String(path || '')) ? String(path || '') : `${API_BASE}${path}`;
 
 
     const UI = {

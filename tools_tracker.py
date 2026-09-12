@@ -30,10 +30,10 @@ IMGBB_API_KEY = get_runtime_secret("IMGBB_API_KEY")
 
 
 # GP_MANUAL_TV_ANNOUNCEMENT_V1
-GP_TV_BACKEND_URL = get_runtime_secret("GP_TV_BACKEND_URL") or "https://gp.18-232-7-146.sslip.io"
+GP_TV_BACKEND_URL = get_runtime_secret("GP_TV_BACKEND_URL") or "https://cqpmcqypwzlunskeeoml.supabase.co/functions/v1/gp-api"
 # GP_APPDEPLOY_BACKEND_FALLBACK_V1
 if GP_TV_BACKEND_URL.rstrip("/") == "https://golden-palace-service-tracker.onrender.com":
-    GP_TV_BACKEND_URL = "https://gp.18-232-7-146.sslip.io"
+    GP_TV_BACKEND_URL = "https://cqpmcqypwzlunskeeoml.supabase.co/functions/v1/gp-api"
 GP_TV_ANNOUNCEMENT_KEY = get_runtime_secret("GP_TV_ANNOUNCEMENT_KEY")
 
 
@@ -2576,7 +2576,7 @@ elif st.session_state['current_module'] == 'FollowUp':
     # same-origin transport, then embed that compact page here.
     with st.expander("📺 تحكم شاشة الورشة (TV Control)", expanded=False):
         st.components.v1.iframe(
-            "https://gp.18-232-7-146.sslip.io/control.html",
+            "https://goldenpalace150-tech.github.io/gp-tools-service-tracker/control.html",
             height=410,
             scrolling=False,
         )
