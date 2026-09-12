@@ -1,0 +1,39 @@
+name: Embed AppDeploy TV Control V8
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/embed_appdeploy_tv_control_v8.py
+      - .github/workflows/embed-appdeploy-tv-control-v8.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch Streamlit TV control UI
+        run: python scripts/embed_appdeploy_tv_control_v8.py
+      - name: Validate Python
+        run: python -m py_compile tools_tracker.py
+      - name: Validate embedded AppDeploy control
+        run: |
+          grep -q 'GP_TV_CONTROL_AND_PUSH_UI_V8' tools_tracker.py
+          grep -q 'https://gp.18-232-7-146.sslip.io/control.html' tools_tracker.py
+      - name: Commit generated change
+        run: |
+          if git diff --quiet; then
+            echo 'No generated change required.'
+            exit 0
+          fi
+          git config user.name 'Golden Palace Update Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add tools_tracker.py
+          git commit -m 'Embed AppDeploy TV control page'
+          git push
