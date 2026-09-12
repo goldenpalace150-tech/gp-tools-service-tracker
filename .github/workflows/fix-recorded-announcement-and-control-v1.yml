@@ -1,0 +1,63 @@
+name: Fix recorded announcement and control v1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/fix_recorded_announcement_and_control_v1.py'
+      - '.github/workflows/fix-recorded-announcement-and-control-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply recorded announcement and control fixes
+        run: python scripts/fix_recorded_announcement_and_control_v1.py
+      - name: Validate Python
+        run: python -m py_compile tools_tracker.py
+      - name: Validate TV JavaScript
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re, subprocess, sys
+          text=Path('templates/tv.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', text, flags=re.S|re.I)
+          for i, code in enumerate(scripts, 1):
+              p=Path(f'/tmp/tv-recorded-{i}.js')
+              p.write_text(code, encoding='utf-8')
+              r=subprocess.run(['node','--check',str(p)], text=True, capture_output=True)
+              if r.returncode:
+                  print(r.stdout)
+                  print(r.stderr, file=sys.stderr)
+                  raise SystemExit(r.returncode)
+          print(f'Validated {len(scripts)} inline script(s)')
+          PY
+      - name: Verify fixes
+        run: |
+          grep -q 'GP_RECORDED_ANNOUNCEMENT_AUDIO_V1' templates/tv.html
+          grep -q 'gp-announcement' templates/tv.html
+          grep -q 'https://gp.18-232-7-146.sslip.io/control.html' tools_tracker.py
+      - name: Commit generated files
+        shell: bash
+        run: |
+          if git diff --quiet -- templates/tv.html tools_tracker.py; then
+            echo 'No generated changes needed'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add templates/tv.html tools_tracker.py
+          git commit -m 'Add recorded announcement playback and repair TV control embed'
+          git push origin main
