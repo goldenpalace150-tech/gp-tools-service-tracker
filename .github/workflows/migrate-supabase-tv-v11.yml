@@ -19,12 +19,29 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Apply voice migration patch
         run: python scripts/migrate_frontend_to_supabase_v11.py
       - name: Validate TV voice markers
         run: |
           grep -q 'cqpmcqypwzlunskeeoml.supabase.co/functions/v1/gp-voice' templates/tv.html
           ! grep -q '/api/followup-voice?' templates/tv.html
+      - name: Validate inline TV JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html = Path('templates/tv.html').read_text(encoding='utf-8')
+          blocks = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', html, flags=re.I | re.S)
+          if not blocks:
+              raise SystemExit('No inline script found in TV HTML')
+          for i, block in enumerate(blocks, 1):
+              Path(f'/tmp/tv-script-{i}.js').write_text(block, encoding='utf-8')
+          print(f'Extracted {len(blocks)} inline script block(s)')
+          PY
+          for f in /tmp/tv-script-*.js; do node --check "$f"; done
       - name: Commit generated changes
         run: |
           if git diff --quiet; then
