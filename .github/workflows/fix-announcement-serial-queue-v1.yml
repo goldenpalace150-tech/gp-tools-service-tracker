@@ -1,0 +1,58 @@
+name: Fix announcement serial queue v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/fix_manual_announcement_serial_queue_v1.py'
+      - '.github/workflows/fix-announcement-serial-queue-v1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply serial announcement fix
+        run: python scripts/fix_manual_announcement_serial_queue_v1.py
+      - name: Validate inline TV JavaScript
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re, subprocess, sys, tempfile
+          text=Path('templates/tv.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', text, flags=re.S|re.I)
+          if not scripts:
+              raise SystemExit('No inline scripts found')
+          for i, code in enumerate(scripts, 1):
+              p=Path(f'/tmp/tv-inline-{i}.js')
+              p.write_text(code, encoding='utf-8')
+              r=subprocess.run(['node','--check',str(p)], text=True, capture_output=True)
+              if r.returncode:
+                  print(r.stdout)
+                  print(r.stderr, file=sys.stderr)
+                  raise SystemExit(r.returncode)
+          print(f'Validated {len(scripts)} inline script(s)')
+          PY
+      - name: Commit generated TV fix
+        shell: bash
+        run: |
+          if git diff --quiet -- templates/tv.html; then
+            echo 'No TV changes needed'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add templates/tv.html
+          git commit -m 'Serialize TV announcements and prevent stale replay'
+          git push origin main
