@@ -1,0 +1,43 @@
+name: Migrate TV Backend to AppDeploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/migrate_tv_backend_to_appdeploy.py
+      - .github/workflows/migrate-tv-backend-appdeploy.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  migrate-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Replace retired Render backend references
+        run: python scripts/migrate_tv_backend_to_appdeploy.py
+
+      - name: Validate Tools Tracker
+        run: python -m py_compile tools_tracker.py
+
+      - name: Verify AppDeploy backend is the default
+        run: |
+          grep -q 'https://gp.18-232-7-146.sslip.io' tools_tracker.py
+          ! grep -q 'golden-palace-service-tracker.onrender.com' tools_tracker.py
+
+      - name: Commit migrated app references
+        run: |
+          if git diff --quiet; then
+            echo 'No migration changes required.'
+            exit 0
+          fi
+          git config user.name 'Golden Palace Update Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add tools_tracker.py GP-TV-Fullscreen.cmd scripts .github/workflows
+          git commit -m 'Point TV controls to AppDeploy backend'
+          git push
