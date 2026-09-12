@@ -28,7 +28,7 @@ jobs:
       - name: Verify AppDeploy backend is the default
         run: |
           grep -q 'https://gp.18-232-7-146.sslip.io' tools_tracker.py
-          ! grep -q 'golden-palace-service-tracker.onrender.com' tools_tracker.py
+          grep -q 'GP_APPDEPLOY_BACKEND_FALLBACK_V1' tools_tracker.py
 
       - name: Commit migrated app references
         run: |
@@ -39,5 +39,5 @@ jobs:
           git config user.name 'Golden Palace Update Bot'
           git config user.email 'actions@users.noreply.github.com'
           git add tools_tracker.py GP-TV-Fullscreen.cmd scripts .github/workflows
-          git commit -m 'Point TV controls to AppDeploy backend'
+          git commit -m 'Ignore retired Render backend override'
           git push
