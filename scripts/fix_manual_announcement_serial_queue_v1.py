@@ -45,3 +45,4 @@ replace_once(
 
 path.write_text(text, encoding='utf-8')
 print('applied announcement serial queue fix')
+# Trigger marker: v1.1
