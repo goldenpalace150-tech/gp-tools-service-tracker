@@ -2576,7 +2576,7 @@ elif st.session_state['current_module'] == 'FollowUp':
     # same-origin transport, then embed that compact page here.
     with st.expander("📺 تحكم شاشة الورشة (TV Control)", expanded=False):
         st.components.v1.iframe(
-            "https://goldenpalace150-tech.github.io/gp-tools-service-tracker/control.html",
+            "https://gp.18-232-7-146.sslip.io/control.html",
             height=410,
             scrolling=False,
         )
