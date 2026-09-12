@@ -30,7 +30,7 @@ IMGBB_API_KEY = get_runtime_secret("IMGBB_API_KEY")
 
 
 # GP_MANUAL_TV_ANNOUNCEMENT_V1
-GP_TV_BACKEND_URL = get_runtime_secret("GP_TV_BACKEND_URL") or "https://golden-palace-service-tracker.onrender.com"
+GP_TV_BACKEND_URL = get_runtime_secret("GP_TV_BACKEND_URL") or "https://gp.18-232-7-146.sslip.io"
 GP_TV_ANNOUNCEMENT_KEY = get_runtime_secret("GP_TV_ANNOUNCEMENT_KEY")
 
 

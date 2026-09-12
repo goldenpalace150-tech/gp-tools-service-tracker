@@ -1,6 +1,6 @@
 @echo off
 setlocal
-set "TVURL=https://golden-palace-service-tracker.onrender.com/tv?lang=ar"
+set "TVURL=https://gp.18-232-7-146.sslip.io/tv?lang=ar"
 set "PROFILE=%LOCALAPPDATA%\GoldenPalace-TV-Kiosk"
 set "CHROME=%ProgramFiles%\Google\Chrome\Application\chrome.exe"
 if not exist "%CHROME%" set "CHROME=%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"
