@@ -1,0 +1,38 @@
+name: Migrate TV voice to Supabase v11
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/migrate_frontend_to_supabase_v11.py'
+      - '.github/workflows/migrate-supabase-tv-v11.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply voice migration patch
+        run: python scripts/migrate_frontend_to_supabase_v11.py
+      - name: Validate TV voice markers
+        run: |
+          grep -q 'cqpmcqypwzlunskeeoml.supabase.co/functions/v1/gp-voice' templates/tv.html
+          ! grep -q '/api/followup-voice?' templates/tv.html
+      - name: Commit generated changes
+        run: |
+          if git diff --quiet; then
+            echo 'No generated changes.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add templates/tv.html
+          git commit -m 'Route TV voice through Supabase gp-voice'
+          git push
