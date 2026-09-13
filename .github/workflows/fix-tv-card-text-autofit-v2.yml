@@ -1,0 +1,51 @@
+name: Fix TV card text auto-fit v2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/fix_tv_card_text_autofit_v2.py'
+      - '.github/workflows/fix-tv-card-text-autofit-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply patch
+        run: python scripts/fix_tv_card_text_autofit_v2.py
+      - name: Validate embedded TV JavaScript
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          text = Path('templates/tv.html').read_text(encoding='utf-8')
+          scripts = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', text, flags=re.S|re.I)
+          for i, script in enumerate(scripts, 1):
+              Path(f'/tmp/tv-script-{i}.js').write_text(script, encoding='utf-8')
+          print(f'extracted {len(scripts)} inline scripts')
+          PY
+          for f in /tmp/tv-script-*.js; do node --check "$f"; done
+      - name: Verify marker
+        run: grep -q 'GP_TV_CARD_TEXT_AUTOFIT_V2' templates/tv.html
+      - name: Commit generated TV update
+        run: |
+          if git diff --quiet; then
+            echo 'No changes to commit'
+            exit 0
+          fi
+          git config user.name 'goldenpalace150-tech'
+          git config user.email 'goldenpalace150@gmail.com'
+          git add templates/tv.html
+          git commit -m 'Keep TV card labels readable on short screens'
+          git push
