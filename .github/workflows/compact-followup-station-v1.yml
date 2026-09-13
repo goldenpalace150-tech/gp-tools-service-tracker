@@ -1,0 +1,51 @@
+name: Compact follow-up station v1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/compact_followup_station_v1.py'
+      - '.github/workflows/compact-followup-station-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply patch
+        run: python scripts/compact_followup_station_v1.py
+      - name: Validate embedded TV JavaScript
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          text = Path('templates/tv.html').read_text(encoding='utf-8')
+          scripts = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', text, flags=re.S|re.I)
+          for i, script in enumerate(scripts, 1):
+              Path(f'/tmp/tv-script-{i}.js').write_text(script, encoding='utf-8')
+          print(f'extracted {len(scripts)} inline scripts')
+          PY
+          for f in /tmp/tv-script-*.js; do node --check "$f"; done
+      - name: Verify marker
+        run: grep -q 'GP_COMPACT_FOLLOWUP_STATION_V1' templates/tv.html
+      - name: Commit generated TV update
+        run: |
+          if git diff --quiet; then
+            echo 'No changes to commit'
+            exit 0
+          fi
+          git config user.name 'goldenpalace150-tech'
+          git config user.email 'goldenpalace150@gmail.com'
+          git add templates/tv.html
+          git commit -m 'Compact follow-up station to expand workflow cards'
+          git push
