@@ -1,0 +1,64 @@
+name: Replace police alert with doorbell v1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/replace_police_alert_with_doorbell_v1.py'
+      - '.github/workflows/replace-police-alert-with-doorbell-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply doorbell patch
+        run: python scripts/replace_police_alert_with_doorbell_v1.py
+      - name: Validate inline TV JavaScript
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re, subprocess, sys
+          text = Path('templates/tv.html').read_text(encoding='utf-8')
+          scripts = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', text, flags=re.S|re.I)
+          if not scripts:
+              raise SystemExit('No inline scripts found')
+          for i, code in enumerate(scripts, 1):
+              p = Path(f'/tmp/tv-inline-{i}.js')
+              p.write_text(code, encoding='utf-8')
+              r = subprocess.run(['node','--check',str(p)], text=True, capture_output=True)
+              if r.returncode:
+                  print(r.stdout)
+                  print(r.stderr, file=sys.stderr)
+                  raise SystemExit(r.returncode)
+          print(f'Validated {len(scripts)} inline script(s)')
+          PY
+      - name: Verify doorbell marker
+        run: |
+          grep -q 'GP_DOORBELL_ANNOUNCEMENT_ALERT_V1' templates/tv.html
+          grep -q 'gpPlayTvDoorBellAlert' templates/tv.html
+          ! grep -q 'gpPlayTvPoliceAlert' templates/tv.html
+      - name: Commit generated TV update
+        run: |
+          if git diff --quiet -- templates/tv.html; then
+            echo 'No TV changes needed'
+            exit 0
+          fi
+          git config user.name 'goldenpalace150-tech'
+          git config user.email 'goldenpalace150@gmail.com'
+          git add templates/tv.html
+          git commit -m 'Use doorbell chime for management announcements'
+          git push origin main
