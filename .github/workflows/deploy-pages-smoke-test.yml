@@ -28,6 +28,46 @@ jobs:
       - uses: actions/configure-pages@v5
         with:
           enablement: true
+      - name: Apply temporary Golden Palace branding
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('site-test/index.html')
+          html = path.read_text(encoding='utf-8')
+
+          logo_url = 'https://golden-palace-operations.floot.app/_cdn/static/d74a627f-097b-457e-812b-9c1ad5b7f0e3-IMG_8993.PNG'
+          html = html.replace(
+              '<div class="logo">GP</div>',
+              f'<div class="logo"><img src="{logo_url}" alt="Golden Palace"></div>',
+              1,
+          )
+
+          if '/* TEMP TRIAL BRANDING */' not in html:
+              css = r'''
+          /* TEMP TRIAL BRANDING */
+          .shell{grid-template-rows:auto auto auto 1fr auto}
+          .logo{width:190px;height:66px;overflow:hidden;padding:0;background:#050505;border:1px solid rgba(230,185,73,.55);border-radius:18px}
+          .logo img{display:block;width:100%;height:100%;object-fit:contain;border-radius:17px}
+          .trial-ticker{position:relative;overflow:hidden;direction:ltr;background:linear-gradient(90deg,#e0a800,#ffd85c,#e0a800);color:#171105;border:1px solid rgba(255,229,128,.95);border-radius:16px;box-shadow:0 8px 26px rgba(230,185,73,.25);min-height:42px;display:flex;align-items:center}
+          .trial-ticker:before,.trial-ticker:after{content:'';position:absolute;top:0;bottom:0;width:52px;z-index:2;pointer-events:none}
+          .trial-ticker:before{left:0;background:linear-gradient(90deg,#dda500,rgba(221,165,0,0))}
+          .trial-ticker:after{right:0;background:linear-gradient(270deg,#dda500,rgba(221,165,0,0))}
+          .trial-track{display:inline-flex;align-items:center;min-width:max-content;white-space:nowrap;animation:gpTrialTicker 18s linear infinite;font-size:clamp(14px,1.05vw,18px);font-weight:950;letter-spacing:.1px}
+          .trial-track span{display:inline-block;padding:0 56px;direction:rtl}
+          @keyframes gpTrialTicker{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+          @media(max-width:900px){.logo{width:138px;height:48px}.trial-ticker{min-height:36px;border-radius:12px}.trial-track{font-size:13px;animation-duration:14s}.trial-track span{padding:0 34px}}
+          '''
+              html = html.replace('</style>', css + '\n</style>', 1)
+
+          if 'class="trial-ticker"' not in html:
+              ticker = '<section class="trial-ticker" aria-label="Trial broadcasting notice"><div class="trial-track"><span>بث تجريبي — المنصة قيد الإنشاء والتطوير&nbsp;&nbsp; | &nbsp;&nbsp;Trial broadcasting — platform under establishment and development</span><span>بث تجريبي — المنصة قيد الإنشاء والتطوير&nbsp;&nbsp; | &nbsp;&nbsp;Trial broadcasting — platform under establishment and development</span></div></section>'
+              html = html.replace('</header>', '</header>\n' + ticker, 1)
+
+          path.write_text(html, encoding='utf-8')
+          print('Temporary logo and trial ticker applied')
+          PY
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site-test
