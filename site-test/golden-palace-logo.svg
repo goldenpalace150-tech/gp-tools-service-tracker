@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 210" role="img" aria-label="Golden Palace">
+  <rect width="720" height="210" rx="24" fill="#050505"/>
+  <g transform="translate(275 25)" fill="none" stroke="#e0b400" stroke-width="6" stroke-linejoin="round">
+    <path d="M82 0 154 35v105l-72 35-72-35V35Z"/>
+    <path d="M31 57 82 31l51 26v77l-51 25-51-25Z"/>
+    <path d="M40 64 82 46l42 18v18L82 65 40 82Z" fill="#e0b400" stroke="none"/>
+    <path d="M52 60v70M112 60v70M57 104h50M82 31v128"/>
+    <path d="M57 132c9 7 17 11 25 11s16-4 25-11"/>
+  </g>
+  <text x="245" y="127" fill="#ffffff" font-family="Georgia,Times New Roman,serif" font-size="55" text-anchor="end">Golden</text>
+  <text x="475" y="127" fill="#ffffff" font-family="Georgia,Times New Roman,serif" font-size="55">Palace</text>
+</svg>
