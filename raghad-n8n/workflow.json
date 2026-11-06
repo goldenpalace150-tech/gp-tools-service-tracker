@@ -1,0 +1,56 @@
+{
+  "id": "RaghadDispatchV1",
+  "name": "Raghad group dispatch check",
+  "active": false,
+  "nodes": [
+    {
+      "id": "incoming",
+      "name": "Approved Dispatch",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "18ea2141-f982-4c6a-818d-030752e282ae",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "raghad-dispatch-v1",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "route",
+      "name": "Validate and Route",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const p=$input.first().json.body||{};\nconst valid=/^owner-group-web-[a-f0-9-]{36}$/i.test(p.jobId||\"\")&&p.jobId===\"owner-group-\"+p.approvalId&&[\"D\",\"S\",\"V\",\"P\"].includes(p.branch)&&[\"voice\",\"text\"].includes(p.format);\nreturn [{json:{ok:valid,jobId:p.jobId||null,branch:p.branch||null,format:p.format||null,endpoint:valid?(p.format===\"voice\"?\"sendVoice\":\"sendText\"):null,workflow:\"raghad-dispatch-v1\"}}];"
+      }
+    }
+  ],
+  "connections": {
+    "Approved Dispatch": {
+      "main": [
+        [
+          {
+            "node": "Validate and Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false
+  }
+}
